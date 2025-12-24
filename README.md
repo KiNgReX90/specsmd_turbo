@@ -8,9 +8,7 @@ specsmd implements the [AI-Driven Development Lifecycle (AI-DLC)](https://aws.am
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <p align="center">
-  <a href="https://asciinema.org/a/763877" target="_blank">
-    <img src="https://asciinema.org/a/763877.svg" alt="specs.md demo" width="800" />
-  </a>
+  <img src="assets/demo.gif" alt="specs.md demo" width="800" />
 </p>
 
 ---
