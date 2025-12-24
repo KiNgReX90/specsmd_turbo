@@ -27,6 +27,10 @@ flowchart LR
 
 ## Quick Decision Guide
 
+<Info>
+  The Inception Agent automatically selects the appropriate bolt type based on your requirements. If you disagree with its choice, you can change it during the human gate review.
+</Info>
+
 <Steps>
   <Step title="Does it involve complex business logic or domain rules?">
     **Yes** → Use **DDD Construction Bolt**
@@ -61,7 +65,7 @@ flowchart LR
 | **1. Domain Model** | Model business logic using DDD principles | Domain model document |
 | **2. Technical Design** | Apply patterns, define interfaces | Technical design document |
 | **3. ADR Analysis** | Document significant decisions | Architecture Decision Record |
-| **4. Code** | Generate production code | Implementation |
+| **4. Implement** | Generate production code | Implementation |
 | **5. Test** | Verify correctness | Test suite |
 
 ### Example Use Cases

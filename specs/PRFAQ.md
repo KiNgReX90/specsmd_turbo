@@ -101,14 +101,12 @@ A: Three phases:
 ### Bolt Types
 
 **Q: What bolt types are available?**
-A: Four bolt types:
-1. **DDD Construction Bolt** - Domain-Driven Design stages (model, design, code, test)
-2. **TDD Construction Bolt** - Test-Driven Development approach
-3. **BDD Construction Bolt** - Behavior-Driven Development approach
-4. **Spike Bolt** - Research and exploration
+A: Two bolt types:
+1. **DDD Construction Bolt** - Domain-Driven Design stages (model, design, ADR, implement, test)
+2. **Simple Construction Bolt** - Lightweight stages for UI, integrations, utilities (spec, implement, test)
 
 **Q: How do I choose a bolt type?**
-A: The Construction Agent recommends bolt types based on the unit's requirements. DDD is default for complex business logic, TDD for well-defined interfaces, BDD for user-facing features, and Spike for unknowns.
+A: The Construction Agent recommends bolt types based on the unit's requirements. DDD is default for complex business logic, Simple for UI, integrations, and utilities.
 
 ### Memory Bank
 

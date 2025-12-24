@@ -17,12 +17,16 @@ The **Master Agent** is the orchestrator of the AI-DLC flow. It maintains awaren
   </Tab>
   <Tab title="Cursor">
     ```
+    /specsmd-master-agent
+    ```
+    Or use the `@` prefix:
+    ```
     @specsmd-master-agent
     ```
   </Tab>
   <Tab title="GitHub Copilot">
     ```
-    @specsmd-master-agent
+    /specsmd-master-agent
     ```
   </Tab>
 </Tabs>
@@ -130,6 +134,39 @@ The agent provides context-aware answers using:
 - AI-DLC methodology knowledge
 - Your project's current state
 - Memory Bank artifacts
+
+## Routing Flow
+
+The Master Agent doesn't have stage gates - it routes to specialized agents based on project state:
+
+```mermaid
+flowchart TB
+    Start[/specsmd-master-agent/] --> Check{Standards exist?}
+
+    Check -->|No| New[New User Flow]
+    Check -->|Yes| Return[Returning User Flow]
+
+    subgraph New[New User]
+        E[Explain AI-DLC] --> Init[Project Init]
+    end
+
+    subgraph Return[Returning User]
+        Analyze[Analyze Context] --> Route[Route to Agent]
+    end
+
+    Route --> IA[Inception Agent]
+    Route --> CA[Construction Agent]
+    Route --> OA[Operations Agent]
+
+    style Check fill:#F472B6,stroke:#EC4899,color:#fff
+    style IA fill:#818CF8,stroke:#6366F1,color:#fff
+    style CA fill:#34D399,stroke:#10B981,color:#fff
+    style OA fill:#FBBF24,stroke:#F59E0B,color:#fff
+```
+
+<Info>
+  The Master Agent is the entry point. It determines where you are in the AI-DLC flow and routes you to the appropriate specialist agent.
+</Info>
 
 ## When to Use Master Agent
 

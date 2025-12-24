@@ -156,17 +156,6 @@ flowchart TB
   Circular dependencies between units indicate poor decomposition. If Unit A depends on Unit B and Unit B depends on Unit A, consider merging them or extracting the shared concern.
 </Warning>
 
-## Unit vs Microservice
-
-| Aspect | Unit | Microservice |
-|--------|------|--------------|
-| **Granularity** | Logical grouping | Deployment unit |
-| **Coupling** | Loose at design | Independent runtime |
-| **Communication** | In-process or API | Always network |
-| **Ownership** | Same team | Could be different teams |
-
-Units can become microservices, but not all units should be. Use units for logical organization; use microservices for operational independence.
-
 ## Best Practices
 
 <AccordionGroup>

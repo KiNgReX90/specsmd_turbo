@@ -17,12 +17,16 @@ The **Inception Agent** handles the first phase of AI-DLC. It captures your high
   </Tab>
   <Tab title="Cursor">
     ```
+    /specsmd-inception-agent
+    ```
+    Or use the `@` prefix:
+    ```
     @specsmd-inception-agent
     ```
   </Tab>
   <Tab title="GitHub Copilot">
     ```
-    @specsmd-inception-agent
+    /specsmd-inception-agent
     ```
   </Tab>
 </Tabs>
@@ -238,6 +242,51 @@ intent-create → requirements → context → units → story-create → bolt-p
 <Warning>
   Complete each step before moving on. Incomplete inception leads to problems in construction.
 </Warning>
+
+## Human Gates
+
+The Inception Agent has **4 checkpoints** with auto-continue between artifact generation:
+
+```mermaid
+flowchart TB
+    A[User Request] --> B[Clarifying Questions]
+    B --> G1{Gate 1}
+    G1 -->|User answers| C[Generate Requirements]
+    C --> G2{Gate 2}
+    G2 -->|User approves| D[Auto-Generate Artifacts]
+
+    subgraph Auto-Continue
+        D --> D1[Context]
+        D1 --> D2[Units]
+        D2 --> D3[Stories]
+        D3 --> D4[Bolt Plan]
+    end
+
+    D4 --> G3{Gate 3}
+    G3 -->|User approves| E[Ready for Construction?]
+    E --> G4{Gate 4}
+    G4 -->|User confirms| F[Route to Construction]
+
+    style G1 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G2 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G3 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G4 fill:#F472B6,stroke:#EC4899,color:#fff
+    style D1 fill:#818CF8,stroke:#6366F1,color:#fff
+    style D2 fill:#818CF8,stroke:#6366F1,color:#fff
+    style D3 fill:#818CF8,stroke:#6366F1,color:#fff
+    style D4 fill:#818CF8,stroke:#6366F1,color:#fff
+```
+
+| Gate | Location | Purpose |
+|------|----------|---------|
+| **Gate 1** | After clarifying questions | Ensure all ambiguities addressed |
+| **Gate 2** | After requirements generated | Validate requirements are correct |
+| **Gate 3** | After all artifacts generated | Review context, units, stories, bolt plan |
+| **Gate 4** | Ready for construction | Confirm inception complete |
+
+<Info>
+  Between Gate 2 and Gate 3, the agent auto-continues through context → units → stories → bolt-plan without stopping. This speeds up artifact generation while maintaining key validation points.
+</Info>
 
 ## Best Practices
 

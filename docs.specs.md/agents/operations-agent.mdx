@@ -5,6 +5,10 @@ description: Deploys, verifies, and monitors systems in production
 
 ## Overview
 
+<Warning>
+  The Operations Agent has known issues and is currently being fixed. Some commands may not work as expected. If you encounter an error, please [report it here](https://github.com/fabriqaai/specsmd/issues).
+</Warning>
+
 The **Operations Agent** handles the third phase of AI-DLC. It takes constructed features to production, verifies they work correctly, and sets up monitoring.
 
 ## Invocation
@@ -17,12 +21,16 @@ The **Operations Agent** handles the third phase of AI-DLC. It takes constructed
   </Tab>
   <Tab title="Cursor">
     ```
+    /specsmd-operations-agent
+    ```
+    Or use the `@` prefix:
+    ```
     @specsmd-operations-agent
     ```
   </Tab>
   <Tab title="GitHub Copilot">
     ```
-    @specsmd-operations-agent
+    /specsmd-operations-agent
     ```
   </Tab>
 </Tabs>
@@ -232,6 +240,47 @@ The agent suggests monitoring:
 | **Performance** | Latency (p50, p95, p99), throughput |
 | **Resources** | CPU, memory, disk, connections |
 | **Business** | Active users, transactions, conversions |
+
+## Human Gates
+
+The Operations Agent has **4 checkpoints** aligned with environment progression:
+
+```mermaid
+flowchart TB
+    P{Prerequisites} -->|Construction complete?| A[Build Artifacts]
+    A --> G1{Gate 1}
+    G1 -->|User approves| B[Deploy to Dev]
+    B --> C[Deploy to Staging]
+    C --> G2{Gate 2}
+    G2 -->|User approves| D[Verify Staging]
+    D --> E[Deploy to Production]
+    E --> G3{Gate 3}
+    G3 -->|User approves| F[Verify Production]
+    F --> G[Setup Monitoring]
+    G --> G4{Gate 4}
+    G4 -->|User approves| H((Complete))
+
+    style G1 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G2 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G3 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G4 fill:#F472B6,stroke:#EC4899,color:#fff
+    style P fill:#64748B,stroke:#475569,color:#fff
+    style B fill:#818CF8,stroke:#6366F1,color:#fff
+    style C fill:#818CF8,stroke:#6366F1,color:#fff
+    style E fill:#FBBF24,stroke:#F59E0B,color:#fff
+    style F fill:#FBBF24,stroke:#F59E0B,color:#fff
+```
+
+| Gate | Location | Purpose |
+|------|----------|---------|
+| **Gate 1** | After build | Approve build artifacts before deployment |
+| **Gate 2** | Before staging deploy | Confirm ready for staging environment |
+| **Gate 3** | Before production deploy | Critical approval for production |
+| **Gate 4** | After monitoring setup | Confirm operations complete |
+
+<Warning>
+  Production deployment (Gate 3) requires explicit confirmation. The agent will show exactly what will happen before proceeding.
+</Warning>
 
 ## Artifacts
 

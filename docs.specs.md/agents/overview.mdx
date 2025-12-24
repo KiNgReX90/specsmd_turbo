@@ -47,14 +47,6 @@ flowchart TB
   **These are NOT command-line commands.** These are prompts you type in your AI coding tool's chat interface (Claude Code, Cursor, Copilot, etc.).
 </Warning>
 
-<Info>
-  **First, install specs.md in your project:**
-  ```bash
-  npx specsmd@latest install
-  ```
-  During installation, you'll select which AI development tools you use. The agent prompts will be available in the tools you selected.
-</Info>
-
 ### How to Use
 
 1. Open your AI coding tool (Claude Code, Cursor, GitHub Copilot)
@@ -72,7 +64,14 @@ flowchart TB
     ```
   </Tab>
   <Tab title="Cursor">
-    Type in Cursor's chat:
+    Type in Cursor's chat (either format works):
+    ```
+    /specsmd-master-agent
+    /specsmd-inception-agent
+    /specsmd-construction-agent
+    /specsmd-operations-agent
+    ```
+    Or use the `@` prefix:
     ```
     @specsmd-master-agent
     @specsmd-inception-agent
@@ -83,10 +82,10 @@ flowchart TB
   <Tab title="GitHub Copilot">
     Type in Copilot's chat:
     ```
-    @specsmd-master-agent
-    @specsmd-inception-agent
-    @specsmd-construction-agent
-    @specsmd-operations-agent
+    /specsmd-master-agent
+    /specsmd-inception-agent
+    /specsmd-construction-agent
+    /specsmd-operations-agent
     ```
   </Tab>
 </Tabs>

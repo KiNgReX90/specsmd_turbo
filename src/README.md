@@ -140,9 +140,7 @@ The smallest iteration in AI-DLC, designed for rapid implementation. Unlike Spri
 | Type | Best For | Stages |
 |------|----------|--------|
 | **DDD Construction** | Complex business logic, domain modeling | Model → Design → ADR → Implement → Test |
-| **TDD Construction** | Well-defined interfaces, test-first | Test → Implement → Refactor |
-| **BDD Construction** | User-facing features, acceptance criteria | Scenario → Implement → Verify |
-| **Spike** | Research, exploration, unknowns | Explore → Document |
+| **Simple Construction** | UI, integrations, utilities | Spec → Implement → Test |
 
 ### Memory Bank
 File-based storage for all project artifacts. Maintains context across agent sessions and provides traceability between artifacts.
@@ -249,8 +247,8 @@ DDD, TDD, and BDD are integral to the methodology - not optional add-ons. This a
 ### Tool Agnostic
 Works with Claude Code, Cursor, GitHub Copilot, and other AI coding assistants. Markdown-based agents work anywhere.
 
-### Context Persistence
-Memory bank ensures AI agents have full project context across sessions. All artifacts are linked for backward and forward traceability.
+### Context Engineering
+Specs and Memory Bank provide structured context for AI agents. Agents reload context each session - no more lost knowledge.
 
 ---
 

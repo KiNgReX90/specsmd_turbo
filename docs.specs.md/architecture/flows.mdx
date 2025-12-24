@@ -5,26 +5,23 @@ description: Understanding the specs.md flow architecture
 
 ## Framework Architecture
 
-specs.md is built as a **pluggable framework** where development methodologies are implemented as **flows**. This architecture allows different teams to use different development approaches while sharing the same core infrastructure.
+specs.md is built as a **pluggable framework** where development methodologies are implemented as **flows**. This architecture allows different teams to use different development approaches.
 
 ```mermaid
 flowchart TB
     subgraph Framework[specs.md Framework]
-        subgraph Core[Core]
-            MB[Memory Bank]
-            ST[Standards]
-            AS[Agent System]
-            TM[Templates]
-            SC[Slash Commands]
-        end
         subgraph Flows[Flows]
-            AIDLC[AI-DLC]
+            subgraph AIDLC[AI-DLC Flow]
+                MB[Memory Bank]
+                ST[Standards]
+                AS[Agents]
+                TM[Templates]
+            end
             FF[Future Flows...]
         end
     end
 
     style Framework fill:#1E293B,stroke:#334155,color:#fff
-    style Core fill:#0C4A6E,stroke:#0EA5E9,color:#fff
     style Flows fill:#052E16,stroke:#22C55E,color:#fff
     style AIDLC fill:#22C55E,stroke:#16A34A,color:#fff
     style FF fill:#475569,stroke:#64748B,color:#fff,stroke-dasharray: 5 5
@@ -49,23 +46,9 @@ A **flow** is a complete development methodology implementation that includes:
   </Card>
 </CardGroup>
 
-## Core vs Flows
+## Available Flows
 
-### Core (Shared Infrastructure)
-
-The core provides foundational capabilities used by all flows:
-
-| Component | Purpose |
-|-----------|---------|
-| **Memory Bank** | File-based storage for all project artifacts |
-| **Standards** | Coding standards, conventions, and rules |
-| **Agent System** | Markdown-based agent definitions |
-| **Templates** | Reusable document and code templates |
-| **Slash Commands** | Integration with AI coding tools |
-
-### Flows (Methodology Implementations)
-
-Each flow implements a specific development approach:
+Each flow implements a specific development approach with its own components:
 
 | Flow | Status | Description |
 |------|--------|-------------|

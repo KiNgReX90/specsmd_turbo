@@ -74,41 +74,74 @@ Transform specifications into working, tested code through disciplined stages.
 
 ### Bolt Stages
 
-Each bolt progresses through validated stages:
+Each bolt type progresses through validated stages:
 
-<AccordionGroup>
-  <Accordion title="1. Domain Model">
-    Model the business logic using DDD principles:
-    - Identify aggregates, entities, value objects
-    - Define domain events and commands
-    - Establish ubiquitous language
-  </Accordion>
-  <Accordion title="2. Technical Design">
-    Apply patterns and make architecture decisions:
-    - Choose implementation patterns
-    - Define interfaces and contracts
-    - Plan data structures
-  </Accordion>
-  <Accordion title="3. ADR Analysis (Optional)">
-    Document significant architectural decisions:
-    - Context and problem statement
-    - Options considered
-    - Decision and rationale
-    - Consequences
-  </Accordion>
-  <Accordion title="4. Implement">
-    Generate production code:
-    - Follow coding standards
-    - Apply design patterns
-    - Write clean, maintainable code
-  </Accordion>
-  <Accordion title="5. Test">
-    Verify correctness:
-    - Unit tests for domain logic
-    - Integration tests for interfaces
-    - Acceptance tests for stories
-  </Accordion>
-</AccordionGroup>
+<Tabs>
+  <Tab title="DDD Construction">
+    For complex business logic and domain modeling:
+
+    <AccordionGroup>
+      <Accordion title="1. Domain Model">
+        Model the business logic using DDD principles:
+        - Identify aggregates, entities, value objects
+        - Define domain events and commands
+        - Establish ubiquitous language
+      </Accordion>
+      <Accordion title="2. Technical Design">
+        Apply patterns and make architecture decisions:
+        - Choose implementation patterns
+        - Define interfaces and contracts
+        - Plan data structures
+      </Accordion>
+      <Accordion title="3. ADR Analysis (Optional)">
+        Document significant architectural decisions:
+        - Context and problem statement
+        - Options considered
+        - Decision and rationale
+        - Consequences
+      </Accordion>
+      <Accordion title="4. Implement">
+        Generate production code:
+        - Follow coding standards
+        - Apply design patterns
+        - Write clean, maintainable code
+      </Accordion>
+      <Accordion title="5. Test">
+        Verify correctness:
+        - Unit tests for domain logic
+        - Integration tests for interfaces
+        - Acceptance tests for stories
+      </Accordion>
+    </AccordionGroup>
+  </Tab>
+  <Tab title="Simple Construction">
+    For UI, integrations, and utilities:
+
+    <AccordionGroup>
+      <Accordion title="1. Spec">
+        Define what to build:
+        - Review stories and requirements
+        - List specific deliverables
+        - Identify dependencies
+        - Define acceptance criteria
+      </Accordion>
+      <Accordion title="2. Implement">
+        Write the code:
+        - Setup file structure
+        - Implement core functionality
+        - Handle edge cases
+        - Add documentation
+      </Accordion>
+      <Accordion title="3. Test">
+        Verify the implementation:
+        - Write unit tests
+        - Run test suite
+        - Verify acceptance criteria
+        - Document results
+      </Accordion>
+    </AccordionGroup>
+  </Tab>
+</Tabs>
 
 ### Stage Gates
 

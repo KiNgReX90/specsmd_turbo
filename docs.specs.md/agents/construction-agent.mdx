@@ -17,12 +17,16 @@ The **Construction Agent** handles the second phase of AI-DLC. It executes bolts
   </Tab>
   <Tab title="Cursor">
     ```
+    /specsmd-construction-agent
+    ```
+    Or use the `@` prefix:
+    ```
     @specsmd-construction-agent
     ```
   </Tab>
   <Tab title="GitHub Copilot">
     ```
-    @specsmd-construction-agent
+    /specsmd-construction-agent
     ```
   </Tab>
 </Tabs>
@@ -209,7 +213,69 @@ Use this when:
 - Priorities changed
 - Estimates were off
 
-## Stage Gates
+## Human Gates
+
+The Construction Agent's gates are defined by the bolt type. Each bolt type has its own checkpoint structure.
+
+### DDD Construction (5 gates)
+
+```mermaid
+flowchart LR
+    M[Model] --> G1{Gate}
+    G1 --> D[Design]
+    D --> G2{Gate}
+    G2 --> A[ADR]
+    A --> G3{Gate}
+    G3 --> I[Implement]
+    I --> G4{Gate}
+    G4 --> T[Test]
+    T --> G5{Gate}
+    G5 --> Done((Done))
+
+    style G1 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G2 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G3 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G4 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G5 fill:#F472B6,stroke:#EC4899,color:#fff
+    style M fill:#818CF8,stroke:#6366F1,color:#fff
+    style D fill:#818CF8,stroke:#6366F1,color:#fff
+    style A fill:#818CF8,stroke:#6366F1,color:#fff
+    style I fill:#34D399,stroke:#10B981,color:#fff
+    style T fill:#FBBF24,stroke:#F59E0B,color:#fff
+```
+
+| Gate | After Stage | Purpose |
+|------|-------------|---------|
+| **Gate 1** | Domain Model | Validate domain concepts before design |
+| **Gate 2** | Technical Design | Approve architecture before ADR |
+| **Gate 3** | ADR Analysis | Confirm decisions documented |
+| **Gate 4** | Implement | Review code before testing |
+| **Gate 5** | Test | Verify all tests pass, bolt complete |
+
+### Simple Construction (3 gates)
+
+```mermaid
+flowchart LR
+    S[Spec] --> G1{Gate}
+    G1 --> I[Implement]
+    I --> G2{Gate}
+    G2 --> T[Test]
+    T --> G3{Gate}
+    G3 --> Done((Done))
+
+    style G1 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G2 fill:#F472B6,stroke:#EC4899,color:#fff
+    style G3 fill:#F472B6,stroke:#EC4899,color:#fff
+    style S fill:#818CF8,stroke:#6366F1,color:#fff
+    style I fill:#34D399,stroke:#10B981,color:#fff
+    style T fill:#FBBF24,stroke:#F59E0B,color:#fff
+```
+
+| Gate | After Stage | Purpose |
+|------|-------------|---------|
+| **Gate 1** | Spec | Validate requirements before coding |
+| **Gate 2** | Implement | Review code before testing |
+| **Gate 3** | Test | Verify all tests pass, bolt complete |
 
 <Warning>
   You cannot proceed to the next stage without explicit approval. This is intentional - it catches errors before they cascade.
@@ -225,18 +291,34 @@ At each gate, you can:
 
 Each bolt produces artifacts in the Memory Bank:
 
-```
-memory-bank/intents/{intent}/units/{unit}/bolts/{bolt}/
-├── domain-model.md       # Stage 1 output
-├── technical-design.md   # Stage 2 output
-├── adr-001.md           # Stage 3 output (if applicable)
-├── implementation/       # Stage 4 output
-│   ├── src/
-│   └── ...
-└── tests/               # Stage 5 output
-    ├── unit/
-    └── integration/
-```
+<Tabs>
+  <Tab title="DDD Construction">
+    ```
+    memory-bank/intents/{intent}/units/{unit}/bolts/{bolt}/
+    ├── domain-model.md       # Stage 1 output
+    ├── technical-design.md   # Stage 2 output
+    ├── adr-001.md           # Stage 3 output (if applicable)
+    ├── implementation/       # Stage 4 output
+    │   ├── src/
+    │   └── ...
+    └── tests/               # Stage 5 output
+        ├── unit/
+        └── integration/
+    ```
+  </Tab>
+  <Tab title="Simple Construction">
+    ```
+    memory-bank/intents/{intent}/units/{unit}/bolts/{bolt}/
+    ├── spec.md              # Stage 1 output
+    ├── implementation/       # Stage 2 output
+    │   ├── src/
+    │   └── ...
+    └── tests/               # Stage 3 output
+        ├── unit/
+        └── integration/
+    ```
+  </Tab>
+</Tabs>
 
 ## Best Practices
 

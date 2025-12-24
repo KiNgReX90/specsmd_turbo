@@ -14,7 +14,7 @@ description: How AI-DLC compares to traditional Agile methods
 | **Phases** | Repeating sprints | Rapid three-phase cycles |
 | **Rituals** | Daily standups, retrospectives | Mob Elaboration, Mob Construction |
 | **Documentation** | Often neglected | Built-in artifacts |
-| **Context Persistence** | Lost between sprints | Memory Bank |
+| **Context Engineering** | Lost between sprints | Specs + Memory Bank |
 
 ## Iteration: Sprints vs Bolts
 
@@ -82,18 +82,18 @@ AI leads the conversation. Humans provide intent and validation. AI handles deco
 
 | Bolt Type | Best For | Stages |
 |-----------|----------|--------|
-| **DDD Construction** | Complex domain logic, business rules | Model → Design → ADR → Code → Test |
+| **DDD Construction** | Complex domain logic, business rules | Model → Design → ADR → Implement → Test |
 | **Simple Construction** | UI, integrations, utilities | Spec → Implement → Test |
 
-## Context Persistence
+## Context Engineering
 
 <Warning>
   One of the biggest challenges in traditional Agile is context loss between sprints. Knowledge leaves with team members, decisions aren't documented, and the codebase becomes a mystery.
 </Warning>
 
-### AI-DLC Solution: Memory Bank
+### AI-DLC Solution: Specs + Memory Bank
 
-The Memory Bank is a file-based storage system that maintains:
+Specs and Memory Bank provide structured context for AI agents:
 
 - All project artifacts (requirements, designs, decisions)
 - Traceability between artifacts

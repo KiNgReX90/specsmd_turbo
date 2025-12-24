@@ -215,3 +215,63 @@ Standards can evolve. To update:
     You don't need every detail on day one. Add specifics as patterns emerge.
   </Accordion>
 </AccordionGroup>
+
+## Standards Catalog
+
+Standards are defined in `.specsmd/aidlc/templates/standards/catalog.yaml`. This catalog controls:
+
+- Which standards exist and their importance
+- Decisions within each standard
+- Dependencies between standards
+- Project type presets
+
+```yaml
+standards:
+  tech-stack:
+    description: Core technology choices
+    facilitation: templates/standards/tech-stack.guide.md
+    importance: critical
+    decisions:
+      - id: languages
+        display_name: Languages
+        importance: critical
+      - id: framework
+        display_name: Framework
+        depends_on: [languages]
+      # ...
+
+  coding-standards:
+    depends_on_standards: [tech-stack]
+    decisions:
+      - id: formatting
+      - id: testing_strategy
+      # ...
+
+project_types:
+  full-stack-web:
+    required_standards: [tech-stack, data-stack, coding-standards]
+    recommended_standards: [system-architecture, ux-guide]
+```
+
+### Extensibility
+
+The catalog is designed for extensibility:
+
+<CardGroup cols={2}>
+  <Card title="Add New Standards" icon="plus">
+    Add entries to `standards:` with facilitation guides
+  </Card>
+  <Card title="Custom Decisions" icon="sliders">
+    Add decisions to existing standards
+  </Card>
+  <Card title="Project Types" icon="folder-tree">
+    Define custom project type presets
+  </Card>
+  <Card title="Dependencies" icon="link">
+    Control order via `depends_on_standards`
+  </Card>
+</CardGroup>
+
+<Info>
+  Each standard has a facilitation guide (`.guide.md`) that defines the questions asked during `project-init`. Customize these to match your team's decision-making process.
+</Info>

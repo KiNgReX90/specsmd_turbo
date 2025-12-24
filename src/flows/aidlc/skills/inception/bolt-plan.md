@@ -81,7 +81,6 @@ Review all stories to understand:
 
 - `ddd-construction-bolt` - For domain-heavy backend work (5 stages)
 - `simple-construction-bolt` - For UI, integrations, utilities (3 stages)
-- `spike-bolt` - For research and exploration
 
 ### 3. Assess Story Complexity
 

@@ -83,14 +83,12 @@ Once units are defined, plan your first bolt:
 /specsmd-inception-agent bolt-plan
 ```
 
-A **Bolt** is a rapid iteration (hours to days). Four types available:
+A **Bolt** is a rapid iteration (hours to days). Two types available:
 
 | Bolt Type | Best For |
 |-----------|----------|
 | **DDD Construction** | Complex business logic, domain modeling |
-| **TDD Construction** | Well-defined interfaces, test-first |
-| **BDD Construction** | User-facing features, acceptance criteria |
-| **Spike** | Research, exploration, unknowns |
+| **Simple Construction** | UI, integrations, utilities |
 
 ### Step 4: Execute Bolts
 
@@ -100,12 +98,13 @@ Switch to the Construction Agent to execute:
 /specsmd-construction-agent bolt-start
 ```
 
-Each bolt goes through stages:
+Each bolt goes through stages (DDD bolt example):
 
-1. **Domain Design** - Model the domain
-2. **Logical Design** - Define interfaces and structure
-3. **Code** - Implement the solution
-4. **Test** - Verify correctness
+1. **Domain Model** - Model the business logic
+2. **Technical Design** - Define interfaces and architecture
+3. **ADR Analysis** - Document significant decisions (optional)
+4. **Implement** - Write production code
+5. **Test** - Verify correctness
 
 Human validation happens at each stage.
 
@@ -198,7 +197,7 @@ After installation, your project will have:
     ├── templates/                # Artifact templates
     │   ├── inception/            # Intent, unit, story templates
     │   ├── construction/         # Bolt templates and bolt-types
-    │   │   └── bolt-types/       # DDD, TDD, BDD, Spike bolt definitions
+    │   │   └── bolt-types/       # DDD and Simple bolt definitions
     │   └── standards/            # Standards facilitation
     │       ├── catalog.yaml      # Standards registry
     │       └── *.guide.md        # Facilitation guides
@@ -244,7 +243,7 @@ A cohesive, self-contained work element derived from an Intent. Analogous to a S
 
 ### Bolt
 
-The smallest iteration in AI-DLC. Unlike Sprints (weeks), Bolts are hours to days. Four types: DDD, TDD, BDD, Spike.
+The smallest iteration in AI-DLC. Unlike Sprints (weeks), Bolts are hours to days. Two types: DDD Construction and Simple Construction.
 
 ### Memory Bank
 
