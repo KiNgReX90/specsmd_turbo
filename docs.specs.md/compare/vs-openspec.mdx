@@ -1,19 +1,19 @@
 ---
 title: "specs.md vs OpenSpec"
-description: "Compare specs.md (AI-DLC) with OpenSpec's change-centric approach"
+description: "Compare specs.md with OpenSpec's change-centric approach"
 ---
 
 ## Overview
 
 **OpenSpec** is a lightweight, brownfield-first CLI tool focused on change management. It separates current truth (`specs/`) from proposed changes (`changes/`).
 
-**specs.md (AI-DLC)** is a full lifecycle methodology covering Inception through Operations, with support for both greenfield and brownfield development.
+**specs.md** is a full lifecycle methodology covering Inception through Operations, with support for both greenfield and brownfield development.
 
 ---
 
 ## Side-by-Side Comparison
 
-| Aspect | specs.md (AI-DLC) | OpenSpec |
+| Aspect | specs.md | OpenSpec |
 |--------|-------------------|----------|
 | **Primary Focus** | Full lifecycle (Inception → Operations) | Change management |
 | **Best For** | Greenfield + brownfield | Brownfield-first |
@@ -31,7 +31,7 @@ description: "Compare specs.md (AI-DLC) with OpenSpec's change-centric approach"
 ## When to Choose Each
 
 <CardGroup cols={2}>
-  <Card title="Choose specs.md (AI-DLC) if:" icon="check">
+  <Card title="Choose specs.md if:" icon="check">
     - You need full project lifecycle support
     - You're building new features (greenfield)
     - You want DDD integration
@@ -63,7 +63,7 @@ openspec/
 └── changes/    # Proposed updates (what's changing)
 ```
 
-**specs.md (AI-DLC)**: Full lifecycle. Designed for complex systems from inception through operations.
+**specs.md**: Full lifecycle. Designed for complex systems from inception through operations.
 
 ```
 memory-bank/
@@ -77,18 +77,18 @@ memory-bank/
 
 **OpenSpec**: Excellent token efficiency. Only sends "spec deltas" (proposed changes) to the LLM, not the full codebase context.
 
-**specs.md (AI-DLC)**: Memory Bank provides structured context, but sends more comprehensive context to ensure AI understands the full picture.
+**specs.md**: Memory Bank provides structured context, but sends more comprehensive context to ensure AI understands the full picture.
 
 | Approach | Token Usage | Best For |
 |----------|-------------|----------|
 | OpenSpec | Lower | High-volume small changes |
-| specs.md (AI-DLC) | Higher | Complex decisions requiring full context |
+| specs.md | Higher | Complex decisions requiring full context |
 
 ### 3. Brownfield Handling
 
 **OpenSpec**: Primary design focus. Every change is explicit with clear before/after separation.
 
-**specs.md (AI-DLC)**: Supported via "model elevation" - AI first converts existing code to semantic models (domain components, relationships) before making changes.
+**specs.md**: Supported via "model elevation" - AI first converts existing code to semantic models (domain components, relationships) before making changes.
 
 ```
 AI-DLC Brownfield Flow:
@@ -99,7 +99,7 @@ Existing Code → Semantic Models → Changes → Updated Code
 
 **OpenSpec**: A tool for managing specs and changes. No prescribed methodology.
 
-**specs.md (AI-DLC)**: A complete methodology with:
+**specs.md**: A complete methodology with:
 - Defined phases (Inception → Construction → Operations)
 - Rituals (Mob Elaboration, Mob Construction)
 - Design integration (DDD as core)
@@ -109,7 +109,7 @@ Existing Code → Semantic Models → Changes → Updated Code
 
 ## Use Case Comparison
 
-| Use Case | OpenSpec | specs.md (AI-DLC) |
+| Use Case | OpenSpec | specs.md |
 |----------|----------|-------------------|
 | Small bug fix | Excellent | Overkill |
 | Feature tweak | Excellent | Good |
@@ -126,7 +126,7 @@ Existing Code → Semantic Models → Changes → Updated Code
 You could potentially use both:
 
 <Steps>
-  <Step title="Use specs.md (AI-DLC) for Planning">
+  <Step title="Use specs.md for Planning">
     Run Inception phase to decompose complex features into Units
   </Step>
   <Step title="Use OpenSpec for Execution">
@@ -144,16 +144,16 @@ You could potentially use both:
 | For This Need | Use This |
 |---------------|----------|
 | Brownfield changes | OpenSpec (excellent) or specs.md (good) |
-| Greenfield development | specs.md (AI-DLC) |
+| Greenfield development | specs.md |
 | Token efficiency | OpenSpec |
-| Full lifecycle | specs.md (AI-DLC) |
+| Full lifecycle | specs.md |
 | Minimal setup | OpenSpec |
-| DDD integration | specs.md (AI-DLC) |
-| Team rituals | specs.md (AI-DLC) |
+| DDD integration | specs.md |
+| Team rituals | specs.md |
 | High-volume small changes | OpenSpec |
 
 <Info>
-**Bottom Line**: OpenSpec excels at brownfield changes with minimal overhead. specs.md (AI-DLC) provides full lifecycle support for complex systems.
+**Bottom Line**: OpenSpec excels at brownfield changes with minimal overhead. specs.md provides full lifecycle support for complex systems.
 
 *For brownfield work within a larger project, consider using both together.*
 </Info>

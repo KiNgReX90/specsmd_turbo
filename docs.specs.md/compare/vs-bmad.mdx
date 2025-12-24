@@ -1,21 +1,21 @@
 ---
 title: "specs.md vs BMAD-Method"
-description: "Compare specs.md (AI-DLC) with BMAD's multi-agent framework"
+description: "Compare specs.md with BMAD's multi-agent framework"
 ---
 
 ## Overview
 
-Both **specs.md (AI-DLC)** and **BMAD-Method** target complex systems and enterprise-scale development. The key difference is their approach to agent organization.
+Both **specs.md** and **BMAD-Method** target complex systems and enterprise-scale development. The key difference is their approach to agent organization.
 
 **BMAD-Method** uses 19+ role-based agents that simulate a full development team (Analyst, PM, Architect, Developer, QA, etc.).
 
-**specs.md (AI-DLC)** uses 4 phase-based agents aligned to AI-DLC's methodology (Master, Inception, Construction, Operations).
+**specs.md** uses 4 phase-based agents aligned to AI-DLC's methodology (Master, Inception, Construction, Operations).
 
 ---
 
 ## Side-by-Side Comparison
 
-| Aspect | specs.md (AI-DLC) | BMAD |
+| Aspect | specs.md | BMAD |
 |--------|-------------------|------|
 | **Target Complexity** | Complex systems (same tier) | Complex/Enterprise systems (same tier) |
 | **Origin** | AWS formal methodology | Community-driven framework |
@@ -35,7 +35,7 @@ Both **specs.md (AI-DLC)** and **BMAD-Method** target complex systems and enterp
 ## When to Choose Each
 
 <CardGroup cols={2}>
-  <Card title="Choose specs.md (AI-DLC) if:" icon="check">
+  <Card title="Choose specs.md if:" icon="check">
     - You want a formal AWS methodology
     - You prefer fewer, phase-aligned agents
     - You want DDD as an integral part (not optional)
@@ -67,7 +67,7 @@ Product Owner Agent → Scrum Master Agent →
 Developer Agent → QA Agent → ...
 ```
 
-**specs.md (AI-DLC)**: 4 phase-based agents aligned to methodology
+**specs.md**: 4 phase-based agents aligned to methodology
 
 ```
 Master Agent → Inception Agent → Construction Agent → Operations Agent
@@ -77,19 +77,19 @@ Master Agent → Inception Agent → Construction Agent → Operations Agent
 
 **BMAD**: "Agentic Agile" - a proprietary framework built on agile principles with AI agents replacing human roles.
 
-**specs.md (AI-DLC)**: AWS's formally defined AI-DLC methodology with specific phases, rituals, and artifacts documented in a whitepaper.
+**specs.md**: AWS's formally defined AI-DLC methodology with specific phases, rituals, and artifacts documented in a whitepaper.
 
 ### 3. Design Technique Integration
 
 **BMAD**: Design techniques are optional. Teams can choose their own approach.
 
-**specs.md (AI-DLC)**: DDD is integrated as core. AI applies domain-driven design principles during decomposition—it's not optional.
+**specs.md**: DDD is integrated as core. AI applies domain-driven design principles during decomposition—it's not optional.
 
 ### 4. Rituals and Collaboration
 
 **BMAD**: Agents hand off documents to each other asynchronously.
 
-**specs.md (AI-DLC)**: Mob Elaboration and Mob Construction are collocated rituals where teams work together with AI in real-time.
+**specs.md**: Mob Elaboration and Mob Construction are collocated rituals where teams work together with AI in real-time.
 
 ---
 
@@ -97,7 +97,7 @@ Master Agent → Inception Agent → Construction Agent → Operations Agent
 
 If you're familiar with BMAD agents, here's how they map to AI-DLC:
 
-| BMAD Agents | specs.md (AI-DLC) Phase |
+| BMAD Agents | specs.md Phase |
 |-------------|------------------------|
 | Analyst, PM | **Inception Agent** - requirements elaboration |
 | Architect | **Inception Agent** + **Construction Agent** - domain modeling |
@@ -152,16 +152,16 @@ If you're currently using BMAD and want to try AI-DLC:
 
 | For This Need | Use This |
 |---------------|----------|
-| Formal AWS methodology | specs.md (AI-DLC) |
+| Formal AWS methodology | specs.md |
 | Maximum agent customization | BMAD |
-| Simpler mental model (4 agents) | specs.md (AI-DLC) |
+| Simpler mental model (4 agents) | specs.md |
 | Role-based simulation (19+ agents) | BMAD |
-| DDD as core requirement | specs.md (AI-DLC) |
-| Collocated Mob rituals | specs.md (AI-DLC) |
+| DDD as core requirement | specs.md |
+| Collocated Mob rituals | specs.md |
 | Async agent handoffs | BMAD |
 
 <Info>
-**Bottom Line**: Both target complex systems. specs.md (AI-DLC) offers a formal methodology with fewer agents. BMAD offers maximum customization with 19+ role-based agents.
+**Bottom Line**: Both target complex systems. specs.md offers a formal methodology with fewer agents. BMAD offers maximum customization with 19+ role-based agents.
 
 *Choose based on whether you prefer methodology-driven simplicity or agent-driven flexibility.*
 </Info>

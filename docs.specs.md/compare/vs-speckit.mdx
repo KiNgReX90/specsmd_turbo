@@ -1,13 +1,13 @@
 ---
 title: "specs.md vs GitHub Spec Kit"
-description: "Compare specs.md (AI-DLC) with GitHub's Spec Kit toolkit"
+description: "Compare specs.md with GitHub's Spec Kit toolkit"
 ---
 
 ## Overview
 
 **GitHub Spec Kit** is a toolkit that provides agent prompts and slash commands (`/speckit.specify`, `/speckit.plan`, `/speckit.tasks`) for 15+ AI coding assistants including Claude Code, Cursor, GitHub Copilot, and Gemini CLI.
 
-**specs.md (AI-DLC)** is a full methodology implementation with phase-based agents, Mob rituals, and DDD integration.
+**specs.md** is a full methodology implementation with phase-based agents, Mob rituals, and DDD integration.
 
 <Info>
 **Coming Soon**: specs.md (Simple Flow) will provide Spec Kit-like simple flows for teams wanting a lighter entry point.
@@ -17,7 +17,7 @@ description: "Compare specs.md (AI-DLC) with GitHub's Spec Kit toolkit"
 
 ## Side-by-Side Comparison
 
-| Aspect | specs.md (AI-DLC) | Spec Kit |
+| Aspect | specs.md | Spec Kit |
 |--------|-------------------|----------|
 | **Type** | Full methodology | Toolkit + Agent Prompts |
 | **Target** | Complex systems requiring trade-offs | Small-medium projects |
@@ -35,7 +35,7 @@ description: "Compare specs.md (AI-DLC) with GitHub's Spec Kit toolkit"
 ## When to Choose Each
 
 <CardGroup cols={2}>
-  <Card title="Choose specs.md (AI-DLC) if:" icon="check">
+  <Card title="Choose specs.md if:" icon="check">
     - You're building complex systems with architectural trade-offs
     - You need DDD integration and domain modeling
     - You want Mob rituals for team alignment
@@ -60,7 +60,7 @@ description: "Compare specs.md (AI-DLC) with GitHub's Spec Kit toolkit"
 
 **Spec Kit** is a toolkit—a set of commands that structure your prompts. It doesn't prescribe how you work, just helps you write better specs.
 
-**specs.md (AI-DLC)** is a full methodology with:
+**specs.md** is a full methodology with:
 - Defined phases (Inception → Construction → Operations)
 - Rituals (Mob Elaboration, Mob Construction)
 - Role definitions (AI drives, human validates)
@@ -76,7 +76,7 @@ AI: [asks clarifying questions via /speckit.clarify]
 Human: [validates and refines]
 ```
 
-**specs.md (AI-DLC)**: AI drives with Mob rituals
+**specs.md**: AI drives with Mob rituals
 ```
 Human: [provides intent]
 AI: "I've analyzed your intent. Here are 3 Units I propose.
@@ -88,13 +88,13 @@ Human: [validates, approves, or redirects in Mob session]
 
 **Spec Kit**: Constitution file sets project principles and constraints. Technical plan phase handles architecture decisions.
 
-**specs.md (AI-DLC)**: DDD is the default methodology. AI applies domain-driven design principles during decomposition, creating bounded contexts, aggregates, and domain models. Extensible via bolt types for BDD, TDD, or custom flows.
+**specs.md**: DDD is the default methodology. AI applies domain-driven design principles during decomposition, creating bounded contexts, aggregates, and domain models. Extensible via bolt types for BDD, TDD, or custom flows.
 
 ---
 
 ## Common Spec Kit Issues (and How AI-DLC Addresses Them)
 
-| Spec Kit Issue | specs.md (AI-DLC) Solution |
+| Spec Kit Issue | specs.md Solution |
 |----------------|---------------------------|
 | Commands disappear in Cursor | IDE-agnostic—works with any tool |
 | Subfolder initialization problems | Clear project structure with Memory Bank |
@@ -131,13 +131,13 @@ If you're currently using Spec Kit and want more structure:
 |---------------|----------|
 | Quick spec generation | Spec Kit or specs.md (Simple Flow) |
 | Minimal learning curve | Spec Kit |
-| Complex system development | specs.md (AI-DLC) |
-| Team coordination | specs.md (AI-DLC) |
-| Enterprise/regulated environments | specs.md (AI-DLC) |
-| DDD integration | specs.md (AI-DLC) |
+| Complex system development | specs.md |
+| Team coordination | specs.md |
+| Enterprise/regulated environments | specs.md |
+| DDD integration | specs.md |
 
 <Info>
-**Bottom Line**: Spec Kit is great for adding light structure. specs.md (AI-DLC) is for when you need a complete methodology for complex systems.
+**Bottom Line**: Spec Kit is great for adding light structure. specs.md is for when you need a complete methodology for complex systems.
 
 *Can't decide? Wait for specs.md (Simple Flow)—start simple, graduate when needed.*
 </Info>
