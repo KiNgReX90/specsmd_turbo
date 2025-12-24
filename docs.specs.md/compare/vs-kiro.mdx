@@ -24,7 +24,7 @@ description: "Compare specs.md with AWS Kiro IDE"
 | **Workflow** | AI-DLC: Inception → Construction → Operations | Requirements → Design → Tasks |
 | **Methodology** | Formal AI-DLC phases and rituals | Kiro SDD workflow |
 | **Automation** | Skills + Templates | Agent Hooks + Steering |
-| **Context** | Memory Bank (persistent project knowledge) | Steering Docs (tech.md, structure.md, product.md) |
+| **Context** | Memory Bank (persistent project knowledge) | requirements.md, design.md, tasks.md + steering files |
 | **AI Model** | Any (Claude, GPT, Gemini, etc.) | Claude Sonnet 4 |
 | **AWS Integration** | Manual | Deep (CDK, Aurora, Q Developer) |
 | **Pricing** | Free (open source) | Free preview → $19/mo (Pro), $39/mo (Pro+) |
@@ -84,12 +84,13 @@ description: "Compare specs.md with AWS Kiro IDE"
 
 ### 4. Context Management
 
-**Kiro** uses Steering Docs:
+**Kiro** uses simple spec files + steering:
 ```
 .kiro/
-├── tech.md        # Technology stack
-├── structure.md   # Project structure
-└── product.md     # Product requirements
+├── requirements.md   # Requirements spec
+├── design.md         # Design spec
+├── tasks.md          # Task breakdown
+└── steering/         # Agent steering files
 ```
 
 **specs.md** uses Memory Bank:
@@ -167,8 +168,8 @@ actions:
 If you're using Kiro and want more methodology structure:
 
 <Steps>
-  <Step title="Export Steering Docs">
-    Convert Kiro's tech.md, structure.md, product.md to specs.md Memory Bank format
+  <Step title="Export Kiro Specs">
+    Convert Kiro's requirements.md, design.md, tasks.md to specs.md Memory Bank format
   </Step>
   <Step title="Map Hooks to Skills">
     Convert agent hooks to specs.md skills (or wait for Simple Flow with hook support)
