@@ -1,0 +1,143 @@
+---
+title: "Compare Spec-Driven Tools"
+description: "How specs.md (AI-DLC) compares to Spec Kit, BMAD, Kiro, and OpenSpec"
+---
+
+## specs.md: AI-DLC for Complex Systems, Simple Flow for Everything Else
+
+specs.md implements AWS's AI-DLC—a methodology specifically designed for complex systems requiring architectural trade-offs, scalability, and multi-team coordination.
+
+<Info>
+**Coming Soon**: specs.md (Simple Flow) will provide Spec Kit and Kiro-like simple flows for developers who want a lighter entry point before adopting full AI-DLC workflows.
+</Info>
+
+---
+
+## Product Offerings
+
+| Offering | Status | Best For |
+|----------|--------|----------|
+| **specs.md (AI-DLC)** | Available | Complex systems with architectural complexity, trade-offs, multiple teams, regulated orgs |
+| **specs.md (Simple Flow)** | Coming Soon | Simpler projects without complex trade-off management |
+
+---
+
+## Comparison Matrix
+
+| Feature | specs.md (AI-DLC) | Spec Kit | BMAD | OpenSpec | Kiro |
+|---------|-------------------|----------|------|----------|------|
+| **Target Complexity** | Complex systems | Small-medium | Complex/Enterprise | Any (brownfield-first) | Any |
+| **Type** | Methodology + Framework | CLI Toolkit | Multi-agent Framework | Lightweight CLI | Full IDE |
+| **Methodology** | AWS AI-DLC (formal) | Generic SDD | Agentic Agile | Generic SDD | Kiro SDD |
+| **Design Integration** | DDD as core (not optional) | None | Optional | None | None |
+| **Rituals** | Mob Elaboration, Mob Construction | None | Agent handoffs | None | Automated |
+| **Phases** | 3 sequential | 4 sequential | 4 phases | Change-centric | Spec→Design→Tasks |
+| **Agent Model** | 4 phase-based | Single assistant | 19 role-based | Single assistant | Built-in |
+| **Iteration Cycles** | "Hours or days" (Bolts) | Variable | Epics/Stories | Per-change | Per-feature |
+| **Conversation Direction** | AI drives, human validates | Human drives | Agent-driven | Human drives | Agent-driven |
+| **Brownfield Support** | Yes (with model elevation) | Limited | Yes | Excellent | Limited |
+| **IDE Lock-in** | None (any IDE) | None | None | None | Kiro IDE only |
+| **Open Source** | Yes | Yes | Yes | Yes | Yes (Code OSS based) |
+| **Pricing** | Free | Free | Free | Free | Free preview → $19-39/mo |
+
+---
+
+## Quick Comparisons
+
+<CardGroup cols={2}>
+  <Card title="vs GitHub Spec Kit" icon="github" href="/compare/vs-speckit">
+    Lightweight toolkit vs full methodology. Learn when to choose each.
+  </Card>
+  <Card title="vs BMAD-Method" icon="users" href="/compare/vs-bmad">
+    Both target complex projects. Compare phase-based vs role-based agents.
+  </Card>
+  <Card title="vs Kiro (AWS)" icon="window" href="/compare/vs-kiro">
+    IDE-integrated vs IDE-agnostic. Compare automation approaches.
+  </Card>
+  <Card title="vs OpenSpec" icon="code-branch" href="/compare/vs-openspec">
+    Full lifecycle vs change-centric. Compare brownfield strategies.
+  </Card>
+</CardGroup>
+
+---
+
+## Key Differentiators
+
+### 1. AI-DLC is a Formal AWS Methodology
+
+Unlike generic "spec-driven development," AI-DLC is defined by AWS with specific phases, rituals, and artifacts. specs.md is a faithful implementation—not an interpretation.
+
+### 2. DDD is Core, Not Optional
+
+Agile frameworks leave design techniques optional. AI-DLC integrates Domain-Driven Design as its core—AI applies DDD principles during decomposition, developers validate.
+
+### 3. Reversed Conversation Direction
+
+In AI-DLC, **AI initiates and directs conversations**. AI proposes breakdown, trade-offs, designs. Humans validate and approve. This is the opposite of most tools where humans prompt AI.
+
+### 4. Mob Rituals for Team Alignment
+
+Mob Elaboration (Inception) and Mob Construction condense weeks of sequential work into hours while achieving deep alignment between team and AI.
+
+### 5. Built for Complex Systems
+
+<Warning>
+AI-DLC explicitly targets systems with "continuous functional adaptability, high architectural complexity, numerous trade-offs management, scalability, integration and customization requirements."
+
+Simpler projects → specs.md (Simple Flow) coming soon.
+</Warning>
+
+---
+
+## No Vendor Lock-in
+
+| Tool | Lock-in Risk |
+|------|-------------|
+| specs.md | **None** - works with any IDE/AI |
+| Spec Kit | Low - GitHub ecosystem |
+| BMAD | Low - framework-specific agents |
+| OpenSpec | Low - lightweight |
+| Kiro | **High** - Kiro IDE + Claude Sonnet only |
+
+---
+
+## Cost Comparison (Annual)
+
+| Tool | Cost |
+|------|------|
+| specs.md | $0 + API tokens (~$2-5/feature) |
+| Spec Kit | $0 + API tokens (~$5/feature) |
+| BMAD | $0 + API tokens (~$2/feature) |
+| OpenSpec | $0 + API tokens |
+| Kiro Pro | $228/year + usage limits (1000 interactions/mo) |
+| Kiro Pro+ | $468/year + usage limits (3000 interactions/mo) |
+
+---
+
+## Roadmap: Simple Flows Coming Soon
+
+We're building lightweight entry points for developers coming from other tools:
+
+| Flow | Status | Description |
+|------|--------|-------------|
+| **Simple Flow** | Coming Soon | Kiro-style Requirements → Design → Tasks workflow |
+| **Agent Hooks** | Coming Soon | Event-driven automations on file changes |
+| **Vibe Mode** | Coming Soon | Unstructured AI coding with optional spec upgrade |
+| **Full AI-DLC** | Available | Complete Inception → Construction → Operations |
+
+<Info>
+Start simple, graduate to full AI-DLC when your project complexity demands it.
+</Info>
+
+---
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="The AI-Native SDLC: Reimagined" icon="bolt" href="/methodology/sdlc-reimagined">
+    Why the Agentic Age demands a new methodology
+  </Card>
+  <Card title="What is AI-DLC?" icon="circle-question" href="/methodology/what-is-ai-dlc">
+    Deep dive into AI-DLC methodology
+  </Card>
+</CardGroup>

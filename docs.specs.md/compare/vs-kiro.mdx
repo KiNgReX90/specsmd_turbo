@@ -1,0 +1,203 @@
+---
+title: "specs.md vs Kiro (AWS)"
+description: "Compare specs.md (AI-DLC) with AWS Kiro IDE"
+---
+
+## Overview
+
+**Kiro** is AWS's agentic IDE built on Code OSS (VS Code foundation) with integrated spec-driven development, agent hooks, and deep AWS integration.
+
+**specs.md (AI-DLC)** is an IDE-agnostic framework implementing AWS's AI-DLC methodology, working with any AI coding tool.
+
+<Info>
+**Coming Soon**: specs.md (Simple Flow) will add Kiro-style agent hooks and event-driven automations.
+</Info>
+
+---
+
+## Side-by-Side Comparison
+
+| Aspect | specs.md (AI-DLC) | Kiro |
+|--------|-------------------|------|
+| **Type** | Framework/CLI | Full IDE |
+| **IDE** | Works with any (Cursor, VS Code, Claude Code, etc.) | Kiro IDE only |
+| **Workflow** | AI-DLC: Inception → Construction → Operations | Requirements → Design → Tasks |
+| **Methodology** | Formal AI-DLC phases and rituals | Kiro SDD workflow |
+| **Automation** | Skills + Templates | Agent Hooks (event-driven) |
+| **Context** | Memory Bank (persistent project knowledge) | Steering Docs (tech.md, structure.md, product.md) |
+| **AI Model** | Any (Claude, GPT, Gemini, etc.) | Claude Sonnet 4 |
+| **AWS Integration** | Manual | Deep (CDK, Aurora, Q Developer) |
+| **Pricing** | Free (open source) | Free preview → $19/mo (Pro), $39/mo (Pro+) |
+| **Spec Format** | Markdown + YAML | EARS notation for requirements |
+| **Lock-in** | None | Kiro IDE + Claude only |
+| **Maturity** | Production-ready | GA (July 2025) |
+
+---
+
+## When to Choose Each
+
+<CardGroup cols={2}>
+  <Card title="Choose specs.md (AI-DLC) if:" icon="check">
+    - You want IDE flexibility (not locked to Kiro)
+    - You prefer AI-DLC's formal 3-phase methodology
+    - You want to use your preferred AI model
+    - You don't want recurring subscription costs
+    - You need Mob rituals for team collaboration
+    - You want DDD as an integral part
+  </Card>
+  <Card title="Choose Kiro if:" icon="check">
+    - You want an all-in-one IDE experience
+    - You're heavily invested in AWS ecosystem
+    - You want built-in agent hooks for automation
+    - You prefer visual spec generation
+    - You're okay with Claude Sonnet only
+    - You're okay with subscription pricing
+  </Card>
+</CardGroup>
+
+---
+
+## Key Differences
+
+### 1. IDE Lock-in
+
+**Kiro**: Requires Kiro IDE. You cannot use Kiro's features in VS Code, Cursor, or other editors.
+
+**specs.md (AI-DLC)**: Works with any IDE and AI assistant. Use Claude Code, Cursor, GitHub Copilot, Windsurf—your choice.
+
+### 2. AI Model Flexibility
+
+**Kiro**: Uses Claude Sonnet 4 only. No option to use GPT, Gemini, or other models.
+
+**specs.md (AI-DLC)**: Works with any AI model. Use whichever model works best for your use case.
+
+### 3. Pricing Model
+
+**Kiro**:
+- Free preview (limited)
+- Pro: $19/month (1,000 agent interactions)
+- Pro+: $39/month (3,000 agent interactions)
+
+**specs.md (AI-DLC)**:
+- Free (open source)
+- Pay only for your AI API tokens (~$2-5 per feature)
+
+### 4. Context Management
+
+**Kiro** uses Steering Docs:
+```
+.kiro/
+├── tech.md        # Technology stack
+├── structure.md   # Project structure
+└── product.md     # Product requirements
+```
+
+**specs.md (AI-DLC)** uses Memory Bank:
+```
+memory-bank/
+├── context-config.yaml    # Phase-aware context
+├── artifacts/             # Persistent artifacts
+└── standards/             # Project standards
+```
+
+### 5. Automation Approach
+
+**Kiro** uses Agent Hooks (event-driven):
+```yaml
+# .kiro/hooks/update-tests.yaml
+trigger: on_save
+pattern: "**/*.tsx"
+action: "Update related test file"
+```
+
+**specs.md (AI-DLC)** uses Skills and Templates:
+```yaml
+# skills/construction/domain-modeling.yaml
+name: Domain Modeling
+triggers:
+  - bolt-start
+  - domain-design
+actions:
+  - Apply DDD principles
+  - Generate component model
+```
+
+<Info>
+**Coming Soon**: specs.md (Simple Flow) will add Kiro-style Requirements → Design → Tasks workflow with event-driven agent hooks.
+</Info>
+
+---
+
+## Feature Comparison
+
+### Kiro's Unique Features
+
+| Feature | Description |
+|---------|-------------|
+| **EARS Notation** | Structured requirements format |
+| **Agent Hooks** | Event-driven automations on file save/create |
+| **MCP Integration** | Connect external tools via Model Context Protocol |
+| **Autopilot Mode** | AI works autonomously on foundational tasks |
+| **AWS Powers** | One-click AWS service integrations |
+
+### specs.md (AI-DLC) Unique Features
+
+| Feature | Description |
+|---------|-------------|
+| **Mob Rituals** | Collocated team collaboration with AI |
+| **DDD as Core** | Domain-driven design integrated, not optional |
+| **Phase-Based Agents** | 4 agents aligned to AI-DLC phases |
+| **Bolts** | Rapid iteration cycles (hours/days, not weeks) |
+| **IDE Freedom** | Works with any IDE and AI model |
+
+---
+
+## Cost Comparison (Annual, Solo Developer)
+
+| Tool | Year 1 Cost |
+|------|-------------|
+| specs.md | ~$50-100 (API tokens only) |
+| Kiro Pro | $228 + usage limits |
+| Kiro Pro+ | $468 + usage limits |
+
+---
+
+## Migration Path
+
+If you're using Kiro and want more methodology structure:
+
+<Steps>
+  <Step title="Export Steering Docs">
+    Convert Kiro's tech.md, structure.md, product.md to specs.md Memory Bank format
+  </Step>
+  <Step title="Map Hooks to Skills">
+    Convert agent hooks to specs.md skills (or wait for Simple Flow with hook support)
+  </Step>
+  <Step title="Adopt AI-DLC Phases">
+    Organize work into Inception, Construction, Operations
+  </Step>
+  <Step title="Add Mob Rituals">
+    Introduce Mob Elaboration and Mob Construction for team alignment
+  </Step>
+</Steps>
+
+---
+
+## Summary
+
+| For This Need | Use This |
+|---------------|----------|
+| IDE flexibility | specs.md (AI-DLC) |
+| All-in-one IDE | Kiro |
+| AI model choice | specs.md (AI-DLC) |
+| AWS deep integration | Kiro |
+| Free/open source | specs.md (AI-DLC) |
+| Built-in agent hooks | Kiro (or wait for specs.md Simple Flow) |
+| Formal methodology | specs.md (AI-DLC) |
+| Mob rituals | specs.md (AI-DLC) |
+
+<Info>
+**Bottom Line**: Kiro offers a polished, all-in-one experience with AWS integration. specs.md (AI-DLC) offers methodology depth, IDE freedom, and no subscription costs.
+
+*Want Kiro's simplicity with AI-DLC's methodology? Wait for specs.md (Simple Flow).*
+</Info>

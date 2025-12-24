@@ -40,6 +40,15 @@
             ]
           },
           {
+            "group": "Why specs.md",
+            "pages": [
+              "methodology/sdlc-reimagined",
+              "methodology/what-is-ai-dlc",
+              "methodology/ai-dlc-vs-agile",
+              "methodology/three-phases"
+            ]
+          },
+          {
             "group": "Framework",
             "pages": [
               "architecture/flows"
@@ -48,9 +57,6 @@
           {
             "group": "AI-DLC Flow",
             "pages": [
-              "methodology/what-is-ai-dlc",
-              "methodology/ai-dlc-vs-agile",
-              "methodology/three-phases",
               {
                 "group": "Concepts",
                 "pages": [
@@ -77,6 +83,16 @@
                   "guides/bolt-types"
                 ]
               }
+            ]
+          },
+          {
+            "group": "Compare",
+            "pages": [
+              "compare/overview",
+              "compare/vs-speckit",
+              "compare/vs-bmad",
+              "compare/vs-kiro",
+              "compare/vs-openspec"
             ]
           },
           {
