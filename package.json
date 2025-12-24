@@ -1,6 +1,6 @@
 {
   "name": "specsmd",
-  "version": "0.2.25",
+  "version": "0.2.26",
   "private": true,
   "description": "Root workspace for specsmd development",
   "scripts": {
