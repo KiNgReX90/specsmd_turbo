@@ -17,7 +17,7 @@
     "links": [
       {
         "label": "GitHub",
-        "href": "https://github.com/fabriqaai/specsmd"
+        "href": "https://github.com/fabriqaai/specs.md"
       }
     ],
     "primary": {
@@ -108,7 +108,12 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/fabriqaai/specsmd"
+      "github": "https://github.com/fabriqaai/specs.md"
+    }
+  },
+  "integrations": {
+    "ga4": {
+      "measurementId": "G-Z6L00G5P4N"
     }
   }
 }
