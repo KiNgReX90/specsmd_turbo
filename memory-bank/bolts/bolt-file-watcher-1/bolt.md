@@ -3,15 +3,24 @@ id: bolt-file-watcher-1
 unit: file-watcher
 intent: 011-vscode-extension
 type: simple-construction-bolt
-status: planned
+status: complete
 stories:
   - 001-file-system-watcher
   - 002-debounced-refresh
 created: 2025-12-25T17:00:00Z
-started: null
-completed: null
+started: 2025-12-25T19:30:00Z
+completed: 2025-12-25T19:40:00Z
 current_stage: null
-stages_completed: []
+stages_completed:
+  - name: plan
+    completed: 2025-12-25T19:30:00Z
+    artifact: implementation-plan.md
+  - name: implement
+    completed: 2025-12-25T19:35:00Z
+    artifact: implementation-walkthrough.md
+  - name: test
+    completed: 2025-12-25T19:40:00Z
+    artifact: test-walkthrough.md
 
 requires_bolts:
   - bolt-artifact-parser-1
