@@ -24,7 +24,7 @@ When working on AI-DLC flow implementation or documentation, you MUST read these
    - Contains: memory-bank.yaml, context-config.yaml, skills, templates
 
 ### Specifications (Reference)
-4. **`/specs/`** - Project specifications
+4. **`/memory-bank/`** - Project specifications
    - Contains: PRFAQ, glossary, term-mappings, intents, standards
    - Structure follows AI-DLC: intents → units → stories
 
@@ -64,12 +64,12 @@ Instead of duplicating content here, refer to these files:
 
 | Topic | File Location |
 |-------|---------------|
-| **Term Mappings** | `/specs/term-mappings.md` |
-| **Glossary** | `/specs/glossary.md` |
-| **PRFAQ** | `/specs/PRFAQ.md` |
-| **Standards** | `/specs/standards/` (tech-stack, coding-standards, system-architecture) |
-| **Agent Specs** | `/specs/intents/001-multi-agent-orchestration/units/` |
-| **Memory Bank Specs** | `/specs/intents/003-memory-bank-system/units/` |
+| **Term Mappings** | `/memory-bank/term-mappings.md` |
+| **Glossary** | `/memory-bank/glossary.md` |
+| **PRFAQ** | `/memory-bank/PRFAQ.md` |
+| **Standards** | `/memory-bank/standards/` (tech-stack, coding-standards, system-architecture) |
+| **Agent Specs** | `/memory-bank/intents/001-multi-agent-orchestration/units/` |
+| **Memory Bank Specs** | `/memory-bank/intents/003-memory-bank-system/units/` |
 | **Agent Implementation** | `/src/flows/aidlc/agents/` |
 | **Skills** | `/src/flows/aidlc/skills/` (inception, construction) |
 | **Templates** | `/src/flows/aidlc/templates/` |
@@ -85,7 +85,7 @@ Follow this process for ANY AI-DLC feature work:
    - Understand established patterns and conventions
    - Follow existing agent structure (Persona, Critical Actions, Skills, Workflow)
 
-2. **Check specifications** (`/specs/`)
+2. **Check specifications** (`/memory-bank/`)
    - Review glossary and term-mappings for consistent terminology
    - Check relevant unit-briefs for requirements
 
@@ -109,7 +109,7 @@ Follow this process for ANY AI-DLC feature work:
 
 ### Key Conventions
 - Command naming: noun-verb pattern (e.g., `bolt-start`, `intent-create`)
-- File structure: See `/specs/` for specifications, `/src/flows/aidlc/` for implementation
+- File structure: See `/memory-bank/` for specifications, `/src/flows/aidlc/` for implementation
 
 ---
 
@@ -122,10 +122,66 @@ Before implementing any AI-DLC feature, ask:
 - ✅ Am I using noun-verb command pattern?
 - ✅ Am I respecting the 3-phase structure (Inception → Construction → Operations)?
 - ✅ Am I pointing to specs rather than duplicating content?
-- ✅ Have I checked `/specs/glossary.md` for consistent terminology?
+- ✅ Have I checked `/memory-bank/glossary.md` for consistent terminology?
 
 ---
 
 *These instructions ensure specsmd delivers a faithful, world-class AI-DLC implementation.*
 
-*Last updated: 2025-12-06 - Updated file references to match actual project structure*
+---
+
+## 8. **Dogfooding: Using AI-DLC to Build specsmd**
+
+specsmd is built using its own AI-DLC flows. This section explains the setup.
+
+### Directory Structure
+
+```
+specsmd/
+├── .specsmd/aidlc/    → symlink to src/flows/aidlc/  (AI-DLC flow definitions)
+├── memory-bank/       → primary artifact storage     (intents, bolts, standards)
+└── .claude/commands/  → slash commands for agents
+```
+
+### Slash Commands Available
+
+| Command | Description |
+|---------|-------------|
+| `/specsmd-master-agent` | Start here - orchestrates flow and routes to appropriate agent |
+| `/specsmd-inception-agent` | Planning phase - requirements, stories, units, bolt planning |
+| `/specsmd-construction-agent` | Building phase - execute bolts through DDD stages |
+| `/specsmd-operations-agent` | Deployment phase - build, deploy, verify, monitor |
+
+### How It Works
+
+1. **Flow Source**: The AI-DLC flow is defined in `src/flows/aidlc/` (source)
+2. **Flow Link**: `.specsmd/aidlc/` symlinks to the source for agents to read
+3. **Artifacts**: `memory-bank/` is the primary storage for project artifacts
+4. **Commands**: `.claude/commands/` contains slash commands that activate agents
+
+### Starting Development
+
+```text
+/specsmd-master-agent
+```
+
+This activates the Master Orchestrator which will:
+1. Check if project is initialized (standards exist)
+2. Analyze current project state
+3. Route you to the appropriate phase/agent
+
+### Key Paths for Agents
+
+| Purpose | Path |
+|---------|------|
+| Agent Definitions | `.specsmd/aidlc/agents/` |
+| Skills | `.specsmd/aidlc/skills/` |
+| Templates | `.specsmd/aidlc/templates/` |
+| Memory Bank Schema | `.specsmd/aidlc/memory-bank.yaml` |
+| Standards | `memory-bank/standards/` |
+| Intents | `memory-bank/intents/` |
+| Bolts | `memory-bank/bolts/` |
+
+---
+
+*Last updated: 2025-12-25 - Added dogfooding documentation*

@@ -2,7 +2,7 @@
 
 **Command**: `/compare-specs`
 
-Compare specifications in `specs/` with their corresponding implementations in `src/` to identify gaps, inconsistencies, and missing items.
+Compare specifications in `memory-bank/` with their corresponding implementations in `src/` to identify gaps, inconsistencies, and missing items.
 
 ---
 
@@ -41,9 +41,9 @@ Ask the user:
 
 ### Step 2: Locate Files
 
-**Spec locations** (`specs/`):
+**Spec locations** (`memory-bank/`):
 ```
-specs/
+memory-bank/
 ├── intents/
 │   ├── 001-multi-agent-orchestration/
 │   │   └── units/
@@ -51,15 +51,15 @@ specs/
 │   │       ├── inception-agent/unit-brief.md
 │   │       ├── construction-agent/unit-brief.md
 │   │       └── operations-agent/unit-brief.md
-│   ├── 002-ai-dlc-workflow-engine/
+│   ├── 002-agentic-coding-tool-integration/
 │   └── 003-memory-bank-system/
-├── core/
-│   ├── architecture.md
-│   └── glossary.md
-├── flows/aidlc/
-│   ├── methodology-notes.md
-│   ├── workflow.md
-│   └── glossary.md
+├── standards/
+│   ├── coding-standards.md
+│   ├── tech-stack.md
+│   └── system-architecture.md
+├── research/
+│   └── (research documentation)
+├── glossary.md
 └── term-mappings.md
 ```
 

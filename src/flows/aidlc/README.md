@@ -347,7 +347,7 @@ Three specialized agents guide you through AI-DLC:
 ## Learn More
 
 - **Official AI-DLC Documentation**: See `/resource/aidlc-pdf-dump.txt` in the specsmd repository
-- **Methodology Notes**: See `specs/flows/aidlc/methodology-notes.md`
+- **Methodology Notes**: See `memory-bank/research/` for methodology research
 - **Agent Details**: Read the agent files in `.specsmd/aidlc/agents/`
 
 ## Getting Help
