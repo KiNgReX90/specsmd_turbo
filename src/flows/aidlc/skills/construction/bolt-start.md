@@ -185,6 +185,37 @@ stages_completed:
 completed: {timestamp}
 ```
 
+#### Update Story Status (On Bolt Completion)
+
+When marking a bolt as `status: complete`, update all stories in the bolt's `stories` array:
+
+1. **Read bolt's stories**: Get story IDs from bolt frontmatter `stories: [001-story-name, 002-story-name, ...]`
+2. **Locate story files**: `{intent}/units/{unit}/stories/{story-id}.md`
+3. **Update each story frontmatter**:
+
+   ```yaml
+   # Change from
+   status: draft
+   implemented: false
+
+   # To
+   status: complete
+   implemented: true
+   ```
+
+**Example**:
+
+```text
+Bolt stories: [001-create-role, 002-manage-permissions, 003-view-roles]
+
+Updated:
+✅ stories/001-create-role.md → status: complete, implemented: true
+✅ stories/002-manage-permissions.md → status: complete, implemented: true
+✅ stories/003-view-roles.md → status: complete, implemented: true
+```
+
+This ensures the memory-bank reflects actual implementation status and the VS Code extension shows correct completion indicators.
+
 ### 9. Continue or Complete
 
 Based on condition:
