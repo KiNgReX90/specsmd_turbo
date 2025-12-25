@@ -30,9 +30,9 @@ Stage 1: Spec → Stage 2: Implement → Stage 3: Test
 
 **Stage Overview:**
 
-- ✅/[ ] **1. Spec** (Required) → `spec.md`
+- ✅/[ ] **1. Spec** (Required) → `walkthrough-implementation.md`
 - ✅/[ ] **2. Implement** (Required) → Source code
-- ✅/[ ] **3. Test** (Required) → Tests + `test-report.md`
+- ✅/[ ] **3. Test** (Required) → Tests + `walkthrough-test.md`
 
 **Rules**:
 
@@ -98,8 +98,8 @@ This bolt type provides a lightweight construction process for work that doesn't
 4 - **Define acceptance criteria**: How will we know it's done?
 5 - **Note technical approach**: High-level implementation notes
 
-**Artifact**: `spec.md`
-**Location**: `memory-bank/bolts/{bolt-id}/spec.md`
+**Artifact**: `walkthrough-implementation.md`
+**Location**: `memory-bank/bolts/{bolt-id}/walkthrough-implementation.md`
 
 **Template Structure**:
 
@@ -183,8 +183,8 @@ created: {timestamp}
 4 - **Verify acceptance criteria**: Check against spec
 5 - **Document results**: Create test report
 
-**Artifact**: `test-report.md`
-**Location**: `memory-bank/bolts/{bolt-id}/test-report.md`
+**Artifact**: `walkthrough-test.md`
+**Location**: `memory-bank/bolts/{bolt-id}/walkthrough-test.md`
 
 **Template Structure**:
 
@@ -233,7 +233,7 @@ current_stage: implement
 stages_completed:
   - name: spec
     completed: 2024-12-05T10:00:00Z
-    artifact: spec.md
+    artifact: walkthrough-implementation.md
 status: in-progress
 ---
 ```
@@ -249,7 +249,7 @@ For Stage 2 (Implement) and Stage 3 (Test), load all artifacts from the bolt fol
 **Load all files in this folder**, which may include:
 
 - `bolt.md` - Bolt instance metadata
-- `spec.md` - Spec from Stage 1
+- `walkthrough-implementation.md` - Implementation walkthrough from Stage 1
 
 This ensures implementation and test stages have context from the spec.
 
