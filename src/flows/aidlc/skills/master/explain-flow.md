@@ -58,7 +58,7 @@ AI-DLC is a reimagined development methodology where AI drives the workflow and 
 - **Unit**: Independently deployable component (like a bounded context)
 - **Story**: User story with acceptance criteria
 - **Bolt**: Time-boxed execution session (hours/days, not weeks)
-- **Bolt Type**: Methodology template (DDD, BDD, TDD)
+- **Bolt Type**: Methodology template (DDD or Simple)
 
 ### Core Principles
 

@@ -80,15 +80,11 @@ Requirements covering Performance, Scalability, Security, Reliability, Maintaina
 
 ### DDD Construction Bolt
 
-A bolt type using Domain-Driven Design principles. Stages: Model (domain design) → Design (logical design) → Code → Test.
+A bolt type using Domain-Driven Design principles for complex business logic. Stages: Domain Model → Technical Design → ADR Analysis (optional) → Implement → Test.
 
-### TDD Construction Bolt
+### Simple Construction Bolt
 
-A bolt type using Test-Driven Development approach. Write tests first, then implementation.
-
-### BDD Construction Bolt
-
-A bolt type using Behavior-Driven Development approach. Define behavior scenarios first.
+A lightweight bolt type for UI, integrations, and utilities. Stages: Spec → Implement → Test.
 
 ### Spike Bolt
 

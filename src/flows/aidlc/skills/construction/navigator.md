@@ -136,7 +136,7 @@ When user selects an option:
 
 - [ ] `bolt-auth-1` (auth-service, DDD) - planned
 - [ ] `bolt-auth-2` (auth-service, DDD) - planned
-- [ ] `bolt-api-1` (api-gateway, BDD) - planned
+- [ ] `bolt-api-1` (api-gateway, Simple) - planned
 
 ### Quick Actions
 

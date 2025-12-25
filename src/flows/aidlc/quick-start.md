@@ -98,13 +98,21 @@ Switch to the Construction Agent to execute:
 /specsmd-construction-agent bolt-start
 ```
 
-Each bolt goes through stages (DDD bolt example):
+Each bolt type has its own stages:
 
-1. **Domain Model** - Model the business logic
+**DDD Construction Bolt** (for complex business logic):
+
+1. **Domain Model** - Model the business domain
 2. **Technical Design** - Define interfaces and architecture
 3. **ADR Analysis** - Document significant decisions (optional)
 4. **Implement** - Write production code
 5. **Test** - Verify correctness
+
+**Simple Construction Bolt** (for UI, integrations, utilities):
+
+1. **Spec** - Define what to build
+2. **Implement** - Write the code
+3. **Test** - Verify it works
 
 Human validation happens at each stage.
 
