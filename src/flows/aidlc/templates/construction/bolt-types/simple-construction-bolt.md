@@ -30,9 +30,9 @@ Stage 1: Spec → Stage 2: Implement → Stage 3: Test
 
 **Stage Overview:**
 
-- ✅/[ ] **1. Spec** (Required) → `walkthrough-implementation.md`
-- ✅/[ ] **2. Implement** (Required) → Source code
-- ✅/[ ] **3. Test** (Required) → Tests + `walkthrough-test.md`
+- ✅/[ ] **1. Spec** (Required) → `implementation-plan.md`
+- ✅/[ ] **2. Implement** (Required) → Source code + `implementation-walkthrough.md`
+- ✅/[ ] **3. Test** (Required) → Tests + `test-walkthrough.md`
 
 **Rules**:
 
@@ -98,8 +98,8 @@ This bolt type provides a lightweight construction process for work that doesn't
 4 - **Define acceptance criteria**: How will we know it's done?
 5 - **Note technical approach**: High-level implementation notes
 
-**Artifact**: `walkthrough-implementation.md`
-**Location**: `memory-bank/bolts/{bolt-id}/walkthrough-implementation.md`
+**Artifact**: `implementation-plan.md`
+**Location**: `memory-bank/bolts/{bolt-id}/implementation-plan.md`
 
 **Template Structure**:
 
@@ -110,7 +110,7 @@ bolt: {bolt-id}
 created: {timestamp}
 ---
 
-## Spec: {unit-name}
+## Implementation Plan: {unit-name}
 
 ### Objective
 {What this bolt will accomplish}
@@ -143,7 +143,7 @@ created: {timestamp}
 
 ### Stage 2: Implement
 
-**Objective**: Write the code
+**Objective**: Write the code and document what was done
 
 **Duration**: Hours (varies by complexity)
 
@@ -154,16 +154,80 @@ created: {timestamp}
 3 - **Handle edge cases**: Error handling, validation
 4 - **Add documentation**: Code comments, JSDoc/docstrings
 5 - **Run linting**: Ensure code style compliance
+6 - **Document implementation**: Create implementation walkthrough
 
-**Artifact**: Source code
-**Location**: As defined in project structure (e.g., `src/`, `app/`, `pages/`)
+**Artifacts**:
+- Source code - As defined in project structure (e.g., `src/`, `app/`, `pages/`)
+- `implementation-walkthrough.md` - `memory-bank/bolts/{bolt-id}/implementation-walkthrough.md`
+
+**Implementation Walkthrough Guidelines**:
+
+⚠️ **CRITICAL RULES**:
+- **NO CODE** in this document - only structure summaries and descriptions
+- **USE CHECKMARKS** for all file entries (completed work)
+- **BE CONSISTENT** - follow the template exactly
+
+**Template**:
+
+```markdown
+---
+stage: implement
+bolt: {bolt-id}
+created: {timestamp}
+---
+
+## Implementation Walkthrough: {unit-name}
+
+### Summary
+
+{2-3 sentence overview of what was built - NO CODE}
+
+### Structure Overview
+
+{High-level description of the architecture/organization - NO CODE}
+
+### Completed Work
+
+- [x] `{path/to/file}` - {what this file does, not how}
+- [x] `{path/to/file}` - {what this file does, not how}
+- [x] `{path/to/file}` - {what this file does, not how}
+
+### Key Decisions
+
+- **{Decision}**: {Why this approach was chosen}
+
+### Deviations from Plan
+
+{Any changes from implementation-plan.md and why, or "None"}
+
+### Dependencies Added
+
+- [x] `{package}` - {why needed}
+
+### Developer Notes
+
+{Gotchas, tips, or context for future work - keep brief}
+```
+
+**What to Include**:
+- ✅ File paths with brief purpose descriptions
+- ✅ Architectural decisions and rationale
+- ✅ Deviations from original plan
+- ✅ High-level structure explanations
+
+**What NOT to Include**:
+- ❌ Code snippets or examples
+- ❌ Implementation details (how it works internally)
+- ❌ Line-by-line explanations
+- ❌ API signatures or type definitions
 
 **Completion Criteria**:
 
-- [ ] All deliverables from spec implemented
+- [ ] All deliverables from plan implemented
 - [ ] Code follows project coding standards
 - [ ] Linting passes
 - [ ] Code is documented
+- [ ] Implementation walkthrough created
 
 **⛔ HUMAN Checkpoint**: Present implementation summary and **STOP**. Wait for user to confirm before proceeding to Stage 3.
 
@@ -183,8 +247,8 @@ created: {timestamp}
 4 - **Verify acceptance criteria**: Check against spec
 5 - **Document results**: Create test report
 
-**Artifact**: `walkthrough-test.md`
-**Location**: `memory-bank/bolts/{bolt-id}/walkthrough-test.md`
+**Artifact**: `test-walkthrough.md`
+**Location**: `memory-bank/bolts/{bolt-id}/test-walkthrough.md`
 
 **Template Structure**:
 
@@ -233,7 +297,7 @@ current_stage: implement
 stages_completed:
   - name: spec
     completed: 2024-12-05T10:00:00Z
-    artifact: walkthrough-implementation.md
+    artifact: implementation-plan.md
 status: in-progress
 ---
 ```
@@ -249,9 +313,10 @@ For Stage 2 (Implement) and Stage 3 (Test), load all artifacts from the bolt fol
 **Load all files in this folder**, which may include:
 
 - `bolt.md` - Bolt instance metadata
-- `walkthrough-implementation.md` - Implementation walkthrough from Stage 1
+- `implementation-plan.md` - Implementation plan from Stage 1
+- `implementation-walkthrough.md` - Developer notes from Stage 2 (if exists)
 
-This ensures implementation and test stages have context from the spec.
+This ensures later stages have full context from earlier work.
 
 ---
 
