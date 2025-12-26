@@ -557,27 +557,20 @@
     }
 
     .bolt-stories-list {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      display: flex;
+      flex-direction: column;
       gap: 4px;
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.2s ease;
       margin-bottom: 12px;
-    }
-
-    .bolt-stories-list.visible {
-      max-height: 200px;
     }
 
     .bolt-story {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 6px;
+      gap: 8px;
+      padding: 6px 10px;
       background: var(--vscode-sideBar-background);
-      border-radius: 3px;
-      font-size: 9px;
+      border-radius: 4px;
+      font-size: 10px;
       cursor: pointer;
       transition: background 0.15s;
     }
@@ -586,18 +579,30 @@
       background: var(--vscode-list-hoverBackground);
     }
 
-    .bolt-story-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
+    .bolt-story-checkbox {
+      width: 14px;
+      height: 14px;
+      border-radius: 3px;
+      border: 2px solid var(--vscode-input-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      flex-shrink: 0;
     }
 
-    .bolt-story-dot.done {
+    .bolt-story-checkbox.done {
       background: var(--status-complete);
+      border-color: var(--status-complete);
+      color: white;
     }
 
-    .bolt-story-dot.pending {
-      background: var(--vscode-input-border);
+    .bolt-story-name {
+      flex: 1;
+    }
+
+    .bolt-story-name.done {
+      color: var(--vscode-descriptionForeground);
     }
 
     .bolt-actions {
@@ -1881,8 +1886,8 @@
 
       const storiesHtml = bolt.stories.map(s => `
         <div class="bolt-story" onclick="event.stopPropagation()">
-          <div class="bolt-story-dot ${s.done ? 'done' : 'pending'}"></div>
-          <span>${s.name}</span>
+          <div class="bolt-story-checkbox ${s.done ? 'done' : ''}">${s.done ? '&#10003;' : ''}</div>
+          <span class="bolt-story-name ${s.done ? 'done' : ''}">${s.name}</span>
         </div>
       `).join('');
 
@@ -1897,11 +1902,7 @@
         </div>
       `).join('');
 
-      const actionBtn = bolt.status === 'complete'
-        ? '<button type="button" class="bolt-btn bolt-btn-secondary">View Files</button>'
-        : bolt.status === 'active'
-          ? `<button type="button" class="bolt-btn bolt-btn-primary">Continue ${getCurrentStageName(bolt)}</button><button type="button" class="bolt-btn bolt-btn-secondary">Files</button>`
-          : '<button type="button" class="bolt-btn bolt-btn-primary">Start Bolt</button>';
+      const actionBtn = '<button type="button" class="bolt-btn bolt-btn-secondary">Files</button>';
 
       return `
         <div class="bolt-card ${isExpanded ? 'expanded' : ''}" id="${bolt.id}">
@@ -1923,16 +1924,8 @@
               <div class="bolt-stories-row">
                 <span class="bolt-stories-label">Stories</span>
                 <span class="bolt-stories-count">${doneStories}/${totalStories}</span>
-                <button type="button" class="bolt-stories-toggle" onclick="event.stopPropagation(); toggleStoriesList('${bolt.id}')">Show</button>
               </div>
-              <div class="bolt-stories-list" id="stories-${bolt.id}">${storiesHtml}</div>
-              <div class="files-section">
-                <div class="files-header">
-                  <span class="files-label">Files (${existingFilesCount}/${boltFiles.length})</span>
-                  <button type="button" class="files-toggle" onclick="event.stopPropagation(); toggleFilesList('${bolt.id}')">Show</button>
-                </div>
-                <div class="files-list" id="files-${bolt.id}">${filesHtml}</div>
-              </div>
+              <div class="bolt-stories-list">${storiesHtml}</div>
               <div class="bolt-actions">${actionBtn}</div>
             </div>
           </div>
