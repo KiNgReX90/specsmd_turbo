@@ -1509,6 +1509,17 @@
         </div>
       `).join('');
 
+      // Get files for this bolt type
+      const boltFiles = getBoltFiles(bolt);
+      const existingFilesCount = boltFiles.filter(f => f.exists).length;
+      const filesHtml = boltFiles.map(f => `
+        <div class="file-item ${f.exists ? '' : 'missing'}" onclick="event.stopPropagation()">
+          <span class="file-icon ${f.exists ? 'md' : 'missing'}">&#128196;</span>
+          <span class="file-name">${f.name}</span>
+          <span class="file-status ${f.exists ? 'exists' : 'pending'}">${f.exists ? 'exists' : 'pending'}</span>
+        </div>
+      `).join('');
+
       const actionBtn = bolt.status === 'complete'
         ? '<button type="button" class="bolt-btn bolt-btn-secondary">View Files</button>'
         : bolt.status === 'active'
@@ -1538,6 +1549,13 @@
                 <button type="button" class="bolt-stories-toggle" onclick="event.stopPropagation(); toggleStoriesList('${bolt.id}')">Show</button>
               </div>
               <div class="bolt-stories-list" id="stories-${bolt.id}">${storiesHtml}</div>
+              <div class="files-section">
+                <div class="files-header">
+                  <span class="files-label">Files (${existingFilesCount}/${boltFiles.length})</span>
+                  <button type="button" class="files-toggle" onclick="event.stopPropagation(); toggleFilesList('${bolt.id}')">Show</button>
+                </div>
+                <div class="files-list" id="files-${bolt.id}">${filesHtml}</div>
+              </div>
               <div class="bolt-actions">${actionBtn}</div>
             </div>
           </div>
@@ -1692,6 +1710,13 @@
     function toggleStoriesList(boltId) {
       const list = document.getElementById('stories-' + boltId);
       const btn = list.previousElementSibling.querySelector('.bolt-stories-toggle');
+      list.classList.toggle('visible');
+      btn.textContent = list.classList.contains('visible') ? 'Hide' : 'Show';
+    }
+
+    function toggleFilesList(boltId) {
+      const list = document.getElementById('files-' + boltId);
+      const btn = list.previousElementSibling.querySelector('.files-toggle');
       list.classList.toggle('visible');
       btn.textContent = list.classList.contains('visible') ? 'Hide' : 'Show';
     }
