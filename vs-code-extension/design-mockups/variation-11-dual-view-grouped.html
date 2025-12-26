@@ -2064,22 +2064,7 @@
                     <span class="intent-stories-count">${intentUnits.filter(u => stories.filter(s => s.unitId === u.id).every(s => s.status === 'complete')).length}/${intentUnits.length}</span>
                   </div>
                   <div class="intent-stories-list">
-                    ${intentUnits.map(unit => {
-                      const unitStories = stories.filter(s => s.unitId === unit.id);
-                      const unitDone = unitStories.filter(s => s.status === 'complete').length;
-                      const unitComplete = unitDone === unitStories.length;
-                      const unitActive = unitStories.some(s => s.status === 'active');
-                      let unitStatus = 'pending';
-                      if (unitComplete) unitStatus = 'complete';
-                      else if (unitActive || unitDone > 0) unitStatus = 'active';
-                      return \`
-                        <div class="intent-story-item">
-                          <div class="intent-story-checkbox \${unitStatus}">\${unitStatus === 'complete' ? '&#10003;' : ''}</div>
-                          <span class="intent-story-name \${unitStatus}">\${unit.name}</span>
-                          <span style="font-size: 10px; color: var(--vscode-descriptionForeground);">\${unitDone}/\${unitStories.length}</span>
-                        </div>
-                      \`;
-                    }).join('')}
+                    ${renderIntentUnits(intentUnits)}
                   </div>
                 </div>
 
@@ -2132,6 +2117,25 @@
                 </div>
               `).join('')}
             </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderIntentUnits(intentUnits) {
+      return intentUnits.map(unit => {
+        const unitStories = stories.filter(s => s.unitId === unit.id);
+        const unitDone = unitStories.filter(s => s.status === 'complete').length;
+        const unitComplete = unitDone === unitStories.length && unitStories.length > 0;
+        const unitActive = unitStories.some(s => s.status === 'active');
+        let unitStatus = 'pending';
+        if (unitComplete) unitStatus = 'complete';
+        else if (unitActive || unitDone > 0) unitStatus = 'active';
+        return `
+          <div class="intent-story-item">
+            <div class="intent-story-checkbox ${unitStatus}">${unitStatus === 'complete' ? '&#10003;' : ''}</div>
+            <span class="intent-story-name ${unitStatus}">${unit.name}</span>
+            <span style="font-size: 10px; color: var(--vscode-descriptionForeground);">${unitDone}/${unitStories.length}</span>
           </div>
         `;
       }).join('');
