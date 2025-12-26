@@ -1,9 +1,9 @@
 ---
 intent: vscode-extension
-phase: inception
-status: draft
+phase: construction
+status: construction
 created: 2025-12-25
-updated: 2025-12-25
+updated: 2025-12-26
 ---
 
 # Requirements: VS Code Extension
@@ -118,22 +118,72 @@ Create a VS Code extension ("specsmd extension") that provides a dashboard sideb
 - FR-7.6: Extension SHALL NOT auto-execute command (user must press Enter)
 - FR-7.7: After installation detected (folders appear), sidebar SHALL auto-refresh to show artifacts
 
+### FR-8: Tab-Based Sidebar Architecture
+
+- FR-8.1: Sidebar SHALL display three tabs: **Bolts**, **Specs**, **Overview**
+- FR-8.2: **Bolts tab** SHALL show command center (current focus, queue, activity)
+- FR-8.3: **Specs tab** SHALL show Intent → Unit → Story hierarchy tree
+- FR-8.4: **Overview tab** SHALL show aggregate progress metrics and dashboards
+- FR-8.5: Active tab state SHALL persist across VS Code sessions
+- FR-8.6: Tabs SHALL use VS Code theming (dark/light mode support)
+
+### FR-9: Command Center (Bolts Tab)
+
+- FR-9.1: SHALL display "Current Intent" header with bolt statistics (active/queued/done counts)
+- FR-9.2: SHALL display "Current Focus" expandable card for the active bolt
+- FR-9.3: Current Focus card SHALL show:
+  - Progress ring visualization (percentage complete)
+  - Stage pipeline with status indicators (complete/active/pending)
+  - Stories checklist with completion status
+  - "Continue" and "Files" action buttons
+- FR-9.4: SHALL display "Up Next" queue section showing pending bolts
+- FR-9.5: Up Next queue SHALL order bolts by dependency priority:
+  - Unblocked bolts first (all `requires_bolts` complete)
+  - Among unblocked, prioritize by `enables_bolts` count (enables more work first)
+  - Blocked bolts shown last with blocker indication
+- FR-9.6: Blocked bolts SHALL display which bolts are blocking them
+- FR-9.7: SHALL display "Recent Activity" section with activity feed
+- FR-9.8: Activity feed SHALL support filtering: All, Stages, Bolts
+- FR-9.9: Activity section SHALL be resizable via drag handle (min 120px, max 500px)
+- FR-9.10: Activity section height SHALL persist across sessions
+
+### FR-10: Bolt Dependencies
+
+- FR-10.1: Parser SHALL read `requires_bolts` field from bolt frontmatter
+- FR-10.2: Parser SHALL read `enables_bolts` field from bolt frontmatter
+- FR-10.3: Parser SHALL compute `isBlocked` for pending bolts (true if any `requires_bolts` incomplete)
+- FR-10.4: Parser SHALL compute `blockedBy` list (IDs of incomplete required bolts)
+- FR-10.5: Parser SHALL compute `unblocksCount` (number of bolts this bolt enables)
+- FR-10.6: Status "blocked" SHALL be distinct from "pending" in UI
+
+### FR-11: Activity Feed
+
+- FR-11.1: Activity feed SHALL be derived from bolt timestamp fields (no separate log)
+- FR-11.2: Activity event types:
+  - `bolt-created`: from `created` timestamp
+  - `bolt-start`: from `started` timestamp
+  - `stage-complete`: from `stages_completed[].completed` timestamps
+  - `bolt-complete`: from `completed` timestamp
+- FR-11.3: Activity feed SHALL be sorted by timestamp descending (most recent first)
+- FR-11.4: Activity items SHALL display: icon, description, target bolt, tag (bolt/stage), relative time
+- FR-11.5: Activity feed SHALL update when file watcher detects bolt changes
+
 ---
 
 ## Future Requirements (Phase 2+)
 
-### FR-8: Bolt Actions (Future)
+### FR-12: Bolt Actions (Future)
 
-- FR-8.1: Bolts SHALL have context menu with "Start Bolt" action
-- FR-8.2: "Start Bolt" SHALL copy command to clipboard for pasting in AI chat
-- FR-8.3: Bolts SHALL have context menu with "View Progress" action
-- FR-8.4: Extension MAY provide quick-pick command palette for bolt operations
+- FR-12.1: Bolts SHALL have context menu with "Start Bolt" action
+- FR-12.2: "Start Bolt" SHALL copy command to clipboard for pasting in AI chat
+- FR-12.3: Bolts SHALL have context menu with "View Progress" action
+- FR-12.4: Extension MAY provide quick-pick command palette for bolt operations
 
-### FR-9: Custom Editors (Future)
+### FR-13: Custom Editors (Future)
 
-- FR-9.1: Extension MAY provide custom editor for bolt.md files
-- FR-9.2: Extension MAY provide custom editor for story files
-- FR-9.3: Custom editors MAY show rich UI for status, stages, acceptance criteria
+- FR-13.1: Extension MAY provide custom editor for bolt.md files
+- FR-13.2: Extension MAY provide custom editor for story files
+- FR-13.3: Custom editors MAY show rich UI for status, stages, acceptance criteria
 
 ---
 
@@ -214,6 +264,12 @@ Create a VS Code extension ("specsmd extension") that provides a dashboard sideb
 | Show bolt type? | **Yes** - small badge text (DDD, Simple, etc.) |
 | Empty state UI? | **Welcome view** - logo (links to specs.md), explanation, Install button, copyable command |
 | Bolt expansion content? | **Stages + Stories** - visually differentiated |
+| Sidebar structure? | **Three tabs**: Bolts (command center), Specs (tree), Overview (metrics) |
+| Activity feed source? | **Derived from bolt timestamps** - no separate activity log needed |
+| Up Next queue ordering? | **Dependency-based**: unblocked first, then by enables_bolts count |
+| Blocked bolt display? | **Show blockers**: display which bolts are blocking in queue |
+| Activity panel sizing? | **Resizable**: drag handle, 120-500px range, persisted |
+| Progress visualization? | **Ring chart** for bolt progress, **pipeline** for stages |
 
 ---
 

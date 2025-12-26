@@ -33,7 +33,9 @@ export {
     FrontmatterData,
     BOLT_TYPE_STAGES,
     STAGE_ALIASES,
-    stageMatches
+    stageMatches,
+    ActivityEvent,
+    ActivityEventType
 } from './types';
 
 // Bolt Type Parser
@@ -72,3 +74,20 @@ export {
     parseBolt,
     parseStandard
 } from './artifactParser';
+
+// Dependency Computation
+export {
+    computeBoltDependencies,
+    getUpNextBolts,
+    isBoltBlocked,
+    getBlockingBolts,
+    countUnblocks
+} from './dependencyComputation';
+
+// Activity Feed
+export {
+    buildActivityFeed,
+    filterActivityEvents,
+    limitActivityEvents,
+    formatRelativeTime
+} from './activityFeed';

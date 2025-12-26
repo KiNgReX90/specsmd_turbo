@@ -216,6 +216,64 @@ Updated:
 
 This ensures the memory-bank reflects actual implementation status and the VS Code extension shows correct completion indicators.
 
+#### Update Unit & Intent Status (Status Cascade)
+
+Status changes cascade upward: Bolt → Story → Unit → Intent.
+
+**On Bolt Start** (when changing from `planned` to `in-progress`):
+
+1. **Update Unit Status**:
+   - Read unit-brief: `{intent}/units/{unit}/unit-brief.md`
+   - If unit status is `stories-defined` or `stories-updated` → change to `in-progress`
+
+2. **Update Intent Status**:
+   - Read requirements: `{intent}/requirements.md`
+   - If intent status is `units-defined` → change to `construction`
+
+**On Bolt Completion** (after updating stories):
+
+1. **Check Unit Completion**:
+   - Find all bolts for this unit: `memory-bank/bolts/bolt-{unit}-*/bolt.md`
+   - If ALL bolts have `status: complete` → update unit-brief to `status: complete`
+
+2. **Check Intent Completion**:
+   - Read unit-briefs for all units in intent: `{intent}/units/*/unit-brief.md`
+   - If ALL units have `status: complete` → update requirements to `status: complete`
+
+**Status Transitions**:
+
+```text
+Intent:  draft → requirements-defined → units-defined → construction → complete
+Unit:    draft → stories-defined → in-progress → complete
+Story:   draft → in-progress → complete
+```
+
+**Example** (bolt-artifact-parser-1 completes):
+
+```text
+1. Stories updated: 001, 002, 003, 004 → complete
+2. Check unit bolts:
+   - bolt-artifact-parser-1: complete ✓
+   - bolt-artifact-parser-2: planned ✗
+   → Unit stays in-progress (not all bolts complete)
+3. Intent stays construction (unit not complete)
+```
+
+**Example** (last bolt for file-watcher completes):
+
+```text
+1. Stories updated: 001, 002 → complete
+2. Check unit bolts:
+   - bolt-file-watcher-1: complete ✓
+   → Only bolt for unit, all complete!
+   → Update unit-brief: status: complete
+3. Check intent units:
+   - artifact-parser: in-progress ✗
+   - file-watcher: complete ✓
+   - sidebar-provider: in-progress ✗
+   → Intent stays construction (not all units complete)
+```
+
 ### 9. Continue or Complete
 
 Based on condition:

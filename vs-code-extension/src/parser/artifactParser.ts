@@ -34,6 +34,27 @@ async function readFileSafe(filePath: string): Promise<string | null> {
 }
 
 /**
+ * Parses an ISO 8601 timestamp string into a Date.
+ * Returns undefined for null, invalid, or malformed timestamps.
+ */
+function parseTimestamp(value: string | null | undefined): Date | undefined {
+    if (!value || value === 'null') {
+        return undefined;
+    }
+
+    try {
+        const date = new Date(value);
+        // Check for invalid date
+        if (isNaN(date.getTime())) {
+            return undefined;
+        }
+        return date;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
  * Lists directories in a path, returning empty array on error.
  */
 async function listDirectories(dirPath: string): Promise<string[]> {
@@ -270,6 +291,24 @@ export async function parseBolt(boltPath: string, workspacePath?: string): Promi
         stageNames = BOLT_TYPE_STAGES[boltType] || BOLT_TYPE_STAGES['simple-construction-bolt'];
     }
 
+    // Parse stages_completed with timestamp data
+    const stagesCompletedRaw = Array.isArray(frontmatter.stages_completed)
+        ? frontmatter.stages_completed as Array<{ name: string; completed?: string; artifact?: string } | string>
+        : [];
+
+    // Create a map of completed stage data for timestamp lookup
+    const stageCompletedMap = new Map<string, { completedAt?: Date; artifact?: string }>();
+    for (const s of stagesCompletedRaw) {
+        if (typeof s === 'string') {
+            stageCompletedMap.set(s.toLowerCase(), {});
+        } else if (s.name) {
+            stageCompletedMap.set(s.name.toLowerCase(), {
+                completedAt: s.completed ? parseTimestamp(s.completed) : undefined,
+                artifact: s.artifact
+            });
+        }
+    }
+
     // Build stages array with status using flexible matching
     const stages: Stage[] = stageNames.map((name, index) => {
         let stageStatus: ArtifactStatus;
@@ -286,12 +325,30 @@ export async function parseBolt(boltPath: string, workspacePath?: string): Promi
             stageStatus = ArtifactStatus.Draft;
         }
 
+        // Get timestamp data from map
+        const completedData = stageCompletedMap.get(name.toLowerCase());
+
         return {
             name,
             order: index + 1,
-            status: stageStatus
+            status: stageStatus,
+            completedAt: completedData?.completedAt,
+            artifact: completedData?.artifact
         };
     });
+
+    // Parse dependency fields
+    const requiresBolts = Array.isArray(frontmatter.requires_bolts)
+        ? (frontmatter.requires_bolts as string[])
+        : [];
+    const enablesBolts = Array.isArray(frontmatter.enables_bolts)
+        ? (frontmatter.enables_bolts as string[])
+        : [];
+
+    // Parse timestamp fields
+    const createdAt = frontmatter.created ? parseTimestamp(frontmatter.created as string) : undefined;
+    const startedAt = frontmatter.started ? parseTimestamp(frontmatter.started as string) : undefined;
+    const completedAt = frontmatter.completed ? parseTimestamp(frontmatter.completed as string) : undefined;
 
     return {
         id: boltId,
@@ -303,7 +360,17 @@ export async function parseBolt(boltPath: string, workspacePath?: string): Promi
         stages,
         stagesCompleted,
         stories: Array.isArray(frontmatter.stories) ? (frontmatter.stories as string[]) : [],
-        path: boltPath
+        path: boltPath,
+        // Dependency fields (computed later by computeBoltDependencies)
+        requiresBolts,
+        enablesBolts,
+        isBlocked: false, // Will be computed
+        blockedBy: [],    // Will be computed
+        unblocksCount: 0, // Will be computed
+        // Timestamp fields
+        createdAt,
+        startedAt,
+        completedAt
     };
 }
 

@@ -1,10 +1,10 @@
 ---
 unit: extension-core
 intent: 011-vscode-extension
-phase: inception
-status: draft
+phase: construction
+status: complete
 created: 2025-12-25
-updated: 2025-12-25
+updated: 2025-12-26
 default_bolt_type: simple-construction-bolt
 ---
 

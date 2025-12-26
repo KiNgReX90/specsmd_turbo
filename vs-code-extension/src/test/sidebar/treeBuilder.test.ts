@@ -165,7 +165,12 @@ suite('Tree Builder Test Suite', () => {
                         stages: [],
                         stagesCompleted: ['plan', 'implement', 'test'],
                         stories: [],
-                        path: '/bolt1'
+                        path: '/bolt1',
+                        requiresBolts: [],
+                        enablesBolts: [],
+                        isBlocked: false,
+                        blockedBy: [],
+                        unblocksCount: 0
                     }
                 ],
                 standards: [],
@@ -191,7 +196,12 @@ suite('Tree Builder Test Suite', () => {
                         stages: [],
                         stagesCompleted: ['plan'],
                         stories: [],
-                        path: '/bolt1'
+                        path: '/bolt1',
+                        requiresBolts: [],
+                        enablesBolts: [],
+                        isBlocked: false,
+                        blockedBy: [],
+                        unblocksCount: 0
                     }
                 ],
                 standards: [],
@@ -256,7 +266,12 @@ suite('Tree Builder Test Suite', () => {
                     stages: [],
                     stagesCompleted: [],
                     stories: [],
-                    path: '/bolt'
+                    path: '/bolt',
+                    requiresBolts: [],
+                    enablesBolts: [],
+                    isBlocked: false,
+                    blockedBy: [],
+                    unblocksCount: 0
                 }
             ],
             standards: [{ name: 'standard1', path: '/std' }],

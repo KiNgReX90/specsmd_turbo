@@ -1,8 +1,8 @@
 ---
 intent: vscode-extension
-phase: inception
-status: units-defined
-updated: 2025-12-25
+phase: construction
+status: construction
+updated: 2025-12-26
 ---
 
 # Units: VS Code Extension
@@ -27,6 +27,10 @@ The VS Code extension is decomposed into 5 units based on functional responsibil
 | FR-5.1-5.4 | File watching | `file-watcher` |
 | FR-6.1-6.6 | Memory bank parsing & schema | `artifact-parser` |
 | FR-7.1-7.7 | Project detection & installation | `welcome-view` |
+| FR-8.1-8.6 | Tab-based sidebar architecture | `sidebar-provider` |
+| FR-9.1-9.10 | Command center (Bolts tab) | `sidebar-provider` |
+| FR-10.1-10.6 | Bolt dependencies parsing | `artifact-parser` |
+| FR-11.1-11.5 | Activity feed derivation | `artifact-parser`, `sidebar-provider` |
 
 ## Units
 
@@ -104,11 +108,11 @@ The VS Code extension is decomposed into 5 units based on functional responsibil
 
 ## Unit Summary
 
-| Unit | Stories | Priority | Complexity |
-|------|---------|----------|------------|
-| artifact-parser | ~4 | Must | Medium |
-| file-watcher | ~2 | Must | Low |
-| sidebar-provider | ~5 | Must | High |
-| welcome-view | ~3 | Must | Medium |
-| extension-core | ~3 | Must | Medium |
-| **Total** | **~17** | | |
+| Unit | Stories | Priority | Complexity | Notes |
+|------|---------|----------|------------|-------|
+| artifact-parser | ~6 | Must | Medium | +2 for dependency parsing, activity derivation |
+| file-watcher | ~2 | Must | Low | Unchanged |
+| sidebar-provider | ~10 | Must | High | +5 for tabs, command center, activity UI |
+| welcome-view | ~3 | Must | Medium | Unchanged |
+| extension-core | ~3 | Must | Medium | Unchanged |
+| **Total** | **~24** | | | +7 from mockup scope |

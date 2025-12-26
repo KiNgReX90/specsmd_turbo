@@ -1,10 +1,10 @@
 ---
 unit: artifact-parser
 intent: 011-vscode-extension
-phase: inception
-status: draft
+phase: construction
+status: in-progress
 created: 2025-12-25
-updated: 2025-12-25
+updated: 2025-12-26
 default_bolt_type: simple-construction-bolt
 ---
 
@@ -48,6 +48,15 @@ Parse memory-bank directory structure and artifact files to build a model of AI-
 | FR-6.4 | Parse artifact frontmatter for status | Must |
 | FR-6.5 | Handle missing/malformed frontmatter gracefully | Must |
 | FR-6.6 | Support standard memory-bank directory structure | Must |
+| FR-10.1 | Parse `requires_bolts` field from bolt frontmatter | Must |
+| FR-10.2 | Parse `enables_bolts` field from bolt frontmatter | Must |
+| FR-10.3 | Compute `isBlocked` for pending bolts | Must |
+| FR-10.4 | Compute `blockedBy` list for blocked bolts | Must |
+| FR-10.5 | Compute `unblocksCount` for prioritization | Must |
+| FR-10.6 | Distinguish "blocked" from "pending" status | Must |
+| FR-11.1 | Derive activity feed from bolt timestamps | Must |
+| FR-11.2 | Support activity event types (created, start, stage-complete, complete) | Must |
+| FR-11.3 | Sort activity feed by timestamp descending | Must |
 
 ---
 
@@ -61,10 +70,11 @@ Parse memory-bank directory structure and artifact files to build a model of AI-
 | Intent | Feature/capability container | name, number, status, units[] |
 | Unit | Deployable work unit | name, intent, status, stories[], dependencies |
 | Story | User story | id, title, status, unit |
-| Bolt | Construction session | id, type, status, currentStage, stages[], stories[] |
-| Stage | Bolt execution stage | name, status, order |
+| Bolt | Construction session | id, type, status, currentStage, stages[], stories[], requiresBolts[], enablesBolts[], isBlocked, blockedBy[], unblocksCount |
+| Stage | Bolt execution stage | name, status, order, completed (timestamp) |
 | Standard | Project standard | name, path |
-| ArtifactStatus | Normalized status | draft/pending, in-progress, complete/done, unknown |
+| ArtifactStatus | Normalized status | draft/pending, in-progress, complete/done, blocked, unknown |
+| ActivityEvent | Derived activity item | id, type, timestamp, icon, text, targetId, targetName, tag |
 
 ### Key Operations
 
@@ -77,6 +87,12 @@ Parse memory-bank directory structure and artifact files to build a model of AI-
 | parseBolt | Parse single bolt folder | boltPath | Bolt |
 | parseFrontmatter | Extract YAML frontmatter | fileContent | FrontmatterData |
 | normalizeStatus | Convert status string to enum | rawStatus | ArtifactStatus |
+| computeBoltDependencies | Calculate isBlocked, blockedBy, unblocksCount | Bolt, allBolts | Bolt (enriched) |
+| isBoltBlocked | Check if bolt's requires_bolts are complete | Bolt, allBolts | boolean |
+| getBlockingBolts | Get list of incomplete required bolts | Bolt, allBolts | string[] |
+| countUnblocks | Count bolts this bolt enables | boltId, allBolts | number |
+| buildActivityFeed | Derive activity events from bolts | Bolt[] | ActivityEvent[] |
+| getUpNextBolts | Get pending bolts ordered by priority | Bolt[] | Bolt[] |
 
 ---
 
@@ -84,8 +100,8 @@ Parse memory-bank directory structure and artifact files to build a model of AI-
 
 | Metric | Count |
 |--------|-------|
-| Total Stories | 4 |
-| Must Have | 4 |
+| Total Stories | 6 |
+| Must Have | 6 |
 | Should Have | 0 |
 | Could Have | 0 |
 
@@ -97,6 +113,8 @@ Parse memory-bank directory structure and artifact files to build a model of AI-
 | 002 | Project Detection | Must | Planned |
 | 003 | Artifact Parsing | Must | Planned |
 | 004 | Frontmatter Parser | Must | Planned |
+| 005 | Bolt Dependency Parsing | Must | Planned |
+| 006 | Activity Feed Derivation | Must | Planned |
 
 ---
 
@@ -166,15 +184,24 @@ Parse memory-bank directory structure and artifact files to build a model of AI-
 - [ ] All artifact types parsed correctly (intents, units, stories, bolts, standards)
 - [ ] Frontmatter parsing extracts status fields
 - [ ] Malformed files return "unknown" status, not errors
+- [ ] Bolt dependencies parsed (requires_bolts, enables_bolts)
+- [ ] isBlocked computed correctly for pending bolts
+- [ ] blockedBy list computed for blocked bolts
+- [ ] unblocksCount computed for queue prioritization
+- [ ] Activity feed derived from bolt timestamps
+- [ ] Activity events sorted by timestamp descending
 
 ### Non-Functional
 
 - [ ] Parse 100 artifacts in < 200ms
 - [ ] No memory leaks from repeated parsing
+- [ ] Dependency computation O(n) complexity
 
 ### Quality
 
 - [ ] Unit tests for all parsing functions
+- [ ] Unit tests for dependency computation
+- [ ] Unit tests for activity feed derivation
 - [ ] Test fixtures for valid/invalid frontmatter
 - [ ] Code coverage > 80%
 
@@ -184,7 +211,8 @@ Parse memory-bank directory structure and artifact files to build a model of AI-
 
 | Bolt | Type | Stories | Objective |
 |------|------|---------|-----------|
-| bolt-artifact-parser-1 | Simple | 001, 002, 003, 004 | All artifact-parser functionality |
+| bolt-artifact-parser-1 | Simple | 001, 002, 003, 004 | Core parsing functionality (COMPLETE) |
+| bolt-artifact-parser-2 | Simple | 005, 006 | Dependency parsing and activity derivation |
 
 ---
 

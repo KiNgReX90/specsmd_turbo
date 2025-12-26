@@ -154,7 +154,12 @@ suite('Sidebar Types Test Suite', () => {
                     stages: [],
                     stagesCompleted: [],
                     stories: [],
-                    path: '/test/path'
+                    path: '/test/path',
+                    requiresBolts: [],
+                    enablesBolts: [],
+                    isBlocked: false,
+                    blockedBy: [],
+                    unblocksCount: 0
                 }
             };
             // Bolts are always Collapsed to show stages/stories groups

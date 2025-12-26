@@ -170,6 +170,7 @@ export const STATUS_INDICATORS: Record<ArtifactStatus, string> = {
     [ArtifactStatus.Complete]: '\u2713',  // checkmark
     [ArtifactStatus.InProgress]: '\u25CF', // filled circle
     [ArtifactStatus.Draft]: '\u25CB',      // empty circle
+    [ArtifactStatus.Blocked]: '\u2717',    // X mark for blocked
     [ArtifactStatus.Unknown]: ''
 };
 

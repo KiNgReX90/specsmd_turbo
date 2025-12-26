@@ -25,6 +25,10 @@ const STATUS_ICON_CONFIG: Record<ArtifactStatus, { icon: string; color: string }
         icon: 'circle-outline',
         color: 'disabledForeground'
     },
+    [ArtifactStatus.Blocked]: {
+        icon: 'circle-filled',
+        color: 'charts.red'
+    },
     [ArtifactStatus.Unknown]: {
         icon: 'circle-outline',
         color: 'disabledForeground'

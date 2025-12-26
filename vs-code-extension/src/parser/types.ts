@@ -11,6 +11,7 @@ export enum ArtifactStatus {
     Draft = 'draft',
     InProgress = 'in-progress',
     Complete = 'complete',
+    Blocked = 'blocked',
     Unknown = 'unknown'
 }
 
@@ -21,6 +22,10 @@ export interface Stage {
     name: string;
     order: number;
     status: ArtifactStatus;
+    /** Timestamp when stage was completed (ISO 8601) */
+    completedAt?: Date;
+    /** Artifact produced by this stage */
+    artifact?: string;
 }
 
 /**
@@ -99,6 +104,26 @@ export interface Bolt {
     stories: string[];
     /** Full path to bolt folder */
     path: string;
+
+    // Dependency fields
+    /** IDs of bolts that must complete before this bolt can start */
+    requiresBolts: string[];
+    /** IDs of bolts that this bolt enables (become unblocked when this completes) */
+    enablesBolts: string[];
+    /** Computed: true if any required bolts are incomplete */
+    isBlocked: boolean;
+    /** Computed: IDs of incomplete required bolts */
+    blockedBy: string[];
+    /** Computed: number of bolts this bolt enables */
+    unblocksCount: number;
+
+    // Timestamp fields for activity feed
+    /** When bolt was created (ISO 8601) */
+    createdAt?: Date;
+    /** When bolt was started (ISO 8601) */
+    startedAt?: Date;
+    /** When bolt was completed (ISO 8601) */
+    completedAt?: Date;
 }
 
 /**
@@ -177,4 +202,34 @@ export function stageMatches(expectedStage: string, completedStage: string): boo
     // Fallback: substring matching (e.g., "model" in "domain-model")
     return normalizedCompleted.includes(normalizedExpected) ||
            normalizedExpected.includes(normalizedCompleted);
+}
+
+/**
+ * Activity event types for the activity feed.
+ */
+export type ActivityEventType = 'bolt-created' | 'bolt-start' | 'stage-complete' | 'bolt-complete';
+
+/**
+ * Represents an activity event derived from bolt timestamps.
+ * Used to build the activity feed in the command center UI.
+ */
+export interface ActivityEvent {
+    /** Unique event ID, e.g., "bolt-artifact-parser-1-started" */
+    id: string;
+    /** Event type */
+    type: ActivityEventType;
+    /** When the event occurred */
+    timestamp: Date;
+    /** Icon character for display */
+    icon: string;
+    /** CSS class for icon styling */
+    iconClass: string;
+    /** Human-readable description */
+    text: string;
+    /** ID of the bolt this event relates to */
+    targetId: string;
+    /** Display name of the bolt */
+    targetName: string;
+    /** Category tag for filtering */
+    tag: 'bolt' | 'stage';
 }
