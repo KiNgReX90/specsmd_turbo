@@ -104,6 +104,8 @@ export interface Bolt {
     stories: string[];
     /** Full path to bolt folder */
     path: string;
+    /** Full path to bolt.md file */
+    filePath: string;
 
     // Dependency fields
     /** IDs of bolts that must complete before this bolt can start */

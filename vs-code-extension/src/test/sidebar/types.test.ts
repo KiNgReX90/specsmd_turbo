@@ -155,6 +155,7 @@ suite('Sidebar Types Test Suite', () => {
                     stagesCompleted: [],
                     stories: [],
                     path: '/test/path',
+                    filePath: '/test/path/bolt.md',
                     requiresBolts: [],
                     enablesBolts: [],
                     isBlocked: false,

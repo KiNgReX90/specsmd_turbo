@@ -361,6 +361,7 @@ export async function parseBolt(boltPath: string, workspacePath?: string): Promi
         stagesCompleted,
         stories: Array.isArray(frontmatter.stories) ? (frontmatter.stories as string[]) : [],
         path: boltPath,
+        filePath: boltFilePath,
         // Dependency fields (computed later by computeBoltDependencies)
         requiresBolts,
         enablesBolts,

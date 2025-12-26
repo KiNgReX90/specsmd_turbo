@@ -23,6 +23,7 @@ function createMockBolt(overrides: Partial<Bolt>): Bolt {
         stagesCompleted: [],
         stories: [],
         path: '/test/path',
+        filePath: '/test/path/bolt.md',
         requiresBolts: [],
         enablesBolts: [],
         isBlocked: false,
