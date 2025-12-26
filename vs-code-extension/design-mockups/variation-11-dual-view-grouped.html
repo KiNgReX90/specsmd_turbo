@@ -54,7 +54,7 @@
       background: var(--vscode-sideBar-background);
       border-right: 1px solid var(--vscode-input-border);
       position: relative;
-      padding-bottom: 50px;
+      padding-bottom: 130px;
     }
 
     .header {
@@ -923,6 +923,54 @@
       background: var(--vscode-list-hoverBackground);
     }
 
+    /* Metrics Stats Bar */
+    .metrics-bar {
+      position: absolute;
+      bottom: 42px;
+      left: 0;
+      right: 0;
+      padding: 12px;
+      background: var(--vscode-sideBarSectionHeader-background);
+      border-top: 1px solid var(--vscode-input-border);
+    }
+
+    .metrics-title {
+      font-size: 9px;
+      text-transform: uppercase;
+      color: var(--vscode-descriptionForeground);
+      margin-bottom: 8px;
+      letter-spacing: 0.5px;
+    }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .metric-item {
+      text-align: center;
+      padding: 8px 4px;
+      background: var(--vscode-editor-background);
+      border-radius: 4px;
+    }
+
+    .metric-value {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--vscode-editor-foreground);
+    }
+
+    .metric-value.highlight {
+      color: var(--accent-primary);
+    }
+
+    .metric-label {
+      font-size: 9px;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 2px;
+    }
+
     /* Theme Toggle */
     .theme-toggle {
       padding: 8px 12px;
@@ -1139,6 +1187,25 @@
 
       <div class="bolts-content" id="bolts-content">
         <!-- Will be rendered by JS -->
+      </div>
+    </div>
+
+    <!-- Metrics Stats Bar -->
+    <div class="metrics-bar" id="metrics-bar">
+      <div class="metrics-title">Overall Progress</div>
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <div class="metric-value" id="metric-bolts">10</div>
+          <div class="metric-label">Bolts</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value" id="metric-stages">50</div>
+          <div class="metric-label">Stages</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-value highlight" id="metric-complete">27%</div>
+          <div class="metric-label">Complete</div>
+        </div>
       </div>
     </div>
 
@@ -1782,10 +1849,24 @@
       }
     }
 
+    function renderMetrics() {
+      const totalBolts = bolts.length;
+      const totalStages = bolts.reduce((acc, b) => acc + Object.keys(b.stages).length, 0);
+      const completedStages = bolts.reduce((acc, b) => {
+        return acc + Object.values(b.stages).filter(s => s === 'complete').length;
+      }, 0);
+      const completePercent = Math.round((completedStages / totalStages) * 100);
+
+      document.getElementById('metric-bolts').textContent = totalBolts;
+      document.getElementById('metric-stages').textContent = totalStages;
+      document.getElementById('metric-complete').textContent = completePercent + '%';
+    }
+
     // ==================== INIT ====================
     document.addEventListener('DOMContentLoaded', () => {
       renderBolts();
       renderSpecs();
+      renderMetrics();
     });
   </script>
 </body>
