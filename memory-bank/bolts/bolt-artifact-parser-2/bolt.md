@@ -3,14 +3,14 @@ id: bolt-artifact-parser-2
 unit: artifact-parser
 intent: 011-vscode-extension
 type: simple-construction-bolt
-status: in-progress
+status: complete
 stories:
   - 005-bolt-dependencies
   - 006-activity-feed-derivation
 created: 2025-12-26T10:00:00Z
 started: 2025-12-26T11:00:00Z
-completed: null
-current_stage: test
+completed: 2025-12-26T12:30:00Z
+current_stage: null
 stages_completed:
   - name: plan
     completed: 2025-12-26T11:15:00Z
@@ -18,6 +18,9 @@ stages_completed:
   - name: implement
     completed: 2025-12-26T12:00:00Z
     artifact: implementation-walkthrough.md
+  - name: test
+    completed: 2025-12-26T12:30:00Z
+    artifact: test-walkthrough.md
 
 requires_bolts:
   - bolt-artifact-parser-1
@@ -58,7 +61,7 @@ Implement bolt dependency parsing (requires_bolts, enables_bolts) and activity f
 
 - [x] **1. Plan**: Complete → implementation-plan.md
 - [x] **2. Implement**: Complete → implementation-walkthrough.md
-- [ ] **3. Test**: In Progress → test-walkthrough.md
+- [x] **3. Test**: Complete → test-walkthrough.md
 
 ## Dependencies
 
@@ -71,12 +74,12 @@ Implement bolt dependency parsing (requires_bolts, enables_bolts) and activity f
 
 ## Success Criteria
 
-- [ ] Bolt dependencies parsed from frontmatter
-- [ ] isBlocked, blockedBy, unblocksCount computed
-- [ ] Activity feed derived from timestamps
-- [ ] Events sorted by timestamp descending
-- [ ] Unit tests passing
-- [ ] Handles missing/malformed data gracefully
+- [x] Bolt dependencies parsed from frontmatter
+- [x] isBlocked, blockedBy, unblocksCount computed
+- [x] Activity feed derived from timestamps
+- [x] Events sorted by timestamp descending
+- [x] Unit tests passing (164 tests)
+- [x] Handles missing/malformed data gracefully
 
 ## Notes
 

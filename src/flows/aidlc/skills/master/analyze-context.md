@@ -131,7 +131,40 @@ If inconsistencies found, report them:
 If user confirms fix:
 - Update each artifact's frontmatter `status` field
 - Update `updated` timestamp to current date
+- Log changes to `memory-bank/maintenance-log.md`
 - Report changes made
+
+#### 6.6 Log to Maintenance Log
+
+Append entry to `memory-bank/maintenance-log.md` (create if doesn't exist):
+
+```markdown
+## {ISO-8601-timestamp} - Status Sync
+
+**Triggered by**: analyze-context integrity check
+
+| Artifact | Old Status | New Status | Reason |
+|----------|------------|------------|--------|
+| {path} | {old} | {new} | {reason} |
+
+---
+```
+
+**Example**:
+
+```markdown
+## 2025-12-26T15:30:00Z - Status Sync
+
+**Triggered by**: analyze-context integrity check
+
+| Artifact | Old Status | New Status | Reason |
+|----------|------------|------------|--------|
+| 011-vscode-extension/units/file-watcher/unit-brief.md | draft | complete | All bolts complete (1/1) |
+| 011-vscode-extension/units/extension-core/unit-brief.md | draft | complete | All bolts complete (1/1) |
+| 011-vscode-extension/requirements.md | units-defined | construction | Has in-progress units |
+
+---
+```
 
 ---
 
