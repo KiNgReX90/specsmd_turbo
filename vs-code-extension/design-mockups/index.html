@@ -534,24 +534,33 @@
 
     function renderSidebar() {
       const list = document.getElementById('sidebarList');
-      list.innerHTML = variations.map((v, i) => `
-        <div class="sidebar-item ${i === currentIndex ? 'active' : ''}" onclick="goToSlide(${i})">
-          <div class="sidebar-item-number">Variation ${i + 1}</div>
-          <div class="sidebar-item-title">${v.title}</div>
-          <div class="sidebar-item-desc">${v.desc}</div>
-          <div class="sidebar-item-tags">
-            ${v.tags.map(t => `<span class="tag ${t}">${t}</span>`).join('')}
+      list.innerHTML = variations.map((v, i) => {
+        // Extract variation number from filename (e.g., "variation-8-2.html" -> "8-2")
+        const match = v.file.match(/variation-([^.]+)\.html/);
+        const varNum = match ? match[1].replace(/-/g, ' ').replace(/([a-z])/g, '$1') : (i + 1);
+        return `
+          <div class="sidebar-item ${i === currentIndex ? 'active' : ''}" onclick="goToSlide(${i})">
+            <div class="sidebar-item-number">Variation ${varNum}</div>
+            <div class="sidebar-item-title">${v.title}</div>
+            <div class="sidebar-item-desc">${v.desc}</div>
+            <div class="sidebar-item-tags">
+              ${v.tags.map(t => `<span class="tag ${t}">${t}</span>`).join('')}
+            </div>
           </div>
-        </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     function updateView() {
       const variation = variations[currentIndex];
 
+      // Extract variation number from filename
+      const match = variation.file.match(/variation-([^.]+)\.html/);
+      const varNum = match ? match[1].replace(/-/g, ' ').replace(/([a-z])/g, '$1') : (currentIndex + 1);
+
       // Update iframe
       document.getElementById('mockupFrame').src = variation.file;
-      document.getElementById('currentTitle').textContent = `Variation ${currentIndex + 1}: ${variation.title}`;
+      document.getElementById('currentTitle').textContent = `Variation ${varNum}: ${variation.title}`;
       document.getElementById('frameTitle').textContent = variation.file;
 
       // Update counter
