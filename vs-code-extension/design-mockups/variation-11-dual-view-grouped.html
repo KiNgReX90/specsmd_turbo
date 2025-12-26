@@ -1978,39 +1978,30 @@
           return unitStories.some(s => s.status !== 'complete');
         }) || intentUnits[0];
 
-        // Unit pipeline HTML
-        const unitPipelineHtml = intentUnits.map(unit => {
-          const unitStories = stories.filter(s => s.unitId === unit.id);
-          const unitDone = unitStories.filter(s => s.status === 'complete').length;
-          const unitActive = unitStories.some(s => s.status === 'active');
-          const unitComplete = unitDone === unitStories.length;
-          let status = 'pending';
-          if (unitComplete) status = 'complete';
-          else if (unitActive || unitDone > 0) status = 'active';
+        // Get bolts for this intent
+        const intentBolts = bolts.filter(b => b.intentId === intent.id);
+        const completedBolts = intentBolts.filter(b => b.status === 'complete').length;
 
+        // Bolt pipeline HTML
+        const boltPipelineHtml = intentBolts.slice(0, 5).map(bolt => {
           return `
-            <div class="unit-pipeline-item ${status}">
-              <div class="unit-pipeline-node ${status}">${status === 'complete' ? '&#10003;' : unit.name.charAt(0).toUpperCase()}</div>
-              <span class="unit-pipeline-label ${status}">${unit.name}</span>
+            <div class="unit-pipeline-item ${bolt.status}">
+              <div class="unit-pipeline-node ${bolt.status}">${bolt.status === 'complete' ? '&#10003;' : bolt.name.charAt(0).toUpperCase()}</div>
+              <span class="unit-pipeline-label ${bolt.status}">${bolt.name.split('-').slice(0, 2).join('-')}</span>
             </div>
           `;
         }).join('');
 
-        // Units for expanded view
-        const unitsHtml = intentUnits.map(unit => {
-          const unitStories = stories.filter(s => s.unitId === unit.id);
-          const unitDone = unitStories.filter(s => s.status === 'complete').length;
-          const unitComplete = unitDone === unitStories.length;
-          const unitActive = unitStories.some(s => s.status === 'active');
-          let unitStatus = 'pending';
-          if (unitComplete) unitStatus = 'complete';
-          else if (unitActive || unitDone > 0) unitStatus = 'active';
+        // Bolts for expanded view
+        const boltsHtml = intentBolts.map(bolt => {
+          const doneStagesCount = Object.values(bolt.stages).filter(s => s === 'complete').length;
+          const totalStagesCount = Object.keys(bolt.stages).length;
 
           return `
             <div class="intent-story-item">
-              <div class="intent-story-checkbox ${unitStatus}">${unitStatus === 'complete' ? '&#10003;' : ''}</div>
-              <span class="intent-story-name ${unitStatus}">${unit.name}</span>
-              <span style="font-size: 10px; color: var(--vscode-descriptionForeground);">${unitDone}/${unitStories.length}</span>
+              <div class="intent-story-checkbox ${bolt.status}">${bolt.status === 'complete' ? '&#10003;' : ''}</div>
+              <span class="intent-story-name ${bolt.status}">${bolt.name}</span>
+              <span style="font-size: 10px; color: var(--vscode-descriptionForeground);">${doneStagesCount}/${totalStagesCount}</span>
             </div>
           `;
         }).join('');
@@ -2057,23 +2048,23 @@
                     <span class="intent-progress-text">${progress}%</span>
                   </div>
                   <div class="intent-stage-info">
-                    <div class="intent-stage-title">Stories: <span>${doneStories}/${allStories.length}</span></div>
-                    <div class="intent-stage-subtitle">${intentUnits.filter(u => stories.filter(s => s.unitId === u.id).every(s => s.status === 'complete')).length} of ${intentUnits.length} units complete</div>
+                    <div class="intent-stage-title">Bolts: <span>${completedBolts}/${intentBolts.length}</span></div>
+                    <div class="intent-stage-subtitle">${doneStories} of ${allStories.length} stories complete</div>
                   </div>
                   <span class="intent-status-badge ${intentStatus}">${statusText}</span>
                 </div>
 
                 <div class="unit-pipeline">
-                  ${unitPipelineHtml}
+                  ${boltPipelineHtml}
                 </div>
 
                 <div class="intent-stories-section">
                   <div class="intent-stories-header">
-                    <span class="intent-stories-title">Units</span>
-                    <span class="intent-stories-count">${intentUnits.filter(u => stories.filter(s => s.unitId === u.id).every(s => s.status === 'complete')).length}/${intentUnits.length}</span>
+                    <span class="intent-stories-title">Bolts</span>
+                    <span class="intent-stories-count">${completedBolts}/${intentBolts.length}</span>
                   </div>
                   <div class="intent-stories-list">
-                    ${unitsHtml}
+                    ${boltsHtml}
                   </div>
                 </div>
 
