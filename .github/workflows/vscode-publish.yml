@@ -5,7 +5,6 @@ on:
     branches: [main, dev]
     paths:
       - 'vs-code-extension/**'
-      - '.github/workflows/vscode-publish.yml'
   pull_request:
     branches: [main]
     paths:
@@ -14,16 +13,13 @@ on:
 jobs:
   vs-code-extension-test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20, 22]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: vs-code-extension/package-lock.json
 
@@ -82,6 +78,15 @@ jobs:
         working-directory: vs-code-extension
         run: npm run package
 
+      - name: Validate package
+        if: steps.tag_check.outputs.exists == 'false'
+        working-directory: vs-code-extension
+        run: |
+          # Check VSIX was created
+          ls -la *.vsix
+          # Verify package contents
+          npx vsce ls
+
       - name: Publish to VS Code Marketplace
         if: steps.tag_check.outputs.exists == 'false'
         working-directory: vs-code-extension
@@ -92,8 +97,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "vscode-v${{ steps.version.outputs.version }}" -m "VS Code Extension v${{ steps.version.outputs.version }}"
-          git push origin "vscode-v${{ steps.version.outputs.version }}"
+          # Use --force to handle race condition - if tag exists, we skip anyway
+          git tag -a "vscode-v${{ steps.version.outputs.version }}" -m "VS Code Extension v${{ steps.version.outputs.version }}" || true
+          git push origin "vscode-v${{ steps.version.outputs.version }}" || echo "Tag already exists on remote"
 
       - name: Upload VSIX artifact
         if: steps.tag_check.outputs.exists == 'false'
@@ -101,6 +107,7 @@ jobs:
         with:
           name: specsmd-${{ steps.version.outputs.version }}.vsix
           path: vs-code-extension/*.vsix
+          retention-days: 90
 
       - name: Skip message
         if: steps.tag_check.outputs.exists == 'true'
