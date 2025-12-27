@@ -557,10 +557,16 @@ export class SpecsmdApp extends BaseElement {
 
     /**
      * Attach event handlers to specs view server-rendered HTML.
+     * Uses container-level guard to prevent duplicate listener attachment.
      */
     private _attachSpecsViewHandlers(): void {
-        const specsView = this.shadowRoot?.querySelector('#specs-view');
+        const specsView = this.shadowRoot?.querySelector('#specs-view') as HTMLElement | null;
         if (!specsView) return;
+
+        // Container-level guard to prevent multiple attachment passes
+        const currentHtmlHash = this._specsHtml.length.toString();
+        if (specsView.dataset.handlersAttached === currentHtmlHash) return;
+        specsView.dataset.handlersAttached = currentHtmlHash;
 
         // Intent expand/collapse
         specsView.querySelectorAll('.intent-header').forEach(header => {
@@ -575,9 +581,10 @@ export class SpecsmdApp extends BaseElement {
 
         // Intent open button (magnifier) - opens intent requirements file
         specsView.querySelectorAll('.intent-open-btn').forEach(btn => {
+            const htmlBtn = btn as HTMLElement;
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const path = (btn as HTMLElement).dataset.path;
+                const path = htmlBtn.dataset.path;
                 if (path) {
                     vscode.postMessage({ type: 'openArtifact', kind: 'intent', path });
                 }
@@ -598,9 +605,10 @@ export class SpecsmdApp extends BaseElement {
 
         // Unit open button (magnifier) - opens unit brief file
         specsView.querySelectorAll('.unit-open-btn').forEach(btn => {
+            const htmlBtn = btn as HTMLElement;
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const path = (btn as HTMLElement).dataset.path;
+                const path = htmlBtn.dataset.path;
                 if (path) {
                     vscode.postMessage({ type: 'openArtifact', kind: 'unit', path });
                 }
@@ -609,9 +617,10 @@ export class SpecsmdApp extends BaseElement {
 
         // Story click
         specsView.querySelectorAll('.spec-story-item').forEach(item => {
+            const htmlItem = item as HTMLElement;
             item.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const path = (item as HTMLElement).dataset.path;
+                const path = htmlItem.dataset.path;
                 if (path) {
                     vscode.postMessage({ type: 'openArtifact', kind: 'story', path });
                 }
@@ -621,15 +630,21 @@ export class SpecsmdApp extends BaseElement {
 
     /**
      * Attach event handlers to overview view server-rendered HTML.
+     * Uses data attribute to prevent duplicate listener attachment.
      */
     private _attachOverviewViewHandlers(): void {
-        const overviewView = this.shadowRoot?.querySelector('#overview-view');
+        const overviewView = this.shadowRoot?.querySelector('#overview-view') as HTMLElement | null;
         if (!overviewView) return;
+
+        // Container-level guard to prevent multiple attachment passes
+        const currentHtmlHash = this._overviewHtml.length.toString();
+        if (overviewView.dataset.handlersAttached === currentHtmlHash) return;
+        overviewView.dataset.handlersAttached = currentHtmlHash;
 
         // List item clicks
         overviewView.querySelectorAll('.overview-list-item').forEach(item => {
+            const htmlItem = item as HTMLElement;
             item.addEventListener('click', () => {
-                const htmlItem = item as HTMLElement;
                 const path = htmlItem.dataset.path;
                 const intent = htmlItem.dataset.intent;
                 const actionType = htmlItem.dataset.actionType;
@@ -648,7 +663,7 @@ export class SpecsmdApp extends BaseElement {
         });
 
         // Website link
-        const websiteLink = overviewView.querySelector('#specsWebsiteLink');
+        const websiteLink = overviewView.querySelector('#specsWebsiteLink') as HTMLElement | null;
         if (websiteLink) {
             websiteLink.addEventListener('click', () => {
                 vscode.postMessage({ type: 'openExternal', url: 'https://specs.md' });

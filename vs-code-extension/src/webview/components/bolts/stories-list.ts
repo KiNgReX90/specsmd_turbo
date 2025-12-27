@@ -72,27 +72,35 @@ export class StoriesList extends BaseElement {
                 padding: 4px 0;
             }
 
-            .story.completed {
+            .story.complete {
                 opacity: 0.7;
             }
 
-            .checkbox {
-                width: 14px;
-                height: 14px;
-                border-radius: 3px;
-                border: 1px solid var(--border-color);
+            .status-icon {
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 font-size: 10px;
                 flex-shrink: 0;
-                background: var(--editor-background);
             }
 
-            .checkbox.checked {
+            .status-icon.complete {
                 background: var(--status-complete);
-                border-color: var(--status-complete);
                 color: white;
+            }
+
+            .status-icon.active {
+                background: var(--status-active);
+                color: white;
+            }
+
+            .status-icon.pending {
+                background: var(--editor-background);
+                border: 2px dashed var(--border-color);
+                color: var(--description-foreground);
             }
 
             .name {
@@ -100,9 +108,14 @@ export class StoriesList extends BaseElement {
                 color: var(--foreground);
             }
 
-            .story.completed .name {
+            .story.complete .name {
                 text-decoration: line-through;
                 color: var(--description-foreground);
+            }
+
+            .story.active .name {
+                color: var(--status-active);
+                font-weight: 500;
             }
         `
     ];
@@ -119,9 +132,9 @@ export class StoriesList extends BaseElement {
             </div>
             <div class="list">
                 ${this.stories.map(story => html`
-                    <div class="story ${story.status === 'complete' ? 'completed' : ''}">
-                        <div class="checkbox ${story.status === 'complete' ? 'checked' : ''}">
-                            ${story.status === 'complete' ? '✓' : ''}
+                    <div class="story ${story.status}">
+                        <div class="status-icon ${story.status}">
+                            ${story.status === 'complete' ? '✓' : story.status === 'active' ? '●' : ''}
                         </div>
                         <span class="name">${story.id}</span>
                     </div>
