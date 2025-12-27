@@ -3,10 +3,13 @@
  */
 
 import { html, css } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { BaseElement } from '../shared/base-element.js';
 import './queue-item.js';
 import type { QueuedBoltData } from './queue-item.js';
+
+/** Default number of bolts to show when collapsed. */
+const DEFAULT_VISIBLE_COUNT = 5;
 
 /**
  * Queue section component.
@@ -25,6 +28,12 @@ export class QueueSection extends BaseElement {
      */
     @property({ type: Array })
     bolts: QueuedBoltData[] = [];
+
+    /**
+     * Whether the queue is expanded to show all bolts.
+     */
+    @state()
+    private _expanded = false;
 
     static styles = [
         ...BaseElement.baseStyles,
@@ -73,8 +82,71 @@ export class QueueSection extends BaseElement {
                 color: var(--description-foreground, #858585);
                 font-size: 12px;
             }
+
+            .toggle-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                width: 100%;
+                padding: 8px 12px;
+                margin-top: 12px;
+                background: transparent;
+                border: 1px dashed var(--vscode-input-border, #3c3c3c);
+                border-radius: 6px;
+                color: var(--description-foreground, #858585);
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+
+            .toggle-btn:hover {
+                background: var(--vscode-input-background, #3c3c3c);
+                border-color: var(--foreground, #cccccc);
+                color: var(--foreground, #cccccc);
+            }
+
+            .toggle-icon {
+                font-size: 10px;
+                transition: transform 0.15s ease;
+            }
+
+            .toggle-btn.expanded .toggle-icon {
+                transform: rotate(180deg);
+            }
         `
     ];
+
+    /**
+     * Gets the bolts to display based on expanded state.
+     */
+    private get _visibleBolts(): QueuedBoltData[] {
+        if (this._expanded) {
+            return this.bolts;
+        }
+        return this.bolts.slice(0, DEFAULT_VISIBLE_COUNT);
+    }
+
+    /**
+     * Whether to show the toggle button.
+     */
+    private get _showToggle(): boolean {
+        return this.bolts.length > DEFAULT_VISIBLE_COUNT;
+    }
+
+    /**
+     * Number of hidden bolts when collapsed.
+     */
+    private get _hiddenCount(): number {
+        return this.bolts.length - DEFAULT_VISIBLE_COUNT;
+    }
+
+    /**
+     * Toggles expanded state.
+     */
+    private _handleToggle(): void {
+        this._expanded = !this._expanded;
+    }
 
     render() {
         return html`
@@ -84,7 +156,7 @@ export class QueueSection extends BaseElement {
             </div>
             <div class="list">
                 ${this.bolts.length > 0
-                    ? this.bolts.slice(0, 5).map((bolt, idx) => html`
+                    ? this._visibleBolts.map((bolt, idx) => html`
                         <queue-item
                             .bolt=${bolt}
                             .priority=${idx + 1}
@@ -94,6 +166,17 @@ export class QueueSection extends BaseElement {
                     : html`<div class="empty-state">Queue empty</div>`
                 }
             </div>
+            ${this._showToggle ? html`
+                <button
+                    type="button"
+                    class="toggle-btn ${this._expanded ? 'expanded' : ''}"
+                    @click=${this._handleToggle}>
+                    <span class="toggle-icon">${this._expanded ? '▲' : '▼'}</span>
+                    ${this._expanded
+                        ? 'Show Less'
+                        : `Show ${this._hiddenCount} More`}
+                </button>
+            ` : ''}
         `;
     }
 }
