@@ -30,10 +30,13 @@ import {
 export type IntentSelectionStrategy = (intents: Intent[], bolts: Bolt[]) => Intent | null;
 
 /**
- * Helper: Match intent by number or name.
+ * Helper: Match intent by number, name, or combined format (e.g., "007-installer-analytics").
  */
 function matchIntent(intent: Intent, identifier: string): boolean {
-    return intent.number === identifier || intent.name === identifier;
+    const combined = `${intent.number}-${intent.name}`;
+    return intent.number === identifier
+        || intent.name === identifier
+        || combined === identifier;
 }
 
 /**
