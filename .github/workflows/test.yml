@@ -1,13 +1,18 @@
-name: CI
+name: NPM Package CI
 
 on:
   push:
     branches: [main, dev]
+    paths:
+      - 'src/**'
+      - '.github/workflows/test.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
 
 jobs:
-  test:
+  npm-package-test:
     runs-on: ubuntu-latest
 
     strategy:
