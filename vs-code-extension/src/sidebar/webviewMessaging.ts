@@ -5,6 +5,11 @@
 /**
  * Message types from webview to extension.
  */
+/**
+ * Specs filter - 'all' or any unit status string discovered from parsed data.
+ */
+export type SpecsFilter = string;
+
 export type WebviewToExtensionMessage =
     | { type: 'ready' }
     | { type: 'tabChange'; tab: TabId }
@@ -12,10 +17,12 @@ export type WebviewToExtensionMessage =
     | { type: 'refresh' }
     | { type: 'toggleFocus'; expanded: boolean }
     | { type: 'activityFilter'; filter: ActivityFilter }
+    | { type: 'specsFilter'; filter: SpecsFilter }
     | { type: 'activityResize'; height: number }
     | { type: 'startBolt'; boltId: string }
     | { type: 'continueBolt'; boltId: string; boltName?: string }
     | { type: 'viewBoltFiles'; boltId: string }
+    | { type: 'openBoltMd'; boltId: string }
     | { type: 'openExternal'; url: string };
 
 /**
@@ -82,6 +89,12 @@ export interface WebviewData {
 
     /** UI State: Activity section height */
     activityHeight: number;
+
+    /** UI State: Specs filter */
+    specsFilter: SpecsFilter;
+
+    /** Available unit statuses discovered from parsed data */
+    availableStatuses: string[];
 }
 
 /**
@@ -163,7 +176,7 @@ export interface IntentData {
 export interface UnitData {
     name: string;
     path: string;
-    status: 'complete' | 'active' | 'pending';
+    status: string;  // Raw status from frontmatter (e.g., 'draft', 'in-progress', 'complete')
     storiesComplete: number;
     storiesTotal: number;
     stories: StoryData[];
@@ -176,7 +189,7 @@ export interface StoryData {
     id: string;
     title: string;
     path: string;
-    status: 'complete' | 'active' | 'pending';
+    status: string;  // Raw status from frontmatter
 }
 
 /**
@@ -259,9 +272,19 @@ export const ACTIVITY_FILTER_KEY = 'specsmd.activityFilter';
 export const ACTIVITY_HEIGHT_KEY = 'specsmd.activityHeight';
 
 /**
+ * Workspace state key for specs filter.
+ */
+export const SPECS_FILTER_KEY = 'specsmd.specsFilter';
+
+/**
  * Default activity filter.
  */
 export const DEFAULT_ACTIVITY_FILTER: ActivityFilter = 'all';
+
+/**
+ * Default specs filter.
+ */
+export const DEFAULT_SPECS_FILTER: SpecsFilter = 'all';
 
 /**
  * Default activity section height.

@@ -68,6 +68,17 @@ export class SpecsmdApp extends BaseElement {
     @state()
     private _loaded = false;
 
+    /**
+     * Version counter for specs HTML to track when handlers need reattachment.
+     * Incremented each time _specsHtml changes.
+     */
+    private _specsVersion = 0;
+
+    /**
+     * Last attached specs version to prevent duplicate handler attachment.
+     */
+    private _lastAttachedSpecsVersion = -1;
+
     static styles = [
         ...BaseElement.baseStyles,
         css`
@@ -545,28 +556,29 @@ export class SpecsmdApp extends BaseElement {
         super.updated(changedProperties);
 
         // Attach handlers for specs view whenever specsHtml changes or becomes active
+        // Use requestAnimationFrame to ensure DOM has been updated
         if (changedProperties.has('_specsHtml') || changedProperties.has('_activeTab')) {
-            this._attachSpecsViewHandlers();
+            requestAnimationFrame(() => this._attachSpecsViewHandlers());
         }
 
         // Attach handlers for overview view
         if (changedProperties.has('_overviewHtml') || changedProperties.has('_activeTab')) {
-            this._attachOverviewViewHandlers();
+            requestAnimationFrame(() => this._attachOverviewViewHandlers());
         }
     }
 
     /**
      * Attach event handlers to specs view server-rendered HTML.
-     * Uses container-level guard to prevent duplicate listener attachment.
+     * Uses version counter to prevent duplicate listener attachment.
      */
     private _attachSpecsViewHandlers(): void {
         const specsView = this.shadowRoot?.querySelector('#specs-view') as HTMLElement | null;
         if (!specsView) return;
 
-        // Container-level guard to prevent multiple attachment passes
-        const currentHtmlHash = this._specsHtml.length.toString();
-        if (specsView.dataset.handlersAttached === currentHtmlHash) return;
-        specsView.dataset.handlersAttached = currentHtmlHash;
+        // Version-based guard to prevent duplicate attachment.
+        // _specsVersion is incremented when specsHtml changes in _handleMessage.
+        if (this._lastAttachedSpecsVersion === this._specsVersion) return;
+        this._lastAttachedSpecsVersion = this._specsVersion;
 
         // Intent expand/collapse
         specsView.querySelectorAll('.intent-header').forEach(header => {
@@ -626,6 +638,14 @@ export class SpecsmdApp extends BaseElement {
                 }
             });
         });
+
+        // Specs filter dropdown
+        const specsFilter = specsView.querySelector('#specsFilter') as HTMLSelectElement | null;
+        if (specsFilter) {
+            specsFilter.addEventListener('change', () => {
+                vscode.postMessage({ type: 'specsFilter', filter: specsFilter.value });
+            });
+        }
     }
 
     /**
@@ -712,7 +732,8 @@ export class SpecsmdApp extends BaseElement {
                         @start-bolt=${this._handleStartBolt}
                         @continue-bolt=${this._handleContinueBolt}
                         @view-files=${this._handleViewFiles}
-                        @open-file=${this._handleOpenFile}>
+                        @open-file=${this._handleOpenFile}
+                        @open-bolt=${this._handleOpenBolt}>
                     </bolts-view>
                 ` : html`<div class="loading">Loading...</div>`}
             </div>
@@ -743,6 +764,7 @@ export class SpecsmdApp extends BaseElement {
                 }
                 if (message.specsHtml !== undefined) {
                     this._specsHtml = message.specsHtml;
+                    this._specsVersion++;
                 }
                 if (message.overviewHtml !== undefined) {
                     this._overviewHtml = message.overviewHtml;
@@ -831,6 +853,13 @@ export class SpecsmdApp extends BaseElement {
      */
     private _handleViewFiles(e: CustomEvent<{ boltId: string }>): void {
         vscode.postMessage({ type: 'viewBoltFiles', boltId: e.detail.boltId });
+    }
+
+    /**
+     * Handle open bolt button - opens bolt.md file.
+     */
+    private _handleOpenBolt(e: CustomEvent<{ boltId: string }>): void {
+        vscode.postMessage({ type: 'openBoltMd', boltId: e.detail.boltId });
     }
 }
 
