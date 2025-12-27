@@ -87,7 +87,8 @@ Global index of all stories across intents and units.
 
 | Unit | Stories | Status |
 |------|---------|--------|
-| (units not yet defined) | TBD | Pending |
+| analytics-tracker | 12 stories defined | Pending |
+| privacy-documentation | 3 stories defined | Pending |
 
 ---
 
@@ -125,7 +126,7 @@ Global index of all stories across intents and units.
 | 004-standards-system | 3 | — | ✅ Complete (pre-specsmd) |
 | 005-testing-strategy | 5 | 0 | Pending |
 | 006-brownfield-support | 0 | 0 | Pending |
-| 007-installer-analytics | 0 | 0 | Pending |
+| 007-installer-analytics | 2 | 15 | Ready for Construction |
 | 008-terminal-dashboard | 0 | 0 | Pending |
 | 009-versioning-strategy | 0 | 0 | Pending |
 | 010-smart-unit-decomposition | 0 | 0 | Pending |
