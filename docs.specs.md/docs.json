@@ -26,15 +26,7 @@
       "href": "/getting-started/installation"
     }
   },
-  "navigation": {
-    "global": {
-      "products": [
-        {
-          "product": "test",
-          "href": ""
-        }
-      ]
-    },
+ 
     "tabs": [
       {
         "tab": "Documentation",
