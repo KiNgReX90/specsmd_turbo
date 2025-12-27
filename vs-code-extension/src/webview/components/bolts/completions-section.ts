@@ -179,7 +179,7 @@ export class CompletionsSection extends BaseElement {
                     type="button"
                     class="toggle-btn ${this._expanded ? 'expanded' : ''}"
                     @click=${this._handleToggle}>
-                    <span class="toggle-icon"><svg viewBox="0 0 16 16"><path d="M8 10.5L3 5.5h10L8 10.5z"/></svg></span>
+                    <span class="toggle-icon"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 10.5L3 5.5h10L8 10.5z"/></svg></span>
                     ${this._expanded
                         ? 'Show Less'
                         : `Show ${this._hiddenCount} More`}

@@ -8,7 +8,7 @@
     "homepage": "https://specs.md",
     "repository": {
         "type": "git",
-        "url": "https://github.com/fabriqaai/specsmd.git"
+        "url": "https://github.com/fabriqaai/specs.md.git"
     },
     "license": "MIT",
     "engines": {
