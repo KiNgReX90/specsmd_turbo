@@ -1,5 +1,9 @@
 # specs.md
 
+<p align="center">
+  <img src="images/specs_md_pixel_logo.png" alt="specs.md logo" width="400" />
+</p>
+
 **AI-native software development with multi-agent orchestration.**
 
 specsmd implements the [AI-Driven Development Lifecycle (AI-DLC)](https://aws.amazon.com/blogs/devops/ai-driven-development-life-cycle/) methodology as a set of markdown-based agents that work with your favorite AI coding tools.
