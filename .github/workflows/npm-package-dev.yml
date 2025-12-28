@@ -29,9 +29,9 @@ jobs:
         working-directory: src
         run: npm test
 
-      - name: Set fixed dev version
+      - name: Set unique dev version
         working-directory: src
-        run: npm version 0.0.0-dev --no-git-tag-version
+        run: npm version 0.0.0-dev-$(date +%Y%m%d%H%M%S) --no-git-tag-version
 
       - name: Copy README to src for npm package
         run: cp README.md src/README.md
