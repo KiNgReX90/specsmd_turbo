@@ -2,7 +2,20 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "specs.md",
-  "description": "AI-native software development with multi-agent orchestration",
+  "description": "AI-native software development with multi-agent orchestration. Implement AI-DLC methodology with markdown-based agents for Claude Code, Cursor, and GitHub Copilot.",
+  "metadata": {
+    "og:site_name": "specs.md",
+    "og:type": "website",
+    "og:image": "/images/logo.png",
+    "og:locale": "en_US",
+    "twitter:card": "summary_large_image",
+    "twitter:site": "@specsmd",
+    "twitter:image": "/images/logo.png",
+    "keywords": "AI-DLC, AI-native development, software development lifecycle, multi-agent orchestration, Claude Code, Cursor, GitHub Copilot, Domain-Driven Design, spec-driven development"
+  },
+  "seo": {
+    "indexHiddenPages": true
+  },
   "logo": {
     "dark": "/images/logo.png",
     "light": "/images/logo.png"
