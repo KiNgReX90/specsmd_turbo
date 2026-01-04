@@ -62,7 +62,8 @@
               "index",
               "getting-started/installation",
               "getting-started/vscode-extension",
-              "getting-started/quick-start"
+              "getting-started/quick-start",
+              "deepwiki"
             ]
           },
           {
@@ -151,8 +152,6 @@
       "view",
       "chatgpt",
       "claude",
-      "cursor",
-      "vscode",
       {
         "title": "Explore with DeepWiki",
         "description": "Explore with DeepWiki",
