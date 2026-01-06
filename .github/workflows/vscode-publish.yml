@@ -97,6 +97,10 @@ jobs:
         working-directory: vs-code-extension
         run: npx vsce publish -p ${{ secrets.VSCE_PAT }}
 
+      - name: Publish to Open VSX
+        working-directory: vs-code-extension
+        run: npx ovsx publish *.vsix -p ${{ secrets.OVSX_PAT }}
+
       - name: Create GitHub Release with VSIX
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -109,5 +113,5 @@ jobs:
             --title "VS Code Extension v${{ steps.version.outputs.version }}" \
             --notes "## specsmd VS Code Extension v${{ steps.version.outputs.version }}
 
-          Install from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd) or download the VSIX below." \
+          Install from [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd), [Open VSX](https://open-vsx.org/extension/fabriqaai/specsmd), or download the VSIX below." \
             vs-code-extension/*.vsix
