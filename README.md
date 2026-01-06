@@ -30,7 +30,7 @@ Track your AI-DLC progress with our sidebar extension for VS Code and compatible
 
 **Install from:**
 - [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd) — VS Code, Cursor, Windsurf, GitHub Codespaces, Amazon Kiro
-- [Open VSX Registry](https://open-vsx.org/extension/fabriqaai/specsmd) — VSCodium, Gitpod, Google IDX, Eclipse Theia, Code-Server
+- [Open VSX Registry](https://open-vsx.org/extension/fabriqaai/specsmd) — Google Antigravity, VSCodium, Gitpod, Google IDX, Eclipse Theia
 - [GitHub Releases (VSIX)](https://github.com/fabriqaai/specs.md/releases) — Manual installation
 
 ---
