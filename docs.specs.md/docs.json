@@ -37,8 +37,8 @@
         "href": "https://www.npmjs.com/package/specsmd"
       },
       {
-        "label": "vscode extension",
-        "href": "https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd"
+        "label": "IDE Extension",
+        "href": "/getting-started/ide-extension"
       },
       {
         "label": "product hunt",
@@ -61,7 +61,7 @@
             "pages": [
               "index",
               "getting-started/installation",
-              "getting-started/vscode-extension",
+              "getting-started/ide-extension",
               "getting-started/quick-start",
               "deepwiki"
             ]
@@ -146,6 +146,12 @@
       "measurementId": "G-Z6L00G5P4N"
     }
   },
+  "redirects": [
+    {
+      "source": "/getting-started/vscode-extension",
+      "destination": "/getting-started/ide-extension"
+    }
+  ],
   "contextual": {
     "options": [
       "copy",
