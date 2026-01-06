@@ -29,8 +29,8 @@ Track your AI-DLC progress with our sidebar extension for VS Code and compatible
 > **Note:** Works with any VS Code-based IDE including [Cursor](https://cursor.sh), [Google Antigravity](https://antigravity.google), [Windsurf](https://codeium.com/windsurf), and others.
 
 **Install from:**
-- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd) — VS Code, Cursor, Windsurf, GitHub Codespaces, Amazon Kiro
-- [Open VSX Registry](https://open-vsx.org/extension/fabriqaai/specsmd) — Google Antigravity, VSCodium, Gitpod, Google IDX, Eclipse Theia
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd) — VS Code, GitHub Codespaces
+- [Open VSX Registry](https://open-vsx.org/extension/fabriqaai/specsmd) — Cursor, Windsurf, Amazon Kiro, Google Antigravity, VSCodium, Gitpod, Google IDX
 - [GitHub Releases (VSIX)](https://github.com/fabriqaai/specs.md/releases) — Manual installation
 
 ---
@@ -307,6 +307,13 @@ Specs and Memory Bank provide structured context for AI agents. Agents reload co
 | **Cursor** | Full support | Rules in `.cursor/rules/` (`.mdc` format) |
 | **GitHub Copilot** | Full support | Agents in `.github/agents/` (`.agent.md` format) |
 | **Google Antigravity** | Full support | Agents in `.agent/agents/` |
+| **Windsurf** | Full support | Workflows in `.windsurf/workflows/` |
+| **Amazon Kiro** | Full support | Steering in `.kiro/steering/` |
+| **Gemini CLI** | Full support | Commands in `.gemini/commands/` (`.toml` format) |
+| **Cline** | Full support | Rules in `.clinerules/` |
+| **Roo Code** | Full support | Commands in `.roo/commands/` |
+| **OpenAI Codex** | Full support | Config in `.codex/` |
+| **OpenCode** | Full support | Agents in `.opencode/agent/` |
 
 ---
 
