@@ -29,8 +29,9 @@ Track your AI-DLC progress with our sidebar extension for VS Code and compatible
 > **Note:** Works with any VS Code-based IDE including [Cursor](https://cursor.sh), [Google Antigravity](https://antigravity.google), [Windsurf](https://codeium.com/windsurf), and others.
 
 **Install from:**
-- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd)
-- [GitHub Releases (VSIX)](https://github.com/fabriqaai/specs.md/releases)
+- [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=fabriqaai.specsmd) — VS Code, Cursor, Windsurf, GitHub Codespaces, Amazon Kiro
+- [Open VSX Registry](https://open-vsx.org/extension/fabriqaai/specsmd) — VSCodium, Gitpod, Google IDX, Eclipse Theia, Code-Server
+- [GitHub Releases (VSIX)](https://github.com/fabriqaai/specs.md/releases) — Manual installation
 
 ---
 
