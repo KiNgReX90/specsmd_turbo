@@ -67,6 +67,7 @@ import {
     normalizeBoltStatus,
     projectMetricsTracker,
 } from '../analytics';
+import { openFile } from '../utils';
 
 /**
  * WebviewViewProvider for the SpecsMD sidebar.
@@ -840,14 +841,13 @@ export class SpecsmdWebviewProvider implements vscode.WebviewViewProvider {
 
     /**
      * Opens an artifact file.
+     * Uses the user's markdown editor preference for .md files.
      */
-    private async _openArtifact(kind: string, path: string): Promise<void> {
+    private async _openArtifact(kind: string, filePath: string): Promise<void> {
         try {
-            const uri = vscode.Uri.file(path);
-            const doc = await vscode.workspace.openTextDocument(uri);
-            await vscode.window.showTextDocument(doc);
+            await openFile(filePath);
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open ${kind}: ${path}`);
+            vscode.window.showErrorMessage(`Failed to open ${kind}: ${filePath}`);
         }
     }
 
@@ -890,6 +890,7 @@ export class SpecsmdWebviewProvider implements vscode.WebviewViewProvider {
 
     /**
      * Opens the bolt file in the editor.
+     * Uses the user's markdown editor preference.
      */
     private async _openBoltFile(boltId: string): Promise<void> {
         const state = this._store.getState();
@@ -897,9 +898,7 @@ export class SpecsmdWebviewProvider implements vscode.WebviewViewProvider {
 
         if (bolt?.filePath) {
             try {
-                const uri = vscode.Uri.file(bolt.filePath);
-                const doc = await vscode.workspace.openTextDocument(uri);
-                await vscode.window.showTextDocument(doc);
+                await openFile(bolt.filePath);
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to open bolt file: ${bolt.filePath}`);
             }

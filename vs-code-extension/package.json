@@ -65,6 +65,10 @@
             {
                 "command": "specsmd.copyPath",
                 "title": "Copy Path"
+            },
+            {
+                "command": "specsmd.selectMarkdownEditor",
+                "title": "specsmd: Select Markdown Editor"
             }
         ],
         "menus": {
@@ -83,6 +87,11 @@
                     "type": "boolean",
                     "default": true,
                     "description": "Enable anonymous usage telemetry to help improve specsmd. No personally identifiable information is collected."
+                },
+                "specsmd.markdownEditor": {
+                    "type": "string",
+                    "default": "default",
+                    "markdownDescription": "Markdown editor to use when opening files from specsmd. Use `default` for text editor, `preview` for markdown preview, `side-by-side` for both, or enter a custom editor viewType (e.g., `fabriqa.markdownEditor`). [Select from available editors](command:specsmd.selectMarkdownEditor)"
                 }
             }
         }
