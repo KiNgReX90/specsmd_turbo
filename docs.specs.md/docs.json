@@ -33,6 +33,10 @@
   "navbar": {
     "links": [
       {
+        "label": "fabriqa.ai",
+        "href": "https://fabriqa.ai/?utm_source=specsmd&utm_medium=referral&utm_campaign=specsmd_crosslink"
+      },
+      {
         "label": "github",
         "href": "https://github.com/fabriqaai/specs.md"
       },
@@ -43,10 +47,6 @@
       {
         "label": "IDE Extension",
         "href": "/getting-started/ide-extension"
-      },
-      {
-        "label": "product hunt",
-        "href": "https://www.producthunt.com/products/specs-md"
       }
     ],
     "primary": {
