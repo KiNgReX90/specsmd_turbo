@@ -21,8 +21,8 @@
     "indexHiddenPages": true
   },
   "logo": {
-    "dark": "/images/logo.png",
-    "light": "/images/logo.png"
+    "dark": "/images/logo-with-tagline.png",
+    "light": "/images/logo-with-tagline.png"
   },
   "favicon": "/images/favicon.png",
   "colors": {
@@ -32,10 +32,6 @@
   },
   "navbar": {
     "links": [
-      {
-        "label": "fabriqa",
-        "href": "https://fabriqa.ai/?utm_source=specsmd&utm_medium=referral&utm_campaign=specsmd_crosslink"
-      },
       {
         "label": "github",
         "href": "https://github.com/fabriqaai/specs.md"
