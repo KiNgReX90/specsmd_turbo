@@ -1,5 +1,5 @@
 item: gs-no-flake-rerun-passes-as-proof
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.cjs
@@ -7,13 +7,7 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs
   - src/flows/inferno/agents/orchestrator/agent.md
   - src/flows/inferno/codex/skills/specsmd-inferno/references/procedure.md
-findings:
-  - criterion: "run-proofs.test.cjs 'a proof a flake gate result names is revoked at the next lookup, and only that proof'"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs
-    line: 404
-    evidence: "On Delta, run-proofs.cjs:120 mutated to drop 'record.branch === branch &&' and, separately, to drop 'record.command === entry.command &&'; node --test --test-name-pattern 'a proof a flake gate result names is revoked' run-proofs.test.cjs passed both times (ok 1). The fixture's only bystander proof differs in seconds (903), so 'only that proof' is proven for seconds alone; a revocation that deletes another command's or another branch's proof with the same seconds goes unseen."
-    fix: "In the same test, write two more bystander proofs next to 'other-run': one with a different command (same branch B, seconds 904) and one with a different branch (same command C, seconds 904), and assert after the first commandProof that both still exist."
-    severity: major
+findings: []
 mutants:
   - criterion: "run-gate.test.cjs: the gate prints IGNORED verification.flake_rerun (run-gate.cjs:203 returns [])"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'gate stays red on a failed command with flake_rerun' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs"
@@ -21,24 +15,36 @@ mutants:
   - criterion: "run-gate.test.cjs: gate --detach prints IGNORED verification.flake_rerun (run-gate.cjs:285 drops ignoredKeys(current))"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'gate stays red on a failed command with flake_rerun' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs"
     caught: yes
-  - criterion: "run-gate.test.cjs: a failed command is red on its first failure and green exits 3 (run-gate.cjs:237 if (false))"
+  - criterion: "run-gate.test.cjs: a failed command is red on its first failure and never rerun (run-gate.cjs:236 reinstates the flake_rerun rerun and marks the entry flake)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'gate stays red on a failed command with flake_rerun' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs"
     caught: yes
-  - criterion: "run-proofs.test.cjs: the flake-minted proof is gone after one commandProof (run-proofs.cjs:132 no revokeFlakeProofs call)"
+  - criterion: "run-gate.test.cjs: a red gate mints no proof and green exits 3 (run-gate.cjs:236 writes the command proof on a fail)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern 'gate stays red on a failed command with flake_rerun' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs"
+    caught: yes
+  - criterion: "run-proofs.test.cjs: the flake-minted proof is gone after one commandProof (run-proofs.cjs:133 no revokeFlakeProofs call)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
     caught: yes
-  - criterion: "run-proofs.test.cjs: only that proof, by seconds (run-proofs.cjs:120 drops the seconds match)"
+  - criterion: "run-proofs.test.cjs: only that proof, by seconds (run-proofs.cjs:121 drops the seconds match)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
     caught: yes
-  - criterion: "run-proofs.test.cjs: .flake-revoked.json lists the result and a re-minted proof survives the next process (run-proofs.cjs:124 no done.push)"
+  - criterion: "run-proofs.test.cjs: only that proof, by branch (run-proofs.cjs:121 drops the branch match)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
     caught: yes
-  - criterion: "run-proofs.test.cjs: only that proof, by branch (run-proofs.cjs:120 drops the branch match)"
+  - criterion: "run-proofs.test.cjs: only that proof, by command (run-proofs.cjs:121 drops the command match)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
-    caught: no
-  - criterion: "run-proofs.test.cjs: only that proof, by command (run-proofs.cjs:120 drops the command match)"
+    caught: yes
+  - criterion: "run-proofs.test.cjs: .flake-revoked.json lists the result (run-proofs.cjs:125 no done.push)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
-    caught: no
+    caught: yes
+  - criterion: "run-proofs.test.cjs: a proof re-minted with the same three values survives the next process (run-proofs.cjs:111 ignores the ledger)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
+    caught: yes
+  - criterion: "run-proofs.test.cjs: the walk finds a result under a branch name with a slash (run-proofs.cjs:85 no recursion)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
+    caught: yes
+  - criterion: "run-proofs.test.cjs: an unreadable gate result is skipped (run-proofs.cjs:109 drops the null guard)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern 'a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
+    caught: yes
 tree: 8bcfb4a02cd92461c8c9a70c86b0fe75781364e460f0fe73208e5d66e0dedee6
-commit: f7aadcf6e284049a6c369d1b98080dd748af5ba2
-reviewer: af769aec1642a90d6
+commit: ce49659d49e2148d39708a53829a95205006500f
+reviewer: a0f7a6aa09fcf5a4e
