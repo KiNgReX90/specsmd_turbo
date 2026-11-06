@@ -41,6 +41,19 @@ test('gate --wait exits 4 while a lane runs and 0 once the gate and every lane a
   assert.match(done.out, /GREEN lane windows/);
 });
 
+test('with a windows lane configured, a green smoke run holds for green and for the next gate', (t) => {
+  const f = fixture(t, config({ smoke: '0', windows: '0' }));
+  touch(f);
+  passed(gated(f));
+  // green reads the smoke proof under the key the lane minted, folded windows lane and all.
+  passed(run(f, 'green'));
+  const again = run(f, 'gate', '--detach');
+  passed(again);
+  assert.match(again.out, /GREEN lane smoke \(unchanged since [^)]+\)/);
+  passed(run(f, 'gate', '--wait', '--minutes', '0.5'));
+  assert.deepEqual(laneRuns(f).sort(), ['smoke', 'windows']);
+});
+
 test('gate --wait exits 2 on a product red lane and on a red gate', (t) => {
   const product = fixture(t, config({ smoke: '10' }));
   touch(product);
@@ -251,7 +264,7 @@ test('an accept_check that exits 0 accepts and saw the lane, its run, its log an
   passed(run(f, 'green'));
 });
 
-test('the smoke proof changes when the windows lane\'s command or scope changes, and with no windows lane keys as before', (t) => {
+test('the smoke proof changes when the windows lane\'s command or scope changes, and with no windows lane, as the windows lane itself, keys as before', (t) => {
   const lib = require('./run-lib.cjs');
   const proofs = require('./run-proofs.cjs');
   const { laneProof } = require('./run-lanes.cjs');
@@ -281,6 +294,8 @@ test('the smoke proof changes when the windows lane\'s command or scope changes,
   assert.notEqual(first.file, laneProof(f.tree, null, smoke, wider).file);
   assert.notEqual(first.file, plain);
   assert.equal(laneProof(f.tree, null, smoke, none).file, plain);
+  const win = configuredLanes(both).find((lane) => lane.name === 'windows');
+  assert.equal(laneProof(f.tree, null, win, both).file, proofs.commandProof(f.tree, {}, null, win.command, win.scope).file);
   write(f.tree, 'win/run.txt', 'two\n');
   assert.notEqual(laneProof(f.tree, null, smoke, both).hash, first.hash);
 });
