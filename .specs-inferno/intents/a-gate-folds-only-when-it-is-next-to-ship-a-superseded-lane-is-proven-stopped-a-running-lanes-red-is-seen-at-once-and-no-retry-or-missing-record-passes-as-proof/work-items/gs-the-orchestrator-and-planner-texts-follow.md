@@ -66,6 +66,7 @@ ownership:
     - src/flows/inferno/README.codex.md
     - src/flows/inferno/agents/planner/agent.md
     - src/flows/inferno/commands/inferno-planner.md
+    - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-printed-calls.test.cjs
 probes:
     - run: "grep -c 'A file shared with a pending intent is intent-level' src/flows/inferno/commands/inferno-planner.md"
       shows: "1"
