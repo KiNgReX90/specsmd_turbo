@@ -15,7 +15,7 @@ const processes = require('./run-processes.cjs');
 const { LANES } = require('./run-lane-config.cjs');
 const { RUNNER, RUNNER_PATH } = require('./run-call.cjs');
 
-/** The gate's files, or a lane's when `lane` names one. */
+/** The gate's files, or a lane's when `lane` names one; `run` is where a running lane names its own log. */
 function jobPaths(tree, lane) {
   const dir = path.join(lib.cacheDir(tree), lib.currentBranch(tree));
   const stem = lane ? `lane-${lane}-job` : 'gate-job';
@@ -23,6 +23,7 @@ function jobPaths(tree, lane) {
     job: path.join(dir, `${stem}.json`),
     result: path.join(dir, `${stem}.result.json`),
     log: path.join(dir, `${stem}.log`),
+    run: path.join(dir, `${stem}.run.json`),
   };
 }
 
@@ -68,6 +69,8 @@ function sleepSync(ms) {
  */
 function detach(tree, args, paths, fields) {
   fs.mkdirSync(path.dirname(paths.job), { recursive: true });
+  // Taken before the spawn, so a run file the child writes is never stamped before its own job.
+  const started = new Date().toISOString();
   const out = fs.openSync(paths.result, 'w');
   const err = fs.openSync(paths.log, 'w');
   const child = spawn(process.execPath, [RUNNER_PATH, ...args], {
@@ -79,7 +82,8 @@ function detach(tree, args, paths, fields) {
   const owner = processes.loadOwnership(tree);
   const identity = processes.processIdentity(child.pid);
   if (owner && identity) processes.registerProcess(tree, child.pid, owner.run_id, { inspect: () => identity });
-  const job = { pid: child.pid, ...fields, started: new Date().toISOString(), tree, branch: lib.currentBranch(tree), ...paths };
+  const files = { job: paths.job, result: paths.result, log: paths.log };
+  const job = { pid: child.pid, ...fields, started, tree, branch: lib.currentBranch(tree), ...files };
   fs.writeFileSync(paths.job, `${JSON.stringify(job)}\n`, 'utf8');
   return job;
 }

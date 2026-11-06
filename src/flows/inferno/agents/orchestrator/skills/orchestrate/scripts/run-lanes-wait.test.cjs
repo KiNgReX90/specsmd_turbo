@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { acceptLine, cacheOf, config, fixture, gated, passed, run, touch, whole } = require('./run-lanes-fixture.cjs');
+const jobs = require('./run-jobs.cjs');
 const { writeFile } = require('./test-write.cjs');
 
 const lines = (result) => result.out.trim().split('\n');
@@ -93,4 +94,51 @@ test('gate --detach refuses while a lane of the earlier gate still runs', (t) =>
   const again = run(f, 'gate', '--detach');
   assert.equal(again.code, 2, again.out + again.err);
   assert.match(again.err, /a windows lane is already running for this tree \(pid \d+, .*\); wait for it: node \S+run\.cjs gate --wait/);
+});
+
+const RED_LINE = { smoke: { red_line: '"^PRODUCT RED "' } };
+const laneJob = (f) => JSON.parse(fs.readFileSync(path.join(cacheOf(f), 'lane-smoke-job.json'), 'utf8'));
+
+test("a running lane's red line ends the wait with exit 2 while the lane walks on", (t) => {
+  const f = fixture(t, config({ smoke: 'redwait' }, undefined, undefined, RED_LINE));
+  touch(f);
+  passed(run(f, 'gate', '--detach'));
+  const result = run(f, 'gate', '--wait', '--minutes', '0.1');
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.match(result.out, /RED lane smoke while it walks: PRODUCT RED demo: red on the branch -> \S+\.log/);
+  assert.ok(jobs.alive(laneJob(f)), 'the lane walks on after the wait ends');
+});
+
+test('without red_line the same lane keeps the wait at 4', (t) => {
+  const f = fixture(t, config({ smoke: 'redwait' }));
+  touch(f);
+  passed(run(f, 'gate', '--detach'));
+  const result = run(f, 'gate', '--wait', '--minutes', '0.1');
+  assert.equal(result.code, 4, result.out + result.err);
+  assert.match(result.out, /smoke lane still running pid \d+/);
+});
+
+test('a line the pattern does not match keeps the wait at 4', (t) => {
+  const f = fixture(t, config({ smoke: 'redwait' }, undefined, undefined, { smoke: { red_line: '"^NOT RED FIRST "' } }));
+  touch(f);
+  passed(run(f, 'gate', '--detach'));
+  const result = run(f, 'gate', '--wait', '--minutes', '0.1');
+  assert.equal(result.code, 4, result.out + result.err);
+  assert.match(result.out, /smoke lane still running pid \d+/);
+});
+
+test('a red line from an earlier run of the lane is not read', (t) => {
+  const f = fixture(t, config({ smoke: 'wait' }, undefined, undefined, RED_LINE));
+  touch(f);
+  passed(run(f, 'gate', '--detach'));
+  const runFile = path.join(cacheOf(f), 'lane-smoke-job.run.json');
+  for (let i = 0; i < 200 && !fs.existsSync(runFile); i += 1) jobs.sleepSync(50);
+  assert.ok(fs.existsSync(runFile), 'the running lane names its log');
+  const earlier = path.join(cacheOf(f), 'lane-smoke-earlier.log');
+  writeFile(earlier, 'PRODUCT RED demo: red on an earlier run\n');
+  const started = new Date(Date.parse(laneJob(f).started) - 60000).toISOString();
+  writeFile(runFile, `${JSON.stringify({ run: 'earlier', log: earlier, started })}\n`);
+  const result = run(f, 'gate', '--wait', '--minutes', '0.1');
+  assert.equal(result.code, 4, result.out + result.err);
+  assert.doesNotMatch(result.out, /while it walks/);
 });

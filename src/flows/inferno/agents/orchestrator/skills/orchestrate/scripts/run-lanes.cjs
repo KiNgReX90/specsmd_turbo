@@ -110,6 +110,8 @@ function laneNow(options) {
   fs.rmSync(proof.file, { force: true });
   const runId = `${lib.stamp()}-${process.pid}`;
   const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `lane-${lane.name}-${lib.stamp()}.log`);
+  // The lane names its log while it walks, so a wait can read a red line before the result exists.
+  writeRecord(jobs.jobPaths(tree, lane.name).run, { run: runId, log, started: new Date().toISOString() });
   // runShell inherits this one-shot process's environment, so the lane reads the config the gate used.
   process.env.INFERNO_GATE_CONFIG = proof.config;
   const run = lib.runShell(lane.command, tree, log);
@@ -127,11 +129,34 @@ function laneNow(options) {
   return { exit: result === 'green' ? 0 : 2, payload, out: [`${result} lane ${lane.name} exit ${run.code} -> ${log}`] };
 }
 
-/** One lane job as it stands: running, its result, or a process that died without one. */
-function laneState(tree, name) {
+/**
+ * The first line of a running lane's log that matches the lane's `red_line`, or null. Only the
+ * run file of this job counts: one stamped before the job started belongs to an earlier run.
+ */
+function redLine(tree, lane, job) {
+  if (!lane || !lane.red_line) return null;
+  const run = jobs.readJson(jobs.jobPaths(tree, lane.name).run);
+  if (!run || typeof run.log !== 'string' || !(Date.parse(run.started) >= Date.parse(job.started))) return null;
+  let text;
+  try {
+    text = fs.readFileSync(run.log, 'utf8');
+  } catch (error) {
+    return null;
+  }
+  const pattern = new RegExp(lane.red_line);
+  const line = text.split(/\r?\n/).find((entry) => pattern.test(entry));
+  return line === undefined ? null : { log: run.log, line };
+}
+
+/** One lane job as it stands: running, running with a red line, its result, or a process that died without one. */
+function laneState(tree, name, config) {
   const paths = jobs.jobPaths(tree, name);
   const job = jobs.readJson(paths.job);
-  if (jobs.alive(job)) return { lane: name, state: 'running', pid: job.pid, log: paths.log };
+  if (jobs.alive(job)) {
+    const red = redLine(tree, configuredLanes(config).find((entry) => entry.name === name), job);
+    if (red) return { lane: name, state: 'running-red', pid: job.pid, log: red.log, line: red.line };
+    return { lane: name, state: 'running', pid: job.pid, log: paths.log };
+  }
   const result = jobs.readJson(paths.result);
   if (result && result.lane === name) return { ...result, state: result.result };
   return { lane: name, state: 'died', pid: job && job.pid, log: paths.log };
@@ -145,6 +170,8 @@ function acceptFix(tree, lane, selected) {
 /** The lines for a lane, and whether it holds (green or bounded), fails (2) or is unbounded. */
 function describeLane(tree, selected, config, entry) {
   if (entry.state === 'running') return { verdict: 'running', out: [`${entry.lane} lane still running pid ${entry.pid}, log ${entry.log}`] };
+  // The lane walks on and writes its result as today; its red line only ends the wait sooner.
+  if (entry.state === 'running-red') return { verdict: 'red', out: [`RED lane ${entry.lane} while it walks: ${entry.line} -> ${entry.log}`] };
   if (entry.state === 'green') return { verdict: 'hold', out: [`GREEN lane ${entry.lane} ${entry.seconds}s`] };
   if (entry.state === 'product-red') {
     return { verdict: 'red', out: [`RED lane ${entry.lane}: product red (exit ${entry.code}) -> ${entry.log}`, ...lib.tail(entry.log, 5)] };
@@ -161,21 +188,23 @@ function describeLane(tree, selected, config, entry) {
 
 /**
  * gate --wait over the gate and every lane it started: 2 as soon as the gate or a lane is red,
- * 4 while anything runs at the deadline, else 0 when every lane holds.
+ * a running lane's red line included, 4 while anything runs at the deadline, else 0 when every
+ * lane holds.
  */
 function waitAll(job, options, deadline, gateResult) {
   const tree = job.tree;
   const config = lib.readConfig(tree, options.config);
   for (;;) {
     const gate = jobs.alive(job) ? null : gateResult();
-    const lanes = (job.lanes || []).map((name) => ({ name, ...describeLane(tree, options.config, config, laneState(tree, name)) }));
+    const states = (job.lanes || []).map((name) => laneState(tree, name, config));
+    const lanes = states.map((state, at) => ({ name: job.lanes[at], ...describeLane(tree, options.config, config, state) }));
     // An unbounded lane prints last, so its accept line is the last line of the wait.
     const laneOut = [...lanes.filter((entry) => entry.verdict !== 'unbounded'), ...lanes.filter((entry) => entry.verdict === 'unbounded')]
       .flatMap((entry) => entry.out);
     // The gate block gives way to the lane lines, so the 30-line cap never cuts an accept line.
     const fit = (gateOut, tail = []) =>
       [...lib.capLines(gateOut, Math.max(1, MAX_LINES - laneOut.length - tail.length)), ...laneOut, ...tail];
-    const lanePayload = { lanes: (job.lanes || []).map((name) => laneState(tree, name)) };
+    const lanePayload = { lanes: states };
     if ((gate && gate.exit !== 0) || lanes.some((entry) => entry.verdict === 'red')) {
       const gateOut = gate ? gate.out : [`gate still running pid ${job.pid}`];
       return { exit: 2, payload: { ...(gate ? gate.payload : { ok: false }), ok: false, ...lanePayload }, out: fit(gateOut) };

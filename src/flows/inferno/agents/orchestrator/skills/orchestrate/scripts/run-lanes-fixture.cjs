@@ -2,8 +2,9 @@
 
 /**
  * Test fixtures for the smoke and Windows lanes: a throwaway host repo on an intent branch whose
- * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | file>`. `wait`
- * holds until the release file exists, `movewait` then writes an in-scope file, and `file` exits
+ * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | redwait | file>`.
+ * `wait` holds until the release file exists, `movewait` then writes an in-scope file, `redwait`
+ * first prints a product red class line and then holds like `wait`, and `file` exits
  * with the code written to the code file outside the tree. Every lane run appends its name and
  * INFERNO_GATE_CONFIG to the lane-env file outside the tree. A lane's `accept_check` stub,
  * `node check.cjs <exit>`, writes its INFERNO_* environment to the check-env file outside the
@@ -66,7 +67,7 @@ function fixture(t, source = config()) {
   write(tree, 'src/input.txt', 'one\n');
   write(tree, 'docs/readme.txt', 'one\n');
   const code = path.join(dir, 'code');
-  write(tree, DEFAULT, source.replace(/ (wait|movewait)\n/g, ` $1 ${release}\n`).replace(/ file\n/g, ` file ${code}\n`));
+  write(tree, DEFAULT, source.replace(/ (wait|movewait|redwait)\n/g, ` $1 ${release}\n`).replace(/ file\n/g, ` file ${code}\n`));
   write(tree, 'proof.cjs', `const fs = require('node:fs');
 fs.appendFileSync('.runs', process.argv[2] + '\\n');
 if (process.argv[2] === 'red') process.exit(1);
@@ -75,7 +76,8 @@ if (process.argv[2] === 'red') process.exit(1);
 const [name, code, release] = process.argv.slice(2);
 fs.appendFileSync('.lane-runs', name + '\\n');
 fs.appendFileSync('../lane-env', name + ' ' + (process.env.INFERNO_GATE_CONFIG || '') + '\\n');
-if (code === 'wait' || code === 'movewait') {
+if (code === 'redwait') console.log('PRODUCT RED demo: red on the branch');
+if (code === 'wait' || code === 'movewait' || code === 'redwait') {
   while (!fs.existsSync(release) && fs.existsSync('lane.cjs')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   if (code === 'movewait') fs.writeFileSync('src/moved.txt', 'moved\\n');
   process.exit(0);
