@@ -1,5 +1,5 @@
 item: gs-the-gate-folds-only-at-the-head-of-the-slot
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-intent-review.cjs
@@ -8,25 +8,7 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-slot-gate.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-slot.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
-findings:
-  - criterion: "the queued tree's wait folds and starts once the head's wait is red (description 2: wait waits in the queue, and at the deadline exits 4 with the queued line and call ... again)"
-    severity: major
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-slot-gate.test.cjs
-    line: 67
-    evidence: "On Delta at 9e53da4, two mutants of slotWait survive the whole of run-slot-gate.test.cjs (5 pass each, 6s and 5s). The first makes the queue loop at run-gate.cjs:346 never run (for (; false; ...)). The second makes the deadline at run-gate.cjs:348 return exit 0 instead of the queued exit 4. The test calls the second tree's gate --wait only after the head's wait has already released the ticket and its jobs have ended. So no test ever has a wait blocking behind the head, and none reaches the queued deadline. A wait that never blocks would return 4 at once and make the orchestrator spin, and a wrong deadline exit goes unseen."
-    fix: "Add two cases to run-slot-gate.test.cjs. (a) 'a queued wait blocks until the head's wait is red': after one's detach and two's queued detach, start two's gate --wait --minutes 0.5 asynchronously (child_process.spawn with the fixture's env: CLAUDE_BUILD_WRAPPED=1 and XDG_CACHE_HOME=f.cache). While it blocks, run one's wait to its red exit 2, then await two's wait. Assert exit 0, 'folded main into <TWO>', 'gate started pid' and 'GREEN lane smoke'. (b) 'a queued wait exits 4 at its deadline and folds nothing': while one holds the head (its exit 3 or exit 0 wait keeps the ticket), run two's gate --wait --minutes 0.05. Assert exit 4, 'queued behind <ONE> (1 ahead); nothing folded' and /call node \\S+run\\.cjs gate --wait --tree \\S+ again/. Also assert two's HEAD is unchanged and it has no gate-job.json. Both mutants above must then fail."
-  - criterion: "accept renews on success (description 5, run-lanes.cjs accept)"
-    severity: minor
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
-    line: 275
-    evidence: "Deleting 'if (mergeSlot(config)) slot.renew(tree);' at run-lanes.cjs:275 still passes run-slot-gate.test.cjs and run-lanes.test.cjs on Delta (23 pass, 0 fail). No test asserts that an accept moves the ticket's activity."
-    fix: "In 'teardown and a red wait free the slot, an exit 3 keeps it', after the exit 3 wait, commit a harness file on main in the primary and merge main into one. Then read the ticket, run one's smoke --accept --harness-fix <that sha> (exit 0), and assert that the ONE ticket's activity is later than before."
-  - criterion: "ship and teardown release (description 4); removeWorktree's left names what a failure leaves owed"
-    severity: minor
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-ship.cjs
-    line: 135
-    evidence: "In removeWorktree the release at :135 runs before left.push at :136. slot.release takes the slot lock through withFileLock, which throws STATE_LOCKED when the lock or its guard is held past the timeout (state-store.cjs acquire). The readConfig on the same line can throw too. When either throws, ship's catch prints 'left to do: ' with nothing named, although the worktree removal and the branch delete are still owed. teardown prints the same empty list."
-    fix: "Move the left.push(...) of the two git steps above the release line. A failed release then still names both steps in 'left to do'. Keep the release before stopOwnedProcesses."
+findings: []
 mutants:
   - criterion: "a second gate --detach queues behind the first and folds nothing (run-gate.cjs:297, if (!turn.head) becomes if (false))"
     test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs --test-name-pattern 'queues behind the first'"
@@ -37,14 +19,23 @@ mutants:
   - criterion: "the queued tree's wait folds and starts once the head's wait is red (run-lanes.cjs:213, a red wait keeps its ticket)"
     test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs --test-name-pattern 'wait folds and starts'"
     caught: yes
+  - criterion: "a queued wait blocks until the head's wait is red (run-gate.cjs:346, the queue loop never runs; the wait exited 4, not 0)"
+    test: "remote-run.sh delta <clone of 67ac6fe> node --test S/run-slot-gate.test.cjs --test-name-pattern 'blocks until'"
+    caught: yes
+  - criterion: "a queued wait exits 4 at its deadline and folds nothing (run-gate.cjs:348, the deadline returns exit 0; the wait exited 0, not 4)"
+    test: "remote-run.sh delta <clone of 67ac6fe> node --test S/run-slot-gate.test.cjs --test-name-pattern 'exits 4 at its deadline'"
+    caught: yes
+  - criterion: "an accepted instrument red renews the ticket (run-lanes.cjs:275, no renew; activity stayed equal)"
+    test: "remote-run.sh delta <clone of 67ac6fe> node --test S/run-slot-gate.test.cjs --test-name-pattern 'free the slot'"
+    caught: yes
   - criterion: "teardown and a red wait free the slot (run-lanes.cjs:213, a red wait keeps its ticket)"
-    test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs --test-name-pattern 'free the slot'"
+    test: "remote-run.sh delta <clone of 67ac6fe> node --test S/run-slot-gate.test.cjs --test-name-pattern 'free the slot'"
     caught: yes
   - criterion: "an exit 3 keeps it (run-lanes.cjs:219, the unbounded exit also releases)"
-    test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs --test-name-pattern 'free the slot'"
+    test: "remote-run.sh delta <clone of 67ac6fe> node --test S/run-slot-gate.test.cjs --test-name-pattern 'free the slot'"
     caught: yes
-  - criterion: "teardown frees the slot (run-ship.cjs:135, removeWorktree releases nothing)"
-    test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs --test-name-pattern 'free the slot'"
+  - criterion: "teardown frees the slot (run-ship.cjs:143, removeWorktree releases nothing)"
+    test: "remote-run.sh delta <clone of 67ac6fe> node --test S/run-slot-gate.test.cjs --test-name-pattern 'free the slot'"
     caught: yes
   - criterion: "an intent review call renews the ticket (run-intent-review.cjs:138, no renew)"
     test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs --test-name-pattern 'renews the ticket'"
@@ -55,15 +46,6 @@ mutants:
   - criterion: "a wait at the head waits on a gate started since its ticket (run-gate.cjs:354, the check removed, so the wait detaches again)"
     test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs"
     caught: yes
-  - criterion: "wait waits in the queue (run-gate.cjs:346, the queue loop never runs)"
-    test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs"
-    caught: no
-  - criterion: "a queued wait exits 4 at its deadline (run-gate.cjs:348, the deadline returns exit 0)"
-    test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs"
-    caught: no
-  - criterion: "accept renews on success (run-lanes.cjs:275, no renew)"
-    test: "remote-run.sh delta <clone of 9e53da4> node --test S/run-slot-gate.test.cjs S/run-lanes.test.cjs"
-    caught: no
-tree: 3e764a5b1e5cc04ba4c0bccc0ec3e9d1463bbad00b1bda087b8461860a97c654
-commit: 381debddfd14d808bd187415bb19155de477737c
+tree: 73a152e2250ca237bbae7b9f862858d5320c0bc80454f308a401aba87d0c0664
+commit: 67ac6fea0fe243b4889d41423a3f48db7d294ce2
 reviewer: a85814363f7d14b24
