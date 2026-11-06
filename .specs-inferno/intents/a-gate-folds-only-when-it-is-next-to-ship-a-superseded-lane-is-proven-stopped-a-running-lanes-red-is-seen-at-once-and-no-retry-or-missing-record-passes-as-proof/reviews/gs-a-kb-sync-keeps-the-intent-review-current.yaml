@@ -1,5 +1,5 @@
 item: gs-a-kb-sync-keeps-the-intent-review-current
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/review-fixture.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-gates.cjs
@@ -9,29 +9,26 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lib.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs
-findings:
-  - criterion: "the intent's own wiki edit after the review voids it"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-intent-owed.cjs
-    line: 111
-    evidence: "On Delta, in a private clone at 381f2df, the mutant that drops '&& !own.has(file)' from the skip at :111 left run-review-outside.test.cjs at 9 pass, 0 fail (the first review caught the same mutant at 8265a81). The correction's own-kb name list at :110 now voids the existing case by itself, because that case commits a new path, so nothing pins that an own kb page's content stays in the hash. A probe case (the branch commits wiki/own.md before the review, the review is recorded with the OUTSIDE config, gate exits 0, the branch edits and commits wiki/own.md again, gate) exits 3 on the real code and 0 under the mutant: the review stays current over the intent's own kb edit."
-    fix: "Add the case 'the intent's second edit of its own kb page after the review voids it' to run-review-outside.test.cjs: the branch writes and commits wiki/own.md together with the work, intentReviewed(tree, 'alpha', 'verdict: clean\\n', lib.readConfig(tree)), gate exits 0, the branch rewrites wiki/own.md and commits, gate exits 3 and prints 'intent review owed: the code changed since the review'. Dropping '&& !own.has(file)' at run-intent-owed.cjs:111 must then make it fail."
-    severity: minor
+findings: []
 mutants:
-  - criterion: "earlier finding 1: the intent deleting a kb page the base gave it voids the review (run-intent-owed.cjs:110 kb = [])"
-    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
+  - criterion: "earlier finding: the intent's second edit of its own kb page after the review voids it (run-intent-owed.cjs:113 drops && !own.has(file))"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 03b0b33)"
     caught: yes
-  - criterion: "earlier finding 2: the origin/<base> diff is read when origin resolves (run-intent-owed.cjs:98 refs.push(origin/<base>) replaced by void 0)"
-    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
+  - criterion: "a tree whose base resolves to its own branch judges the kb with the code (run-intent-owed.cjs:98 return null dropped)"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 03b0b33)"
     caught: yes
-  - criterion: "the intent's own wiki edit after the review voids it (run-intent-owed.cjs:111 drops && !own.has(file))"
-    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
-    caught: no
-  - criterion: "a base commit outside the kb voids the review even with review.outside set (run-intent-owed.cjs:111 drops the glob match)"
-    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
+  - criterion: "the intent deleting a kb page the base gave it voids the review (run-intent-owed.cjs kb = [])"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df, code unchanged since)"
     caught: yes
-  - criterion: "a base commit that only changes wiki/ keeps a clean review current, and an own kb change voids it (run-intent-owed.cjs:118 compares tree_outside with itself)"
-    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
+  - criterion: "the origin/<base> diff is read when origin resolves (refs.push(origin/<base>) replaced by void 0)"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df, code unchanged since)"
     caught: yes
-tree: 223a608a55cac9a0fa097ae739604296d6000c064fd965e63f73f8d76a9b7ab8
-commit: 6e88268e28ac1188feadf7cac36ed8ce6b273def
+  - criterion: "a base commit outside the kb voids the review even with review.outside set (the skip drops its glob match)"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df, code unchanged since)"
+    caught: yes
+  - criterion: "a base commit that only changes wiki/ keeps a clean review current, and an own kb change voids it (reviewCurrent compares tree_outside with itself)"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df, code unchanged since)"
+    caught: yes
+tree: c7553f69783353dc23633396a3d3e11548fc4073e5b3d4f7a0d2b1a74e1f4f15
+commit: ac84e15e13f61c294444fa2350ff3099ec9378fb
 reviewer: a654b21842a0f6b86
