@@ -378,3 +378,42 @@ test('legacy whole-tree markers cannot satisfy command proofs', (t) => {
   verdict(fixture, 'gate', 0);
   assert.deepEqual(counts(fixture), [1, 1, 1]);
 });
+
+test('a proof a flake gate result names is revoked at the next lookup, and only that proof', (t) => {
+  const dir = hashTree(t);
+  const cacheHome = tempdir('inferno-flake-cache-');
+  t.after(() => fs.rmSync(cacheHome, { recursive: true, force: true }));
+  const previous = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = cacheHome;
+  t.after(() => { if (previous === undefined) delete process.env.XDG_CACHE_HOME; else process.env.XDG_CACHE_HOME = previous; });
+  const cache = lib.cacheDir(dir);
+  const command = 'bash remote-run.sh host tree npm run test:e2e';
+  const branch = 'inferno-intent/demo-20260101T000000Z';
+  const greens = path.join(cache, 'green-commands');
+  const proof = (name, seconds) => {
+    const file = path.join(greens, name);
+    write(greens, name, `${JSON.stringify({ command, config: CONFIG, hash: 'h', stamp: new Date().toISOString(), seconds, branch })}\n`);
+    return file;
+  };
+  const result = path.join(cache, branch, 'gate-job.result.json');
+  write(cache, path.join(branch, 'gate-job.result.json'), JSON.stringify({
+    ok: true, branch, results: [{ command, result: 'flake', seconds: 904, log: '/logs/0.log', cases: [] }],
+  }));
+  write(cache, 'inferno-intent/other/gate-job.result.json', '{ not json');
+  const minted = proof('minted-by-flake', 904);
+  const other = proof('other-run', 903);
+  const config = { verification: { finalize: [command] } };
+  proofs.commandProof(dir, config, null, command);
+  assert.equal(fs.existsSync(minted), false);
+  assert.equal(fs.existsSync(other), true);
+  const revoked = JSON.parse(fs.readFileSync(path.join(greens, '.flake-revoked.json'), 'utf8'));
+  assert.deepEqual(revoked, [{ result, log: '/logs/0.log' }]);
+  assert.equal(JSON.parse(fs.readFileSync(result, 'utf8')).results[0].result, 'flake', 'a result file is never rewritten');
+  const reminted = proof('reminted', 904);
+  const next = spawnSync(process.execPath, ['-e',
+    `require(${JSON.stringify(path.join(__dirname, 'run-proofs.cjs'))}).commandProof(${JSON.stringify(dir)}, ${JSON.stringify(config)}, null, ${JSON.stringify(command)})`],
+  { encoding: 'utf8', env: { ...process.env, XDG_CACHE_HOME: cacheHome } });
+  assert.equal(next.status, 0, next.stderr);
+  assert.equal(fs.existsSync(reminted), true);
+  assert.equal(fs.existsSync(other), true);
+});

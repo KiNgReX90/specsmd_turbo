@@ -57,9 +57,79 @@ function scopeHash(tree, scope, options = {}) {
   return digest(JSON.stringify([scope ? [...scope].sort() : null, sorted]));
 }
 
+const REVOKED = '.flake-revoked.json';
+const revokedIn = new Set();
+
+function readJson(file) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const pending = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(pending, `${JSON.stringify(value)}\n`);
+  fs.renameSync(pending, file);
+}
+
+/** Every gate-job.result.json under the cache dir: a branch name holds slashes, so the walk recurses. */
+function gateResults(dir) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (error) { return []; }
+  return entries.flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === 'green-commands' ? [] : gateResults(full);
+    return entry.name === 'gate-job.result.json' ? [full] : [];
+  });
+}
+
+/**
+ * A rerun that went green once minted an ordinary proof for a red command. Each gate result that
+ * names a flake has the proof it minted (same command, branch and seconds) deleted, once: the
+ * handled result is listed in green-commands/.flake-revoked.json, so a proof a later green run
+ * mints with the same three values stands. A result file is never rewritten, because a new
+ * `gate --detach` reopens that path for writing.
+ */
+function revokeFlakeProofs(tree) {
+  const cache = lib.cacheDir(tree);
+  if (revokedIn.has(cache)) return;
+  revokedIn.add(cache);
+  const greens = path.join(cache, 'green-commands');
+  const ledger = path.join(greens, REVOKED);
+  const handled = readJson(ledger);
+  const done = Array.isArray(handled) ? handled : [];
+  const seen = (result, log) => done.some((entry) => entry && entry.result === result && entry.log === log);
+  const pending = [];
+  for (const file of gateResults(cache)) {
+    const result = readJson(file);
+    if (!result || !Array.isArray(result.results)) continue;
+    for (const entry of result.results) {
+      if (entry && entry.result === 'flake' && !seen(file, entry.log)) pending.push({ file, branch: result.branch, entry });
+    }
+  }
+  if (pending.length === 0) return;
+  let proofFiles;
+  try { proofFiles = fs.readdirSync(greens, { withFileTypes: true }).filter((entry) => entry.isFile()); } catch (error) { proofFiles = []; }
+  for (const { file, branch, entry } of pending) {
+    for (const proof of proofFiles) {
+      const full = path.join(greens, proof.name);
+      const record = readJson(full);
+      if (record && record.command === entry.command && record.branch === branch && record.seconds === entry.seconds) {
+        fs.rmSync(full, { force: true });
+      }
+    }
+    done.push({ result: file, log: entry.log });
+  }
+  writeJson(ledger, done);
+}
+
 /** A command's proof, keyed by its `finalize_scopes` entry unless the caller names a scope, as a lane does. */
 function commandProof(tree, config, selected, command,
   scope = config.verification && config.verification.finalize_scopes && config.verification.finalize_scopes[command]) {
+  revokeFlakeProofs(tree);
   const file = path.relative(tree, path.resolve(tree, selected || DEFAULT_CONFIG));
   const hash = scopeHash(tree, scope);
   const key = digest(JSON.stringify([command, file, hash]));
@@ -94,12 +164,8 @@ function runCommand(tree, config, selected, command, log, force = false) {
     return { command, result: 'fail', seconds: run.seconds, log: run.log, ...(moved ? { moved: true } : {}) };
   }
   const { file, ...identity } = proof;
-  const record = { ...identity, stamp: new Date().toISOString(), seconds: run.seconds, branch: lib.currentBranch(tree) };
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const pending = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(pending, `${JSON.stringify(record)}\n`);
-  fs.renameSync(pending, file);
+  writeJson(file, { ...identity, stamp: new Date().toISOString(), seconds: run.seconds, branch: lib.currentBranch(tree) });
   return { command, result: 'pass', seconds: run.seconds };
 }
 
-module.exports = { commandProof, readProof, runCommand, scopeHash };
+module.exports = { commandProof, readProof, revokeFlakeProofs, runCommand, scopeHash };
