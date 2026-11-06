@@ -1,37 +1,25 @@
 item: gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lane-config.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-fixture.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-config.test.cjs
-findings:
-  - criterion: "Description 3: every caller passes the config it already holds, so on a host with both lanes the smoke proof laneNow mints is the one startLanes and green read"
-    severity: major
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs
-    line: 42
-    evidence: "Mutants run-lanes.cjs:257 `laneProof(tree, selected, lane, {})` (smokeOwed) and run-lanes.cjs:89 `laneProof(tree, options.config, lane, {})` (startLanes), each run on Delta with `node --test run-lanes.test.cjs` (whole file): 17 pass, 0 fail, both survive. No case on a config with a windows lane calls `green` or a second `gate --detach` after a green smoke run, so a caller that keys smoke without the windows fold goes unseen. On Skoft_CRA that is a deadlock: laneNow mints the folded key, green looks up the plain key and owes smoke forever, and the gate keeps re-running smoke."
-    fix: "Add a case beside run-lanes.test.cjs:30, for example 'with a windows lane configured, a green smoke run holds for green and for the next gate': f = fixture(t, config({ smoke: '0', windows: '0' })); touch(f); passed(gated(f)); passed(run(f, 'green')); const again = run(f, 'gate', '--detach'); passed(again); assert.match(again.out, /GREEN lane smoke \\(unchanged since/); passed(run(f, 'gate', '--wait', '--minutes', '0.5')); assert.deepEqual(laneRuns(f).sort(), ['smoke', 'windows']). Both mutants above must then fail."
-  - criterion: "Description 3: any lane other than smoke keys as today"
-    severity: minor
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs
-    line: 283
-    evidence: "Mutant run-lanes.cjs:39 drops `lane.name === 'smoke' && `, so the windows lane folds itself into its own key; run on Delta with `node --test run-lanes.test.cjs` (whole file): 17 pass, the mutant survives. No case pins the windows lane's proof key."
-    fix: "In the case at run-lanes.test.cjs:254, add: const win = configuredLanes(both).find((lane) => lane.name === 'windows'); assert.equal(laneProof(f.tree, null, win, both).file, proofs.commandProof(f.tree, {}, null, win.command, win.scope).file);"
+findings: []
 mutants:
-  - criterion: "the smoke proof key folds the union of both scopes (run-lanes.cjs:41 `const scope = lane.scope;`, the earlier finding)"
+  - criterion: "the smoke proof key folds the union of both scopes (run-lanes.cjs:41 `const scope = lane.scope;`)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern=proof.changes src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
     caught: yes
   - criterion: "the smoke proof changes when the windows lane's command changes (run-lanes.cjs:42 key without windows.command)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern=proof.changes src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
     caught: yes
-  - criterion: "any lane other than smoke keys as today (run-lanes.cjs:39 windows folds itself)"
-    test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
-    caught: no
-  - criterion: "startLanes passes its config (run-lanes.cjs:89 passes {})"
-    test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
-    caught: no
+  - criterion: "any lane other than smoke keys as today (run-lanes.cjs:39 drops `lane.name === 'smoke' && `, windows folds itself); fails run-lanes.test.cjs:298"
+    test: "remote-run.sh delta <scratch clone of 7bb0b1a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-m39/run-lanes.test.cjs (mutant copy of scripts/, one batch with the baseline)"
+    caught: yes
+  - criterion: "startLanes passes its config (run-lanes.cjs:89 passes {}); fails run-lanes.test.cjs:52, smoke lane started again instead of GREEN unchanged"
+    test: "remote-run.sh delta <scratch clone of 7bb0b1a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-m89/run-lanes.test.cjs (mutant copy of scripts/, one batch with the baseline)"
+    caught: yes
   - criterion: "laneNow's moved check passes the re-read config (run-lanes.cjs:117 passes {})"
     test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
     caught: yes
@@ -41,9 +29,9 @@ mutants:
   - criterion: "accept passes its config (run-lanes.cjs:233 passes {})"
     test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
     caught: yes
-  - criterion: "smokeOwed passes its config (run-lanes.cjs:257 passes {})"
-    test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
-    caught: no
+  - criterion: "smokeOwed passes its config (run-lanes.cjs:257 passes {}); fails run-lanes.test.cjs:49, green exits 3 with smoke owed"
+    test: "remote-run.sh delta <scratch clone of 7bb0b1a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-m257/run-lanes.test.cjs (mutant copy of scripts/, one batch with the baseline)"
+    caught: yes
   - criterion: "accept runs the lane's accept_check and refuses on its non-zero exit, writing no record (run-lanes.cjs:214 `if (run.code === 0) return;` -> `return;`)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern=refuses.on.its.non-zero.exit src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
     caught: yes
@@ -62,6 +50,6 @@ mutants:
   - criterion: "a lane without accept_check accepts as today (run-lanes.cjs:239 runs acceptCheck unconditionally)"
     test: "remote-run.sh delta <tree> node --test --test-name-pattern=refuses.a.sha.off.the.base src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
     caught: yes
-tree: fa95a46541013e9f5e26e07640a87a4f42e59d88aaf3ecb2015e2858546cd767
-commit: 8265a81637467a7e280fb81800be2dbb4894b2cd
-reviewer: a432f59ff93419a8c
+tree: aeaf5a2c8c9f1b71168eab98630a9b18602fb210dc6fec67fe6ccd355f99c29d
+commit: 381f2df123fdc4a23e162c2cc505ffdb37e6dedc
+reviewer: a49cf9539f77df06e
