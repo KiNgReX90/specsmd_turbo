@@ -259,12 +259,12 @@ intents:
         mode: autopilot
         status: pending
         review: fix
-        review_hash: 98ac4cf5598ceaab349694c5e6ecbafb898efc784ef2325347db42fcb16ae3f0
-        review_commit: 711451036fe2894ed481f129eafe9b66cadad70d
+        review_hash: 13dd3cc7f98738f98bf994bf2cb8d9df92ed10e5492303aa55846e12487f7103
+        review_commit: d93eb74fd89a16bd0e79f84eae3e8c5ed5e768ad
         review_tier: strong
-        review_rejections: 1
+        review_rejections: 2
         review_weight: serious
-        reviewed_at: 2026-11-06T23:33:59Z
+        reviewed_at: 2026-11-06T23:54:31Z
         depends_on:
           - gs-supersede-proves-the-running-lanes-stopped
           - gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone
