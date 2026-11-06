@@ -91,6 +91,7 @@ intents:
       CHAIN. Flake, kb review, lane keys and slot store start in parallel; early red after the lane keys; the gate wiring after all four; then the direct driver commands, supersede and the texts, serialized on run.cjs and run-gate.cjs.
       DEPENDS. None in this ledger. Skoft_CRA's lane intent builds the host halves against this interface; whichever lands second sets accept_check and stop in Skoft_CRA's configs.
       AFTER SHIP. The reinstall recipe in the brief installs the flow into Skoft_CRA in the shape of d81f2307e and turns merge_slot, review.outside and red_line on; the high-contrast intent shipped as bd1a6a318.
+      APPENDED. gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone runs the host's optional verification.ship_cleanup last in removeWorktree, from the primary with INFERNO_BRANCH and INFERNO_TREE, after the slot item on run-ship.cjs; the texts item documents the key in config.example.yaml.
       TESTER. None. LOOK. None.
     work_items:
       - id: gs-no-flake-rerun-passes-as-proof
@@ -193,6 +194,14 @@ intents:
         status: pending
         depends_on:
           - gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes
+      - id: gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone
+        title: "Ship and teardown run the host's ship cleanup once the worktree is gone"
+        kind: behavior
+        complexity: medium
+        mode: autopilot
+        status: pending
+        depends_on:
+          - gs-the-gate-folds-only-at-the-head-of-the-slot
       - id: gs-the-orchestrator-and-planner-texts-follow
         title: "The orchestrator and planner texts follow the queued gate"
         kind: docs-only
@@ -201,6 +210,7 @@ intents:
         status: pending
         depends_on:
           - gs-supersede-proves-the-running-lanes-stopped
+          - gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone
 runs:
   active: []
   completed:
