@@ -1,9 +1,10 @@
 'use strict';
 
 /**
- * Two config keys the gate reads beside the lanes: `verification.merge_slot`, whether a merge
- * waits its turn in the slot across worktrees, and `review.outside`, the globs of a knowledge
- * base the base branch syncs, whose folded changes keep the intent review current.
+ * Three config keys the gate and ship read beside the lanes: `verification.merge_slot`, whether
+ * a merge waits its turn in the slot across worktrees, `verification.ship_cleanup`, the host's
+ * one shell command ship runs once a shipped worktree is gone, and `review.outside`, the globs
+ * of a knowledge base the base branch syncs, whose folded changes keep the intent review current.
  *
  * It sits apart from run-lib.cjs, as run-lane-config.cjs does, so the config reader validates
  * and inherits both keys and every reader asks one place for their values. The YAML reader has
@@ -17,12 +18,19 @@ const BOOLEANS = [true, false, 'true', 'false'];
 
 const globList = (value) => Array.isArray(value) && value.length > 0 &&
   value.every((glob) => typeof glob === 'string' && glob.trim().length > 0);
+const command = (value) => typeof value === 'string' && value.trim().length > 0;
 
 function validateGates(config, file) {
   const verification = isMap(config.verification) ? config.verification : {};
   if (verification.merge_slot !== undefined && !BOOLEANS.includes(verification.merge_slot)) {
     throw new RunError(
       `verification.merge_slot in ${file} must be true or false: "merge_slot: true" under verification:.`,
+      'BAD_CONFIG'
+    );
+  }
+  if (verification.ship_cleanup !== undefined && !command(verification.ship_cleanup)) {
+    throw new RunError(
+      `verification.ship_cleanup in ${file} must be one shell command: "ship_cleanup: \\"<command>\\"" under verification:.`,
       'BAD_CONFIG'
     );
   }
@@ -36,9 +44,9 @@ function validateGates(config, file) {
   }
 }
 
-/** A --config file inherits merge_slot and review.outside from the project config when it sets neither. */
+/** A --config file inherits merge_slot, ship_cleanup and review.outside from the project config when it sets none. */
 function inheritGates(config, defaults) {
-  for (const [section, key] of [['verification', 'merge_slot'], ['review', 'outside']]) {
+  for (const [section, key] of [['verification', 'merge_slot'], ['verification', 'ship_cleanup'], ['review', 'outside']]) {
     const from = defaults[section];
     if (!isMap(from) || from[key] === undefined) continue;
     if (config[section] === undefined) config[section] = {};
@@ -53,10 +61,16 @@ function mergeSlot(config) {
   return value === true || value === 'true';
 }
 
+/** The host's ship cleanup command, trimmed, or null when the config sets none. */
+function shipCleanup(config) {
+  const value = isMap(config.verification) ? config.verification.ship_cleanup : undefined;
+  return command(value) ? value.trim() : null;
+}
+
 /** The globs whose base-side changes keep the intent review current, or none. */
 function reviewOutside(config) {
   const value = isMap(config.review) ? config.review.outside : undefined;
   return globList(value) ? [...value] : [];
 }
 
-module.exports = { inheritGates, mergeSlot, reviewOutside, validateGates };
+module.exports = { inheritGates, mergeSlot, reviewOutside, shipCleanup, validateGates };
