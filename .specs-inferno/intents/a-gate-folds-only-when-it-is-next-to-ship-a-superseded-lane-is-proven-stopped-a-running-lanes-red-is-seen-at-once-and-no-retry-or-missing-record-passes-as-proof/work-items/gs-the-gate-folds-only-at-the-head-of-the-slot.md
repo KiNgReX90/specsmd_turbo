@@ -5,7 +5,8 @@ intent: a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-st
 kind: behavior
 complexity: high
 mode: autopilot
-status: pending
+status: completed
+completed_at: 2026-11-06T20:09:31Z
 depends_on: [gs-no-flake-rerun-passes-as-proof, gs-a-kb-sync-keeps-the-intent-review-current, gs-the-merge-slot-queues-tickets-across-worktrees, gs-a-running-lane-red-ends-the-wait]
 created: 2026-11-06
 ---
