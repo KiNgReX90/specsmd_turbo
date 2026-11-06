@@ -1,5 +1,5 @@
 item: gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes
-verdict: fix
+verdict: clean
 files:
   - src/__tests__/unit/inferno/printed-calls.test.ts
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-call.cjs
@@ -9,53 +9,56 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-slot-cli.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-slot.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
-findings:
-  - criterion: "a red wait releases the ticket (brief Decisions): a red lanes-only wait releases the driver's ticket and no other"
-    severity: major
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-only.cjs
-    line: 58
-    evidence: "releaseHolder defaults to the first ticket in the queue, whoever holds it. Probe on Delta (clone of 97e34e7): driver took the slot on main 31 minutes ago, a linked worktree took `slot --take --holder inferno-intent/other` (printed `evicted driver`, other at the head), then the pinned call `gate --detach --lanes-only --since HEAD~1` on main recorded `holder: inferno-intent/other` in the job, and the red wait (smoke exit 10) released it: the queue went from [\"inferno-intent/other\"] to []. The driver procedure takes the slot before the edit and starts the lanes only after the edit, commit and verification, so its ticket idling out first is a normal path, and the red then drops another intent from the queue. Mutant N6 (`if (options.holder)` becomes `if (false)`) also stays green: no test passes --holder to the gate."
-    fix: "In releaseHolder, without --holder pick the first ticket whose `tree` resolves (fs.realpathSync) to this tree, else null, never a ticket of another worktree. Add run-slot-cli cases: \"a red lanes-only wait leaves another worktree's ticket queued\" (git worktree add a second tree, take its ticket first, start lanes-only red on main without a driver ticket, wait exits 2, the other ticket is still queued) and \"--holder names the ticket a red lanes-only wait releases\" (tickets first and driver, `--holder driver`, red wait leaves [\"first\"])."
-  - criterion: "on the base branch without --since the start refuses BAD_ARGS when origin/<base> equals HEAD (coordinator decision 1)"
-    severity: minor
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-only.cjs
-    line: 45
-    evidence: "The refusal works (probe on Delta: commit pushed to origin before the start, `gate --detach --lanes-only` exited 1 with `ERROR [BAD_ARGS] on main with no unpushed commit to diff`), but no test reaches it: mutant N3 (`if (!origin || origin === HEAD)` becomes `if (!origin)`) left the whole run-slot-cli.test.cjs at 11 pass 0 fail. Without it a driver that pushed before starting its lanes gets an empty diff, every lane SKIPs and the wait is green."
-    fix: "Add a run-slot-cli case \"gate --detach --lanes-only on the base branch after the push is refused\": pushedOrigin(f), touch(f), push main again, the start exits 1, stderr matches /BAD_ARGS/ and /--since/, and no lane-smoke-job.json exists."
-  - criterion: "gate takes --holder only with --detach --lanes-only (added by the correction)"
-    severity: minor
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs
-    line: 387
-    evidence: "Mutant N7 (`if (options.holder && !options.lanes_only) throw` becomes `if (false) throw`) left the whole run-slot-cli.test.cjs at 11 pass 0 fail: no test sends --holder to a gate without --lanes-only."
-    fix: "Extend the \"--since without --lanes-only is refused\" case: `gate --detach --holder driver` exits 1 and stderr matches /--holder/."
+findings: []
 mutants:
-  - criterion: "earlier finding: --since naming no commit is BAD_REF exit 2 (run-lanes-only.cjs:31, the throw becomes if (false))"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test '--test-name-pattern=an unknown ref is refused' S/run-slot-cli.test.cjs"
+  - criterion: "slot --take exits 4 behind another holder and 0 at the head (run-slot.cjs:190, if (turn.head) becomes if (true))"
+    test: "remote-run.sh delta <clone of 1fdca3d> node --test --test-name-pattern 'slot --take exits 4' S/run-slot-cli.test.cjs"
     caught: yes
-  - criterion: "earlier finding: every printed slot call is built in run-call.cjs (run-slot.cjs:219, a hand-built slot --take call in the renew line)"
-    test: "remote-run.sh delta <clone of 97e34e7> env -C src npx vitest run __tests__/unit/inferno/printed-calls.test.ts"
+  - criterion: "slot --release frees the head for the next holder (run-slot.cjs:222, release becomes held = false)"
+    test: "remote-run.sh delta <clone of 1fdca3d> node --test --test-name-pattern 'slot --release frees the head' S/run-slot-cli.test.cjs"
     caught: yes
-  - criterion: "on the base branch without --since the lanes diff from origin/<base> (run-lanes-only.cjs:51, return origin becomes return null)"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test '--test-name-pattern=diffs the commits origin lacks' S/run-slot-cli.test.cjs"
+  - criterion: "slot without merge_slot says there is no queue and exits 0 (run-slot.cjs:210, the mergeSlot check becomes if (false))"
+    test: "remote-run.sh delta <clone of 1fdca3d> node --test --test-name-pattern 'slot without merge_slot' S/run-slot-cli.test.cjs"
     caught: yes
-  - criterion: "on the base branch with no origin and no --since the start is refused (run-lanes-only.cjs:45, the check becomes if (false))"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test '--test-name-pattern=with no origin and no --since is refused' S/run-slot-cli.test.cjs"
+  - criterion: "the usage carries the three driver lines (run.cjs, the release line drops --holder; the lanes-only line drops [--since <ref>])"
+    test: "remote-run.sh delta <clone of 1fdca3d> node --test --test-name-pattern 'the usage carries' S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "lanes-only starts the lanes the diff since --since touched, takes no ticket, runs no finalize command, and the wait waits on the lanes green (run-gate.cjs:296 --since ignored; run-lanes-only.cjs slot.take added, finalize run, ok false, lanes [])"
+    test: "remote-run.sh delta <clone of 1fdca3d> node --test --test-name-pattern 'gate --detach --lanes-only on the base branch' S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "--since and --lanes-only refused outside gate --detach --lanes-only (run-gate.cjs:384-385, each check becomes if (false))"
+    test: "remote-run.sh delta <clone of 1fdca3d> node --test '--test-name-pattern=without --lanes-only is refused' S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "builder decisions: parseArgs maps hyphenated flags to underscores; two verbs or a verb without --holder are a usage refusal (run.cjs:177, run-slot.cjs:208)"
+    test: "remote-run.sh delta <clone of 1fdca3d> node --test --test-name-pattern 'slot refuses|gate --detach --lanes-only on the base branch' S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "on the base branch without --since the lanes diff from origin/<base>, and the start is refused with no origin (run-lanes-only.cjs:51 return null; :45 check becomes if (false))"
+    test: "remote-run.sh delta <clone of 97e34e7> node --test '--test-name-pattern=diffs the commits origin lacks|with no origin and no --since is refused' S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "without --holder a red lanes-only wait releases only this tree's ticket, never another worktree's (run-lanes-only.cjs:68, the tree match becomes tickets[0])"
+    test: "remote-run.sh delta <clone of ab32846> node --test \"--test-name-pattern=leaves another worktree's ticket queued\" S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "the lanes-only job records the driver's own ticket (run-lanes-only.cjs:69, the default returns null)"
+    test: "remote-run.sh delta <clone of ab32846> node --test S/run-slot-cli.test.cjs"
     caught: yes
   - criterion: "on the base branch with origin/<base> at HEAD the start is refused (run-lanes-only.cjs:45, the HEAD comparison dropped)"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test S/run-slot-cli.test.cjs"
-    caught: no
-  - criterion: "a red lanes-only wait releases the job's holder (run-lanes.cjs:214, slot.release(tree, job.holder) becomes slot.release(tree))"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test \"--test-name-pattern=releases the driver's ticket\" S/run-slot-cli.test.cjs"
+    test: "remote-run.sh delta <clone of ab32846> node --test '--test-name-pattern=after the push is refused' S/run-slot-cli.test.cjs"
     caught: yes
-  - criterion: "the lanes-only job records the driver's ticket as its holder (run-lanes-only.cjs:59, the default returns null)"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test S/run-slot-cli.test.cjs"
+  - criterion: "an explicit --holder names the released ticket (run-lanes-only.cjs:65, if (options.holder) becomes if (false))"
+    test: "remote-run.sh delta <clone of ab32846> node --test '--test-name-pattern=names the ticket a red lanes-only wait releases' S/run-slot-cli.test.cjs"
     caught: yes
-  - criterion: "an explicit --holder names the released ticket (run-lanes-only.cjs:56, if (options.holder) becomes if (false))"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test S/run-slot-cli.test.cjs"
-    caught: no
   - criterion: "gate takes --holder only with --detach --lanes-only (run-gate.cjs:387, the check becomes if (false))"
-    test: "remote-run.sh delta <clone of 97e34e7> node --test S/run-slot-cli.test.cjs"
-    caught: no
-tree: b649c951922b8b258022d6af75094fd47e873fc451fc1d2571981a489d174299
-commit: 97e34e768de62b891780c1055e86a1ff3e83a9a7
+    test: "remote-run.sh delta <clone of ab32846> node --test '--test-name-pattern=without --lanes-only is refused' S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "a red lanes-only wait releases the job's holder (run-lanes.cjs:214, slot.release(tree, job.holder) becomes slot.release(tree))"
+    test: "remote-run.sh delta <clone of ab32846> node --test \"--test-name-pattern=releases the driver's ticket\" S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "--since naming no commit is BAD_REF exit 2 (run-lanes-only.cjs:31, the throw becomes if (false))"
+    test: "remote-run.sh delta <clone of ab32846> node --test '--test-name-pattern=an unknown ref is refused' S/run-slot-cli.test.cjs"
+    caught: yes
+  - criterion: "every printed slot call is built in run-call.cjs (run-slot.cjs:219, a hand-built slot --take call in the renew line)"
+    test: "remote-run.sh delta <clone of ab32846> env -C src npx vitest run __tests__/unit/inferno/printed-calls.test.ts"
+    caught: yes
+tree: f76a8b8286e7b105ebd80b35057dfc6f284745585c508c4d1db02d450bf3e29a
+commit: ab3284662fe93a6ba425fd93f4fa1b1d1475c1a0
 reviewer: a713d72db4fd4c8bc
