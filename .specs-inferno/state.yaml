@@ -208,12 +208,12 @@ intents:
         mode: autopilot
         status: pending
         review: fix
-        review_hash: d87bdf5d0582fb539bba5230b967ad5a9fa0f2304d809be173217dac80814320
-        review_commit: 1fdca3da3ad88c1b4d5afdbf3a8de3476dc56018
+        review_hash: b649c951922b8b258022d6af75094fd47e873fc451fc1d2571981a489d174299
+        review_commit: 97e34e768de62b891780c1055e86a1ff3e83a9a7
         review_tier: strong
-        review_rejections: 1
+        review_rejections: 2
         review_weight: serious
-        reviewed_at: 2026-11-06T21:11:44Z
+        reviewed_at: 2026-11-06T21:47:33Z
         depends_on:
           - gs-the-gate-folds-only-at-the-head-of-the-slot
       - id: gs-supersede-proves-the-running-lanes-stopped
