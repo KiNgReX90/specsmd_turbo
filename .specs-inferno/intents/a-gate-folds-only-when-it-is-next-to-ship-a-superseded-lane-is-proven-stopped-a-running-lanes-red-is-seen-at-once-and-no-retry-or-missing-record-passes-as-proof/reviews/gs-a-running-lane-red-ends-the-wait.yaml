@@ -1,0 +1,30 @@
+item: gs-a-running-lane-red-ends-the-wait
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-jobs.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-fixture.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
+findings: []
+mutants:
+  - criterion: "a running lane's red line ends the wait with exit 2 while the lane walks on (run-lanes.cjs:114 laneNow writes no run file)"
+    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M1/run-lanes-wait.test.cjs (wait exited 4, not 2)"
+    caught: yes
+  - criterion: "a running lane's red line ends the wait with exit 2 while the lane walks on (run-lanes.cjs:174 running-red maps to verdict running)"
+    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M2/run-lanes-wait.test.cjs (RED line printed, wait exited 4, not 2)"
+    caught: yes
+  - criterion: "without red_line the same lane keeps the wait at 4 (run-lanes.cjs:137 drops the red_line check)"
+    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M3/run-lanes-wait.test.cjs (wait exited 2, not 4)"
+    caught: yes
+  - criterion: "a line the pattern does not match keeps the wait at 4 (run-lanes.cjs:147 any non-empty line counts instead of pattern.test)"
+    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M4/run-lanes-wait.test.cjs (wait exited 2, not 4)"
+    caught: yes
+  - criterion: "a red line from an earlier run of the lane is not read (run-lanes.cjs:139 drops the run.started >= job.started guard)"
+    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M5/run-lanes-wait.test.cjs (wait exited 2 on the earlier log, not 4)"
+    caught: yes
+  - criterion: "node --test run-lanes-wait, run-lanes, run-lanes-config reports 0 fail (unmutated baseline in the same Delta batch)"
+    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-config.test.cjs (35 pass, 0 fail)"
+    caught: yes
+tree: 90e3bc565af9b42a4b34052b76988ee3567642dd2195597242f8a60f2c86c112
+commit: 665062ec79ab9816298d83f4875b38ee05ca79f1
+reviewer: a58378b54d47f918d
