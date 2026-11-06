@@ -186,6 +186,13 @@ intents:
         complexity: high
         mode: autopilot
         status: pending
+        review: fix
+        review_hash: 3e764a5b1e5cc04ba4c0bccc0ec3e9d1463bbad00b1bda087b8461860a97c654
+        review_commit: 381debddfd14d808bd187415bb19155de477737c
+        review_tier: strong
+        review_rejections: 1
+        review_weight: serious
+        reviewed_at: 2026-11-06T19:12:16Z
         depends_on:
           - gs-no-flake-rerun-passes-as-proof
           - gs-a-kb-sync-keeps-the-intent-review-current
