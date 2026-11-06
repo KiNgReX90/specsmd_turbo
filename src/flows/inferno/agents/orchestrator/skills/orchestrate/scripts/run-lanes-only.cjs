@@ -7,8 +7,8 @@
  * result names `lanes_only`, so `gate --wait` waits on the lanes alone and nothing reads that
  * result as a finalize proof. Each lane mints and checks its proof exactly as a gate's lane does.
  *
- * The job names the ticket a red wait releases: `--holder`, else the head ticket under the merge
- * slot, since the driver holding the head is the one that started the lanes.
+ * The job names the ticket a red wait releases: `--holder`, else the ticket this tree took, else
+ * none. Never another worktree's ticket, so a red here never drops another intent from the queue.
  */
 
 const fs = require('fs');
@@ -51,12 +51,22 @@ function lanesSince(tree, since, base) {
   return origin;
 }
 
-/** The holder a red wait releases: `--holder`, else the head ticket (never a worktree running without one), else none. */
+/** A directory's real path, or null when it is gone, as a removed worktree's is. */
+function realDir(dir) {
+  try {
+    return fs.realpathSync(dir);
+  } catch (error) {
+    return null;
+  }
+}
+
+/** The holder a red wait releases: `--holder`, else the first ticket whose tree is this tree, else none. */
 function releaseHolder(tree, options, config) {
   if (options.holder) return options.holder;
   if (!mergeSlot(config)) return null;
-  const [head] = slot.queue(tree).tickets;
-  return head ? head.holder : null;
+  const here = realDir(tree);
+  const mine = slot.queue(tree).tickets.find((ticket) => ticket.tree && realDir(ticket.tree) === here);
+  return mine ? mine.holder : null;
 }
 
 /**

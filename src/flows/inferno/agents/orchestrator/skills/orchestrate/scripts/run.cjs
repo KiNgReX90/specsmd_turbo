@@ -92,7 +92,7 @@ Options
                     or origin/<base> on the base branch)
   --lanes-only      gate --detach: start only the lanes, for a driver that holds its own slot ticket
   --holder <name>   slot: the holder whose ticket is taken, renewed or released;
-                    gate --detach --lanes-only: the ticket a red wait releases (default the head ticket)
+                    gate --detach --lanes-only: the ticket a red wait releases (default the one this tree took)
   --dispatch-id <id> verify-item: the accepted dispatch to check (default the item's latest)
   --peers <json>    verify-item: the dispatch ids that may explain a sibling's change (default every accepted one)
   --item <id>       integrate: the item this landing completes once the checks are green; review: the item reviewed;

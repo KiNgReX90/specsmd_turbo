@@ -3,7 +3,7 @@ const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { config, fixture, git, passed, run, touch } = require('./run-lanes-fixture.cjs');
+const { BRANCH, config, fixture, git, passed, run, touch } = require('./run-lanes-fixture.cjs');
 const slot = require('./run-slot.cjs');
 
 /** The lanes fixture with the merge slot on, or off when `on` is false. */
@@ -134,6 +134,18 @@ test('gate --detach --lanes-only on the base branch with no origin and no --sinc
   assert.equal(fs.existsSync(smokeJob(f)), false);
 });
 
+test('gate --detach --lanes-only on the base branch after the push is refused', (t) => {
+  const f = onMain(t, slotConfig({ smoke: '0' }));
+  pushedOrigin(f);
+  touch(f);
+  git(f.tree, 'push', '-q', 'origin', 'main');
+  const refused = run(f, 'gate', '--detach', '--lanes-only');
+  assert.equal(refused.code, 1, refused.out + refused.err);
+  assert.match(refused.err, /BAD_ARGS/);
+  assert.match(refused.err, /--since/);
+  assert.equal(fs.existsSync(smokeJob(f)), false);
+});
+
 test('gate --detach --lanes-only --since an unknown ref is refused and starts no lane', (t) => {
   const f = onMain(t, slotConfig({ smoke: '0' }));
   touch(f);
@@ -154,6 +166,35 @@ test("a red lanes-only wait releases the driver's ticket", (t) => {
   assert.deepEqual(holders(f.tree), []);
 });
 
+test("a red lanes-only wait leaves another worktree's ticket queued", (t) => {
+  const f = onMain(t, slotConfig({ smoke: '10' }));
+  const other = path.join(path.dirname(f.tree), 'other');
+  git(f.tree, 'worktree', 'add', '-q', other, BRANCH);
+  // The driver's ticket idled out before its lanes started, so the other worktree's take evicts it and holds the head.
+  slot.take(f.tree, { holder: 'driver' }, Date.now() - slot.IDLE_MS - 60 * 1000);
+  const taken = run(f, 'slot', '--take', '--holder', BRANCH, '--tree', other);
+  passed(taken);
+  assert.match(taken.out, /^evicted driver/m);
+  touch(f);
+  passed(run(f, 'gate', '--detach', '--lanes-only', '--since', 'HEAD~1'));
+  const job = JSON.parse(fs.readFileSync(path.join(mainCache(f), 'gate-job.json'), 'utf8'));
+  assert.equal(job.holder, undefined);
+  const red = run(f, 'gate', '--wait', '--minutes', '0.5');
+  assert.equal(red.code, 2, red.out + red.err);
+  assert.deepEqual(holders(f.tree), [BRANCH]);
+});
+
+test('--holder names the ticket a red lanes-only wait releases', (t) => {
+  const f = onMain(t, slotConfig({ smoke: '10' }));
+  passed(run(f, 'slot', '--take', '--holder', 'first'));
+  assert.equal(run(f, 'slot', '--take', '--holder', 'driver').code, 4);
+  touch(f);
+  passed(run(f, 'gate', '--detach', '--lanes-only', '--since', 'HEAD~1', '--holder', 'driver'));
+  const red = run(f, 'gate', '--wait', '--minutes', '0.5');
+  assert.equal(red.code, 2, red.out + red.err);
+  assert.deepEqual(holders(f.tree), ['first']);
+});
+
 test('--since without --lanes-only is refused', (t) => {
   const f = onMain(t, slotConfig({ smoke: '0' }));
   const since = run(f, 'gate', '--detach', '--since', 'HEAD');
@@ -162,4 +203,7 @@ test('--since without --lanes-only is refused', (t) => {
   const lanesOnly = run(f, 'gate', '--lanes-only');
   assert.equal(lanesOnly.code, 1, lanesOnly.out + lanesOnly.err);
   assert.match(lanesOnly.err, /--lanes-only/);
+  const holder = run(f, 'gate', '--detach', '--holder', 'driver');
+  assert.equal(holder.code, 1, holder.out + holder.err);
+  assert.match(holder.err, /--holder/);
 });
