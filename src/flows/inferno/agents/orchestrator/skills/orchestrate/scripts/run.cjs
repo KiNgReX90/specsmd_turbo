@@ -14,7 +14,8 @@
  * because state.yaml has one writer and this is not it.
  *
  * Exit codes: 0 ok, 1 usage, 2 failure (details printed), 3 a step is owed first,
- * 4 gate still running, or queued behind another intent's ticket (gate --wait: call it again).
+ * 4 gate still running, or queued behind another intent's ticket (gate --wait: call it again),
+ * or a slot --take queued behind another holder (take again).
  */
 
 const path = require('path');
@@ -38,6 +39,7 @@ const { ship, teardown } = require('./run-ship.cjs');
 const { TransitionError } = require('./state-transition.cjs');
 const processes = require('./run-processes.cjs');
 const { caller } = require('./run-call.cjs');
+const { slotCommand } = require('./run-slot.cjs');
 
 const { RunError } = lib;
 
@@ -66,9 +68,14 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs cases --range <from>..<to> [--tree <dir>] [--config <file>] cases the range made stale or reached unanswered, and changed tests no case answers: 0 none, 2 refused
   node run.cjs gate [--tree <dir>] [--config <file>] [--force] run the finalize commands without matching proofs
   node run.cjs gate --detach [--tree <dir>]              start the gate and each lane the branch touched (verification.smoke, .windows) and return; 4 queued behind another intent's ticket (merge_slot)
+  node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base): no fold, no finalize command, no ticket
   node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane's instrument red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
+  node run.cjs slot [--tree <dir>] [--config <file>]     the merge slot queue, a worktree running without a ticket first
+  node run.cjs slot --take --holder <name> [--tree <dir>] take or renew a ticket by hand: 0 at the head, 4 queued behind another holder
+  node run.cjs slot --renew --holder <name> [--tree <dir>] mark the holder's ticket active
+  node run.cjs slot --release --holder <name> [--tree <dir>] drop the holder's ticket
   node run.cjs ship <intent-id> --tree <dir> [--config <file>] fold, merge, push, verify, tear down
   node run.cjs teardown --tree <dir> [--base <branch>] [--config <file>] remove a worktree and branch the base already holds
   node run.cjs register-process <pid> --tree <dir> --run-id <id> let teardown stop a process the run launched in the tree
@@ -78,9 +85,12 @@ const USAGE = `INFERNO orchestrator runner
 Options
   --json            machine-readable output
   --tree <dir>      the worktree to operate in (default: the repository of the cwd)
-  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, integrate, doubles, real-app, cases, gate, green, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml)
+  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml)
   --base <branch>   integrate, doubles, gate, ship and teardown: the base branch to fold in (default: the config's base)
-  --since <ref>     verify-item: compare against this ref instead of the item's accepted dispatch
+  --since <ref>     verify-item: compare against this ref instead of the item's accepted dispatch;
+                    gate --detach --lanes-only: pick the lanes from the diff since this ref instead of the merge base
+  --lanes-only      gate --detach: start only the lanes, for a driver that holds its own slot ticket
+  --holder <name>   slot: the holder whose ticket is taken, renewed or released
   --dispatch-id <id> verify-item: the accepted dispatch to check (default the item's latest)
   --peers <json>    verify-item: the dispatch ids that may explain a sibling's change (default every accepted one)
   --item <id>       integrate: the item this landing completes once the checks are green; review: the item reviewed;
@@ -97,7 +107,7 @@ Options
   --harness-fix <sha> smoke|windows --accept: the harness fix on the base branch the instrument red is accepted against
   --batch <file>    mutate: a JSON or YAML list of {criterion, file, line, find, replace, test}; find occurs once on that line
 
-Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running.`;
+Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder.`;
 
 function required(value, usage) {
   if (!value) throw new RunError(`usage: node run.cjs ${usage}`, 'BAD_ARGS', 1);
@@ -134,6 +144,7 @@ const COMMANDS = {
   scan: (args, options) => scan(options),
   mutate: (args, options) => mutate(options),
   gate: (args, options) => gate.gate(options),
+  slot: (args, options) => slotCommand(options),
   green: (args, options) => gate.green(options),
   ship: (args, options) => ship(required(args[0], 'ship <intent-id> --tree <dir>'), options),
   teardown: (args, options) => teardown(options),
@@ -151,7 +162,7 @@ const COMMANDS = {
 const OWNING = new Set(['frontier', 'probes', 'verify-item', 'scan', 'review', 'integrate', 'gate', 'green', 'ship', 'dispatch-log', 'accept-dispatch', ...LANES]);
 
 /** Options that take no value. Everything else starting with `--` takes the next argument. */
-const FLAGS = new Set(['--json', '--detach', '--wait', '--force', '--collect', '--accept']);
+const FLAGS = new Set(['--json', '--detach', '--wait', '--force', '--collect', '--accept', '--take', '--renew', '--release', '--lanes-only']);
 
 function parseArgs(argv) {
   const options = { cwd: process.cwd() };
@@ -163,7 +174,7 @@ function parseArgs(argv) {
       continue;
     }
     if (FLAGS.has(arg)) {
-      options[arg.slice(2)] = true;
+      options[arg.slice(2).replace(/-/g, '_')] = true;
       continue;
     }
     const value = argv[i + 1];

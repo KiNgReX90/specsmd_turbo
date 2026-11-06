@@ -12,7 +12,8 @@
  * an open intent review holds its ticket longer, up to a cap. A worktree running a gate or a
  * lane without a ticket (started by an older runner) stands at the head until its job ends.
  *
- * This module reads no config: its callers decide whether the slot is in use.
+ * The queue functions read no config: their callers decide whether the slot is in use. The
+ * `run.cjs slot` command, `slotCommand`, reads it, so a driver on a host without the key never waits.
  */
 
 const fs = require('fs');
@@ -22,6 +23,10 @@ const lib = require('./run-lib.cjs');
 const jobs = require('./run-jobs.cjs');
 const { worktreeEntries } = require('./run-worktrees.cjs');
 const { atomicWrite, withFileLock } = require('./state-store.cjs');
+const { mergeSlot } = require('./run-config-gates.cjs');
+const { slotCall } = require('./run-call.cjs');
+
+const { RunError } = lib;
 
 const MINUTE = 60 * 1000;
 const IDLE_MS = 30 * MINUTE;
@@ -130,24 +135,24 @@ function aheadOf(tree, tickets, who) {
   return [...shimHeads(tree, tickets), ...before];
 }
 
-/** Mark the holder's ticket active; a holder not queued is left alone. */
+/** Mark the holder's ticket active; a holder not queued is left alone. True when it held one. */
 function renew(tree, holder, now = Date.now()) {
   const who = holder || lib.currentBranch(tree);
-  locked(tree, (stored) => {
+  return locked(tree, (stored) => {
     const mine = stored.find((ticket) => ticket.holder === who);
     if (!mine) return { tickets: null };
     mine.activity = iso(now);
     return { tickets: stored };
-  });
+  }).tickets !== null;
 }
 
-/** Drop the holder's ticket; a holder not queued is left alone. */
+/** Drop the holder's ticket; a holder not queued is left alone. True when it held one. */
 function release(tree, holder) {
   const who = holder || lib.currentBranch(tree);
-  locked(tree, (stored) => {
+  return locked(tree, (stored) => {
     const kept = stored.filter((ticket) => ticket.holder !== who);
     return { tickets: kept.length === stored.length ? null : kept };
-  });
+  }).tickets !== null;
 }
 
 function evicted(tree, now) {
@@ -172,4 +177,52 @@ function standing(tree, holder, now = Date.now()) {
   return { ticket, ahead: ticket ? aheadOf(tree, kept, who) : [], out };
 }
 
-module.exports = { IDLE_MS, REVIEW_CAP_MS, queue, release, renew, reviewDispatchPath, slotPath, standing, take };
+// ---------------------------------------------------------------------------
+// run.cjs slot: the queue by hand, for a driver that commits straight onto the base. It takes a
+// ticket under its own holder name before it commits, starts the lanes with
+// `gate --detach --lanes-only`, waits, pushes and releases.
+// ---------------------------------------------------------------------------
+
+const SLOT_USAGE = 'slot [--take | --renew | --release] --holder <name> [--tree <dir>] [--config <file>]';
+
+function takeTicket(tree, holder) {
+  const turn = take(tree, { holder });
+  if (turn.head) {
+    return { exit: 0, payload: { head: true, holder, ahead: [] },
+      out: [...turn.out, `${holder} holds the head of the merge slot`, `release with: ${slotCall(tree, 'release', holder)}`] };
+  }
+  return { exit: 4, payload: { head: false, holder, ahead: turn.ahead },
+    out: [...turn.out, `queued behind ${turn.ahead[0]} (${turn.ahead.length} ahead)`, `take again with: ${slotCall(tree, 'take', holder)}`] };
+}
+
+/** The queue as it stands after eviction: every worktree running without a ticket first, then one line per holder. */
+function listed(tree, now = Date.now()) {
+  const { kept, out } = evicted(tree, now);
+  const lines = [...shimHeads(tree, kept), ...kept.map((ticket) => ticket.holder)];
+  return { exit: 0, payload: { heads: lines.slice(0, 1), tickets: kept }, out: [...out, ...(lines.length ? lines : ['the merge slot holds no ticket'])] };
+}
+
+/** `run.cjs slot`: take (0 at the head, 4 queued), renew or release a holder's ticket, or print the queue. */
+function slotCommand(options) {
+  const verbs = ['take', 'renew', 'release'].filter((verb) => options[verb]);
+  if (verbs.length > 1 || (verbs.length === 1 && !options.holder)) throw new RunError(`usage: node run.cjs ${SLOT_USAGE}`, 'BAD_ARGS', 1);
+  const tree = options.tree || lib.repoRoot(options.cwd);
+  if (!mergeSlot(lib.readConfig(tree, options.config))) {
+    const file = options.config || `${lib.SPECS_DIR}/config.yaml`;
+    return { exit: 0, payload: { merge_slot: false }, out: [`no verification.merge_slot in ${file}: there is no queue`] };
+  }
+  const [verb] = verbs;
+  const { holder } = options;
+  if (verb === 'take') return takeTicket(tree, holder);
+  if (verb === 'renew') {
+    const held = renew(tree, holder);
+    return { exit: 0, payload: { renewed: held, holder }, out: [held ? `renewed ${holder}` : `${holder} holds no ticket`] };
+  }
+  if (verb === 'release') {
+    const held = release(tree, holder);
+    return { exit: 0, payload: { released: held, holder }, out: [held ? `released ${holder}` : `${holder} holds no ticket`] };
+  }
+  return listed(tree);
+}
+
+module.exports = { IDLE_MS, REVIEW_CAP_MS, queue, release, renew, reviewDispatchPath, slotCommand, slotPath, standing, take };

@@ -102,6 +102,12 @@ const teardownCall = (tree) => runCall('teardown', tree, null);
 /** Accept a lane's instrument red against a harness fix, by the runner's own path. */
 const laneAcceptCall = (lane, tree) => nodeCall(lane, tree, null, ['--accept', '--harness-fix', '<sha>']);
 
+/**
+ * A merge slot call for a holder by the runner's own path, for a driver that holds its own
+ * ticket: `take`, `renew` or `release`, or the queue itself when `verb` is null.
+ */
+const slotCall = (tree, verb, holder) => nodeCall('slot', tree, null, verb ? [`--${verb}`, '--holder', holder] : []);
+
 /** Close an intent whose items are all completed. */
 const closeIntentCall = (intent) => writerCall('close-intent', intent);
 
@@ -113,5 +119,5 @@ const unclaimIntentCall = (intent) => writerCall('unclaim-intent', intent);
 
 module.exports = {
   RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateWaitCall, integrateCall, intentRecordCall,
-  intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, realAppCall, scanCall, teardownCall, unclaimIntentCall,
+  intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
 };

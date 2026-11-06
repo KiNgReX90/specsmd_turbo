@@ -16,6 +16,7 @@ const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const cases = require('./run-cases.cjs');
 const slot = require('./run-slot.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
+const { sinceCommit, startLanesOnly } = require('./run-lanes-only.cjs');
 
 const { RunError } = lib;
 
@@ -291,6 +292,10 @@ function gateDetach(options) {
     );
   }
 
+  if (options.lanes_only) {
+    const since = options.since ? sinceCommit(tree, options.since) : mergeBase(tree, options.base || resolveBase(config, null, tree));
+    return startLanesOnly(tree, options, config, restored, changedPaths(tree, since));
+  }
   const intent = intentReview.intentFor(tree, options);
   if (mergeSlot(config)) {
     const turn = slot.take(tree, { intent });
@@ -376,6 +381,8 @@ function gateWait(options) {
 
 function gate(options) {
   if (options.detach && options.wait) throw new RunError('gate takes --detach or --wait, not both', 'BAD_ARGS', 1);
+  if (options.lanes_only && !options.detach) throw new RunError('gate takes --lanes-only only with --detach', 'BAD_ARGS', 1);
+  if (options.since && !options.lanes_only) throw new RunError('gate takes --since only with --detach --lanes-only', 'BAD_ARGS', 1);
   if (options.lane) return lanes.laneNow(options);
   if (options.detach) return gateDetach(options);
   if (options.wait) return gateWait(options);
