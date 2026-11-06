@@ -14,7 +14,7 @@
  * because state.yaml has one writer and this is not it.
  *
  * Exit codes: 0 ok, 1 usage, 2 failure (details printed), 3 a step is owed first,
- * 4 gate still running (gate --wait: call it again).
+ * 4 gate still running, or queued behind another intent's ticket (gate --wait: call it again).
  */
 
 const path = require('path');
@@ -65,8 +65,8 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs real-app --range <from>..<to> [--item <id>] [--tree <dir>] real_app.paths lines naming what the range removed, and files driving what it changed: 0 none stale, 2 stale
   node run.cjs cases --range <from>..<to> [--tree <dir>] [--config <file>] cases the range made stale or reached unanswered, and changed tests no case answers: 0 none, 2 refused
   node run.cjs gate [--tree <dir>] [--config <file>] [--force] run the finalize commands without matching proofs
-  node run.cjs gate --detach [--tree <dir>]              start the gate and each lane the branch touched (verification.smoke, .windows) and return
-  node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane's instrument red to accept, 4 still running (default 9 min)
+  node run.cjs gate --detach [--tree <dir>]              start the gate and each lane the branch touched (verification.smoke, .windows) and return; 4 queued behind another intent's ticket (merge_slot)
+  node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane's instrument red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
   node run.cjs ship <intent-id> --tree <dir> [--config <file>] fold, merge, push, verify, tear down

@@ -14,6 +14,8 @@ const intentReview = require('./run-intent-owed.cjs');
 const { gateStartCall, gateWaitCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const cases = require('./run-cases.cjs');
+const slot = require('./run-slot.cjs');
+const { mergeSlot } = require('./run-config-gates.cjs');
 
 const { RunError } = lib;
 
@@ -262,7 +264,19 @@ function gateNow(options) {
 // wrote "I'll continue when it exits" and the process exited with it, gate and all). So the
 // gate runs as its own detached process and the orchestrator blocks on it in slices that fit
 // the cap: `--wait` exits 0 green, 2 red, 4 still running, and 4 means call it again.
+//
+// With `verification.merge_slot` on, a gate folds and starts only at the head of the merge
+// slot (run-slot.cjs), so an intent behind another folds a base that no longer moves under it.
+// A queued detach exits 4 too, and its `--wait` starts the gate once the ticket is at the head.
 // ---------------------------------------------------------------------------
+
+const QUEUE_POLL_MS = 5000;
+
+const queuedLine = (ahead) => `queued behind ${ahead[0]} (${ahead.length} ahead); nothing folded`;
+
+function queued(tree, ahead, out, next) {
+  return { exit: 4, payload: { queued: true, tree, ahead }, out: [...out, queuedLine(ahead), next] };
+}
 
 function gateDetach(options) {
   const tree = treeOf(options);
@@ -278,6 +292,10 @@ function gateDetach(options) {
   }
 
   const intent = intentReview.intentFor(tree, options);
+  if (mergeSlot(config)) {
+    const turn = slot.take(tree, { intent });
+    if (!turn.head) return queued(tree, turn.ahead, [...restored, ...turn.out], `wait with: ${gateWaitCall(tree)}`);
+  }
   const before = lib.git(tree, ['rev-parse', 'HEAD']);
   const base = options.base || resolveBase(config, null, tree);
   const foldLines = foldBase(tree, base);
@@ -316,8 +334,34 @@ function finished(job) {
   };
 }
 
+/**
+ * gate --wait under the merge slot: block while the tree's ticket waits behind the head, then
+ * start the gate at the head unless one started since the ticket was taken. Returns the result
+ * to print instead of the wait, or the lines that lead the wait; a tree with no ticket waits as today.
+ */
+function slotWait(tree, options, deadline) {
+  slot.renew(tree);
+  const out = [];
+  let turn = slot.standing(tree);
+  for (; turn.ticket && turn.ahead.length > 0; turn = slot.standing(tree)) {
+    out.push(...turn.out);
+    if (Date.now() >= deadline) return { result: queued(tree, turn.ahead, out, `call ${gateWaitCall(tree)} again`) };
+    jobs.sleepSync(Math.min(QUEUE_POLL_MS, Math.max(1, deadline - Date.now())));
+  }
+  out.push(...turn.out);
+  if (!turn.ticket) return { lead: out };
+  const job = jobs.readJson(jobs.jobPaths(tree).job);
+  if (job && Date.parse(job.started) >= Date.parse(turn.ticket.taken)) return { lead: out };
+  const started = gateDetach(options);
+  if (started.exit !== 0) return { result: { ...started, out: [...out, ...started.out] } };
+  return { lead: [...out, ...started.out.filter((line) => !line.startsWith('wait with: '))] };
+}
+
 function gateWait(options) {
   const tree = treeOf(options);
+  const deadline = Date.now() + Number(options.minutes || 9) * 60000;
+  const turn = mergeSlot(lib.readConfig(tree, options.config)) ? slotWait(tree, options, deadline) : { lead: [] };
+  if (turn.result) return turn.result;
   const job = jobs.readJson(jobs.jobPaths(tree).job);
   if (!job) {
     throw new RunError(`no gate has been started for this tree; start one with ${gateStartCall(tree)}`, 'NO_GATE_JOB');
@@ -327,8 +371,7 @@ function gateWait(options) {
   if (selected !== configured) {
     throw new RunError(`the started gate uses config ${job.config}. Wait with the same --config file.`, 'GATE_CONFIG');
   }
-  const deadline = Date.now() + Number(options.minutes || 9) * 60000;
-  return lanes.waitAll(job, options, deadline, () => finished(job));
+  return lanes.waitAll(job, options, deadline, () => finished(job), turn.lead);
 }
 
 function gate(options) {

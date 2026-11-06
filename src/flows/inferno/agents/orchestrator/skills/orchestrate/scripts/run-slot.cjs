@@ -120,9 +120,14 @@ function take(tree, { holder, intent } = {}, now = Date.now()) {
     else kept.push({ holder: who, tree, intent: intent || null, taken: iso(now), activity: iso(now) });
     return { tickets: kept, out: evicted };
   });
-  const before = tickets.slice(0, tickets.findIndex((ticket) => ticket.holder === who)).map((ticket) => ticket.holder);
-  const ahead = [...shimHeads(tree, tickets), ...before];
+  const ahead = aheadOf(tree, tickets, who);
   return { head: ahead.length === 0, ahead, out };
+}
+
+/** Every head and ticket ahead of the holder's ticket, which `tickets` holds. */
+function aheadOf(tree, tickets, who) {
+  const before = tickets.slice(0, tickets.findIndex((ticket) => ticket.holder === who)).map((ticket) => ticket.holder);
+  return [...shimHeads(tree, tickets), ...before];
 }
 
 /** Mark the holder's ticket active; a holder not queued is left alone. */
@@ -145,14 +150,26 @@ function release(tree, holder) {
   });
 }
 
+function evicted(tree, now) {
+  return locked(tree, (stored) => {
+    const result = evict(stored, now);
+    return { tickets: result.out.length ? result.kept : null, ...result };
+  });
+}
+
 /** Evict, then name the heads: every worktree running without a ticket, else the first ticket. */
 function queue(tree, now = Date.now()) {
-  const { kept, out } = locked(tree, (stored) => {
-    const evicted = evict(stored, now);
-    return { tickets: evicted.out.length ? evicted.kept : null, ...evicted };
-  });
+  const { kept, out } = evicted(tree, now);
   const shims = shimHeads(tree, kept);
   return { heads: shims.length ? shims : kept.slice(0, 1).map((ticket) => ticket.holder), tickets: kept, out };
 }
 
-module.exports = { IDLE_MS, REVIEW_CAP_MS, queue, release, renew, reviewDispatchPath, slotPath, take };
+/** Evict, then where the holder's ticket stands: the ticket (null when it holds none) and what is ahead of it. */
+function standing(tree, holder, now = Date.now()) {
+  const who = holder || lib.currentBranch(tree);
+  const { kept, out } = evicted(tree, now);
+  const ticket = kept.find((entry) => entry.holder === who) || null;
+  return { ticket, ahead: ticket ? aheadOf(tree, kept, who) : [], out };
+}
+
+module.exports = { IDLE_MS, REVIEW_CAP_MS, queue, release, renew, reviewDispatchPath, slotPath, standing, take };

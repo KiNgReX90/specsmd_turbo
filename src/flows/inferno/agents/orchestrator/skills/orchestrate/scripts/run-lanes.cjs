@@ -18,6 +18,8 @@ const lib = require('./run-lib.cjs');
 const proofs = require('./run-proofs.cjs');
 const jobs = require('./run-jobs.cjs');
 const { configuredLanes } = require('./run-lane-config.cjs');
+const { mergeSlot } = require('./run-config-gates.cjs');
+const slot = require('./run-slot.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { gateStartCall, gateWaitCall, laneAcceptCall } = require('./run-call.cjs');
 
@@ -189,9 +191,10 @@ function describeLane(tree, selected, config, entry) {
 /**
  * gate --wait over the gate and every lane it started: 2 as soon as the gate or a lane is red,
  * a running lane's red line included, 4 while anything runs at the deadline, else 0 when every
- * lane holds.
+ * lane holds. `lead` are lines printed before the wait's own. A red releases the tree's merge
+ * slot ticket; a 0 or 3 keeps it, since the tree is next to ship or owes an accept.
  */
-function waitAll(job, options, deadline, gateResult) {
+function waitAll(job, options, deadline, gateResult, lead = []) {
   const tree = job.tree;
   const config = lib.readConfig(tree, options.config);
   for (;;) {
@@ -203,10 +206,11 @@ function waitAll(job, options, deadline, gateResult) {
       .flatMap((entry) => entry.out);
     // The gate block gives way to the lane lines, so the 30-line cap never cuts an accept line.
     const fit = (gateOut, tail = []) =>
-      [...lib.capLines(gateOut, Math.max(1, MAX_LINES - laneOut.length - tail.length)), ...laneOut, ...tail];
+      [...lead, ...lib.capLines(gateOut, Math.max(1, MAX_LINES - lead.length - laneOut.length - tail.length)), ...laneOut, ...tail];
     const lanePayload = { lanes: states };
     if ((gate && gate.exit !== 0) || lanes.some((entry) => entry.verdict === 'red')) {
       const gateOut = gate ? gate.out : [`gate still running pid ${job.pid}`];
+      if (mergeSlot(config)) slot.release(tree);
       return { exit: 2, payload: { ...(gate ? gate.payload : { ok: false }), ok: false, ...lanePayload }, out: fit(gateOut) };
     }
     const running = !gate || lanes.some((entry) => entry.verdict === 'running');
@@ -268,6 +272,7 @@ function accept(name, options) {
   if (lane.accept_check) acceptCheck(tree, lane, last, proof);
   const { file, ...identity } = proof;
   writeRecord(`${file}${ACCEPTED}`, { ...identity, harness_fix: sha, run: last.run, code: last.code, stamp: new Date().toISOString(), branch: lib.currentBranch(tree) });
+  if (mergeSlot(config)) slot.renew(tree);
   return {
     exit: 0,
     payload: { accepted: true, lane: name, harness_fix: sha, hash: proof.hash },

@@ -23,6 +23,8 @@ const { resolveBase } = require('./run-intents.cjs');
 const { intentOf, worktreeEntries } = require('./run-worktrees.cjs');
 const { green } = require('./run-gate.cjs');
 const { linkedTree, loadOwnership, stopOwnedProcesses } = require('./run-processes.cjs');
+const { mergeSlot } = require('./run-config-gates.cjs');
+const slot = require('./run-slot.cjs');
 
 const { RunError } = lib;
 const TERMINAL = new Set(['completed', 'done']);
@@ -129,6 +131,8 @@ function ship(intentId, options) {
  * what a failure leaves owed.
  */
 function removeWorktree(primary, tree, branch, out, left, options) {
+  // The base holds the branch's work, so its merge slot ticket goes first: a failed removal never holds the slot.
+  if (mergeSlot(lib.readConfig(primary, options.config))) slot.release(primary, branch);
   left.push(`git -C ${primary} worktree remove ${tree}`, `git -C ${primary} branch -d ${branch}`);
   const killed = stopOwnedProcesses(loadOwnership(tree), options.processTransport);
   if (killed.length > 0) out.push(`stopped ${killed.length} process(es) in the worktree`);
