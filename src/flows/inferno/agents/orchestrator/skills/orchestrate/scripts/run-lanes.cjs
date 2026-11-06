@@ -30,8 +30,17 @@ const UNBOUNDED_EXIT = 3;
 /** run.cjs prints at most this many human lines. */
 const MAX_LINES = 30;
 
-/** A lane's proof is keyed like a finalize command's, by its command, its config and its own scope. */
-function laneProof(tree, selected, lane) {
+/**
+ * A lane's proof is keyed like a finalize command's, by its command, its config and its own scope.
+ * The smoke lane folds a configured Windows lane in, so its proof stands only for the Windows
+ * definition and scope it was minted under.
+ */
+function laneProof(tree, selected, lane, config) {
+  const windows = lane.name === 'smoke' && configuredLanes(config).find((entry) => entry.name === 'windows');
+  if (windows) {
+    const scope = [...new Set([...lane.scope, ...windows.scope])].sort();
+    return proofs.commandProof(tree, {}, selected, `${lane.command} (folds windows: ${windows.command})`, scope);
+  }
   return proofs.commandProof(tree, {}, selected, lane.command, lane.scope);
 }
 
@@ -77,7 +86,7 @@ function startLanes(tree, options, config, changed) {
       out.push(`SKIP ${lane.name} (no path in scope changed)`);
       continue;
     }
-    const proof = laneProof(tree, options.config, lane);
+    const proof = laneProof(tree, options.config, lane, config);
     const green = !options.force && proofs.readProof(proof);
     const accepted = !options.force && readAccepted(tree, lane.name, proof);
     if (green) out.push(`GREEN lane ${lane.name} (unchanged since ${green.stamp})`);
@@ -95,13 +104,17 @@ function startLanes(tree, options, config, changed) {
 /** `gate --lane <name>`: run one lane's command in this process and classify its exit. */
 function laneNow(options) {
   const tree = options.tree || lib.repoRoot(options.cwd);
-  const lane = laneOf(lib.readConfig(tree, options.config), options.lane, options.config);
-  const proof = laneProof(tree, options.config, lane);
+  const config = lib.readConfig(tree, options.config);
+  const lane = laneOf(config, options.lane, options.config);
+  const proof = laneProof(tree, options.config, lane, config);
   fs.rmSync(proof.file, { force: true });
   const runId = `${lib.stamp()}-${process.pid}`;
   const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `lane-${lane.name}-${lib.stamp()}.log`);
+  // runShell inherits this one-shot process's environment, so the lane reads the config the gate used.
+  process.env.INFERNO_GATE_CONFIG = proof.config;
   const run = lib.runShell(lane.command, tree, log);
-  const moved = laneProof(tree, options.config, laneOf(lib.readConfig(tree, options.config), lane.name)).file !== proof.file;
+  const now = lib.readConfig(tree, options.config);
+  const moved = laneProof(tree, options.config, laneOf(now, lane.name), now).file !== proof.file;
   let result = 'instrument-red';
   if (moved) result = 'moved';
   else if (run.code === 0) result = 'green';
@@ -138,7 +151,7 @@ function describeLane(tree, selected, config, entry) {
   }
   if (entry.state === 'moved') return { verdict: 'red', out: [`RED lane ${entry.lane}: the code changed while the lane ran. Re-run the gate.`] };
   if (entry.state === 'died') return { verdict: 'red', out: [`lane ${entry.lane} process ${entry.pid} ended without a result -> ${entry.log}`, ...lib.tail(entry.log, 5)] };
-  const accepted = readAccepted(tree, entry.lane, laneProof(tree, selected, laneOf(config, entry.lane, selected)));
+  const accepted = readAccepted(tree, entry.lane, laneProof(tree, selected, laneOf(config, entry.lane, selected), config));
   if (accepted) return { verdict: 'hold', out: [`ACCEPTED lane ${entry.lane} instrument red, harness fix ${accepted.harness_fix.slice(0, 7)}`] };
   return {
     verdict: 'unbounded',
@@ -186,6 +199,23 @@ function waitAll(job, options, deadline, gateResult) {
   }
 }
 
+/**
+ * The host's own check of the instrument red about to be accepted, when the lane sets
+ * `accept_check`. It runs in the tree and sees the lane, the run, its log and the gate's config;
+ * a non-zero exit refuses the accept.
+ */
+function acceptCheck(tree, lane, last, proof) {
+  // runShell inherits this one-shot process's environment.
+  Object.assign(process.env, {
+    INFERNO_LANE: lane.name, INFERNO_LANE_LOG: String(last.log || ''), INFERNO_LANE_RUN: last.run, INFERNO_GATE_CONFIG: proof.config,
+  });
+  const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `lane-${lane.name}-accept-${lib.stamp()}.log`);
+  const run = lib.runShell(lane.accept_check, tree, log);
+  if (run.code === 0) return;
+  const said = fs.readFileSync(log, 'utf8').split('\n').map((line) => line.trim()).filter(Boolean).pop() || '(no output)';
+  throw new RunError(`refused: the ${lane.name} lane's accept_check exited ${run.code}: ${said}\nlog ${log}`, 'ACCEPT_REFUSED');
+}
+
 /** `run.cjs <lane> --accept --harness-fix <sha>`: bound that lane's instrument red on this tree, and no other lane's. */
 function accept(name, options) {
   if (!options.accept || !options.harness_fix) {
@@ -200,12 +230,13 @@ function accept(name, options) {
   if (!sha || !refs.some((ref) => lib.git(tree, ['merge-base', '--is-ancestor', sha, ref], { tolerate: true }) !== null)) {
     throw new RunError(`harness fix ${options.harness_fix} is not on ${base}: land the harness fix on ${base} first, then accept its sha.`, 'NOT_ON_BASE');
   }
-  const proof = laneProof(tree, options.config, lane);
+  const proof = laneProof(tree, options.config, lane, config);
   const last = jobs.readJson(jobs.jobPaths(tree, name).result);
   if (!last || last.lane !== name || last.result !== 'instrument-red' || last.hash !== proof.hash || typeof last.run !== 'string') {
     throw new RunError(`no instrument red of the ${name} lane on this tree to accept: run ${gateStartCall(tree)}, ` +
       `then ${gateWaitCall(tree)}.`, 'NOTHING_TO_ACCEPT');
   }
+  if (lane.accept_check) acceptCheck(tree, lane, last, proof);
   const { file, ...identity } = proof;
   writeRecord(`${file}${ACCEPTED}`, { ...identity, harness_fix: sha, run: last.run, code: last.code, stamp: new Date().toISOString(), branch: lib.currentBranch(tree) });
   return {
@@ -223,7 +254,7 @@ function smokeOwed(tree, config, selected, changed) {
   const lane = configuredLanes(config).find((entry) => entry.name === 'smoke');
   if (!lane) return { owed: [], out: [`SKIP smoke (no verification.smoke in ${selected || DEFAULT_CONFIG})`] };
   if (!touched(lane, changed)) return { owed: [], out: ['SKIP smoke (no path in scope changed)'] };
-  const proof = laneProof(tree, selected, lane);
+  const proof = laneProof(tree, selected, lane, config);
   if (proofs.readProof(proof)) return { owed: [], out: [] };
   const accepted = readAccepted(tree, 'smoke', proof);
   if (accepted) return { owed: [], out: [`ACCEPTED smoke instrument red, harness fix ${accepted.harness_fix.slice(0, 7)}`] };

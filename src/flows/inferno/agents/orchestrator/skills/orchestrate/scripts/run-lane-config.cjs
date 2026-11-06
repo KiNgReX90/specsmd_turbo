@@ -7,25 +7,43 @@
  * that used to run by hand.
  *
  * It sits apart from run-lib.cjs so the config reader and the job plumbing can both name the
- * lanes without requiring each other.
+ * lanes without requiring each other. A lane may also set `accept_check`, the host's own check
+ * that an instrument red may be accepted, `stop`, and `red_line`, a pattern.
  */
 
 const { RunError } = require('./run-error.cjs');
 
 const LANES = ['smoke', 'windows'];
+/** The optional lane keys: the host's check before an accept, its stop command, and the line pattern that marks a red. */
+const COMMANDS = ['accept_check', 'stop'];
+const OPTIONAL = [...COMMANDS, 'red_line'];
+
+const filled = (text) => typeof text === 'string' && text.trim().length > 0;
+
+function compiles(pattern) {
+  try {
+    new RegExp(pattern);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
 
 function validLane(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value) &&
-    typeof value.command === 'string' && value.command.trim().length > 0 &&
+    filled(value.command) &&
     Array.isArray(value.scope) && value.scope.length > 0 &&
-    value.scope.every((glob) => typeof glob === 'string' && glob.length > 0);
+    value.scope.every((glob) => typeof glob === 'string' && glob.length > 0) &&
+    COMMANDS.every((key) => value[key] === undefined || filled(value[key])) &&
+    (value.red_line === undefined || (filled(value.red_line) && compiles(value.red_line)));
 }
 
 function validateLanes(verification, file) {
   for (const lane of LANES) {
     if (verification[lane] === undefined || validLane(verification[lane])) continue;
     throw new RunError(
-      `verification.${lane} in ${file} must be a map with command, one shell command, and scope, a list of path globs: ` +
+      `verification.${lane} in ${file} must be a map with command, one shell command, and scope, a list of path globs, ` +
+        'and may set accept_check and stop, each one shell command, and red_line, a pattern: ' +
         `"${lane}:" then "command: <shell command>" and "scope: [\\"src/**\\"]" indented under it.`,
       'BAD_CONFIG'
     );
@@ -44,11 +62,15 @@ function inheritLanes(config, defaults) {
   }
 }
 
-/** The configured lanes, in a fixed order, each with its name. */
+/** The configured lanes, in a fixed order, each with its name and each optional key it sets. */
 function configuredLanes(config) {
   const verification = config.verification || {};
-  return LANES.filter((lane) => verification[lane] !== undefined)
-    .map((lane) => ({ name: lane, command: verification[lane].command, scope: verification[lane].scope }));
+  return LANES.filter((lane) => verification[lane] !== undefined).map((lane) => {
+    const own = verification[lane];
+    const entry = { name: lane, command: own.command, scope: own.scope };
+    for (const key of OPTIONAL) if (own[key] !== undefined) entry[key] = own[key];
+    return entry;
+  });
 }
 
 module.exports = { LANES, configuredLanes, inheritLanes, validateLanes };
