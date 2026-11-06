@@ -42,6 +42,37 @@ test("a base commit that only changes wiki/ keeps a clean review current", () =>
   assert.ok(fs.existsSync(path.join(tree, "wiki/page.md")));
 });
 
+test("the intent deleting a kb page the base gave it voids the review", () => {
+  const { fixture, tree } = opened();
+  baseCommits(fixture, "wiki/page.md");
+  assert.equal(gate(fixture, tree).code, 3, "the fold brings the page in before any review");
+  assert.ok(fs.existsSync(path.join(tree, "wiki/page.md")));
+  intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));
+  assert.equal(gate(fixture, tree).code, 0);
+  git(tree, ["rm", "-q", "--", "wiki/page.md"]);
+  git(tree, ["commit", "-qm", "own wiki delete"]);
+  const result = gate(fixture, tree);
+  assert.equal(result.code, 3, result.out + result.err);
+  assert.match(result.out, /intent review owed: the code changed since the review/);
+});
+
+test("a kb change the local base holds and origin lacks voids the review, read against origin's base", () => {
+  const fixture = repo({ config: OUTSIDE });
+  const bare = path.join(path.dirname(fixture.root), "origin.git");
+  git(path.dirname(fixture.root), ["init", "-q", "--bare", bare]);
+  git(fixture.root, ["remote", "add", "origin", bare]);
+  git(fixture.root, ["push", "-q", "origin", "main"]);
+  const tree = worktree(fixture, INTENT_TREE);
+  write(tree, "src/a.ts", "export const a = 3;\n");
+  git(tree, ["commit", "-qam", "the work"]);
+  intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));
+  baseCommits(fixture, "wiki/page.md");
+  const result = gate(fixture, tree);
+  assert.equal(result.code, 3, result.out + result.err);
+  assert.match(result.out, /intent review owed: the code changed since the review/);
+  assert.ok(fs.existsSync(path.join(tree, "wiki/page.md")));
+});
+
 test("the same base commit voids the review when review.outside is unset", () => {
   const { fixture, tree } = opened(GATED);
   intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));

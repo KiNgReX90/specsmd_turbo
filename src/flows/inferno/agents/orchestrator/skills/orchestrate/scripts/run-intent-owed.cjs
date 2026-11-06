@@ -12,6 +12,7 @@
  */
 
 const fs = require('fs');
+const { createHash } = require('crypto');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
@@ -105,7 +106,10 @@ function outsideHash(tree, config) {
     if (out === null) return null; // a base it cannot diff leaves the kb in: the review is judged by the whole tree
     for (const file of out.split('\0').filter(Boolean)) own.add(file);
   }
-  return proofs.scopeHash(tree, null, { skip: (file) => lib.matchesAny(file, globs) && !own.has(file) });
+  // The intent's own kb paths are named too: a page it deleted is in no hash of the files that exist.
+  const kb = [...own].filter((file) => lib.matchesAny(file, globs)).sort();
+  const hash = proofs.scopeHash(tree, null, { skip: (file) => lib.matchesAny(file, globs) && !own.has(file) });
+  return createHash('sha256').update(JSON.stringify([hash, kb])).digest('hex');
 }
 
 /** The review reads the tree as it stands, whole or with the kb the base synced left out. */
