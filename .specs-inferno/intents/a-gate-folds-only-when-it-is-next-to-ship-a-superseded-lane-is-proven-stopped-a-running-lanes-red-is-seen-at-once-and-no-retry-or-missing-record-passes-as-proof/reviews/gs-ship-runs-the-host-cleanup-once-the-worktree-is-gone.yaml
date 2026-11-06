@@ -1,0 +1,47 @@
+item: gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-gates.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-ship-cleanup.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-ship.cjs
+findings: []
+mutants:
+  - criterion: "ship runs ship_cleanup once the worktree and branch are gone, with the branch and the tree in its environment (run-ship.cjs:166, INFERNO_TREE set to the primary)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^ship runs ship_cleanup once'"
+    caught: yes
+  - criterion: "ship runs ship_cleanup once the worktree and branch are gone (run-ship.cjs:147-152, the cleanup moved before worktree remove and branch -d)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^ship runs ship_cleanup once'"
+    caught: yes
+  - criterion: "ship runs ship_cleanup with its cwd the fixture root (run-ship.cjs:168, runShell cwd the primary's parent)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^ship runs ship_cleanup once'"
+    caught: yes
+  - criterion: "a failing ship_cleanup prints its line and the ship stands (run-ship.cjs:152, a non-zero cleanup throws out of removeWorktree)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^a failing ship_cleanup'"
+    caught: yes
+  - criterion: "a failing ship_cleanup prints its line and a log line (run-ship.cjs:171, the log line dropped)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^a failing ship_cleanup'"
+    caught: yes
+  - criterion: "the cleanup's log outlives the branch's cache folder (run-ship.cjs:167, the log placed in <cacheDir(primary)>/<branch>)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern \"^the cleanup's log outlives\""
+    caught: yes
+  - criterion: "teardown runs ship_cleanup after removing a merged worktree (run-ship.cjs:220, teardown passes null)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^teardown runs ship_cleanup'"
+    caught: yes
+  - criterion: "without ship_cleanup nothing runs (run-ship.cjs:151, a missing command runs 'true')"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^without ship_cleanup nothing runs'"
+    caught: yes
+  - criterion: "a --config file inherits ship_cleanup (run-config-gates.cjs:49, the ship_cleanup pair removed from inheritGates)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^a --config file inherits'"
+    caught: yes
+  - criterion: "a blank ship_cleanup is refused (run-config-gates.cjs:31, any string accepted)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^a --config file inherits'"
+    caught: yes
+  - criterion: "a non-string ship_cleanup is refused (run-config-gates.cjs:31, an array accepted)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^a --config file inherits'"
+    caught: yes
+  - criterion: "shipCleanup returns the trimmed command (run-config-gates.cjs:67, no trim)"
+    test: "remote-run.sh delta <clone of 381debd> node --test S/run-ship-cleanup.test.cjs --test-name-pattern '^a --config file inherits'"
+    caught: yes
+tree: efaa7333aec12cd3f7e39a81ad7bb3a14586fec6f2a2cbec44f2a388d50008dc
+commit: 89a9a46ed7835ed3daa438d7cdeaddc087456268
+reviewer: a7fc13a59b1aef65f
