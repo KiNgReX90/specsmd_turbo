@@ -1,0 +1,51 @@
+item: gs-the-orchestrator-and-planner-texts-follow
+verdict: fix
+files:
+  - src/flows/inferno/README.codex.md
+  - src/flows/inferno/agents/orchestrator/agent.md
+  - src/flows/inferno/agents/orchestrator/config.example.yaml
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/SKILL.md
+  - src/flows/inferno/agents/planner/agent.md
+  - src/flows/inferno/codex/skills/specsmd-inferno/references/procedure.md
+  - src/flows/inferno/commands/inferno-planner.md
+findings:
+  - criterion: "AC1: npx vitest run __tests__/unit/inferno __tests__/unit/installer in src/ reports 0 failed"
+    severity: blocker
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-printed-calls.test.cjs
+    line: 233
+    evidence: "Scratch clone at 7114510, remote-run.sh delta <clone> env -C src npx vitest run __tests__/unit/inferno __tests__/unit/installer: Tests 1 failed | 196 passed, the failure is the flow script suite run-printed-calls.test.cjs. Run alone (node --test --test-reporter=tap run-printed-calls.test.cjs): not ok 9 'each call builder prints its exact line ...', the deepEqual at :233 sees the exports gateSupersedeCall (added to run-call.cjs:68 by 7114510) and slotCall (run-call.cjs:112, added by 1fdca3d) that the rows at :192-222 do not carry. Every text case passes (planner drift, gate text, date and tally, dash), so the red is not from 453f278, but the item's AC is red at HEAD."
+    fix: "Outside this item's ownership; owners gs-supersede-proves-the-running-lanes-stopped (gateSupersedeCall) and gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes (slotCall). In run-printed-calls.test.cjs rows add gateSupersedeCall: [[[\"/w\"], `run.cjs gate --detach --supersede --tree /w${tail}`]] and slotCall rows for the queue and a verb, e.g. [[\"/w\", null], `node ${calls.RUNNER_PATH} slot --tree /w${tail}`] and [[\"/w\", \"take\", \"h\"], `node ${calls.RUNNER_PATH} slot --take --holder h --tree /w${tail}`], then rerun the AC vitest to 0 failed."
+  - criterion: "Description 1 and 2: supersede said only as run-supersede.cjs behaves"
+    severity: minor
+    file: src/flows/inferno/agents/orchestrator/agent.md
+    line: 111
+    evidence: "agent.md:111, procedure.md:139 and SKILL.md:13 say supersede follows 'a red lane's fix' and 'stops the running lanes'. run-supersede.cjs:79 and :135 signal every live job of the tree, and everyJob (run-jobs.cjs:56-59) includes the finalize gate job, so the running gate is stopped too. The script also never asks what was red: it needs only a running lane (NOTHING_TO_SUPERSEDE at :59-61) and a fix in a running lane's scope (:74-76). Read as written, a red finalize command with lanes still walking sends the orchestrator to a plain detach that refuses GATE_RUNNING and waits, and a lane that ended red sends it to a supersede that refuses NOTHING_TO_SUPERSEDE."
+    fix: "agent.md:111 becomes 'While a lane walks, `run.cjs gate --tree {path} --detach --supersede` stops the tree's gate and lanes, proves each lane stopped by its `stop` check, and gates the committed fix.' (one word more, keep agent.md at 3370 or less with the next finding). Same facts in procedure.md:139 with its --config call, and in SKILL.md:13 '`--detach --supersede` stops the tree's running gate and lanes, proves each lane stopped by its `stop` check and gates the fix'."
+  - criterion: "Description 3 and the bar: no sentence states what the scripts do not"
+    severity: minor
+    file: src/flows/inferno/agents/orchestrator/agent.md
+    line: 15
+    evidence: "agent.md:15 still says run.cjs exits '4 gate still running' and SKILL.md:13 '4 gate or a lane still running'. With merge_slot, gate --detach and gate --wait exit 4 queued (run-gate.cjs:300 and :353 through queued at :279-281) and slot --take exits 4 queued (run.cjs:16-18 and :114 say so). The item's own step 1 text says 4 also means queued, so each file now gives two meanings for exit 4."
+    fix: "agent.md:15 '4 gate running or queued.' (one word more). SKILL.md:13 exit codes '4 gate or a lane still running, or queued in the merge slot'."
+  - criterion: "Description 3: config.example says what each lane key switches on"
+    severity: minor
+    file: src/flows/inferno/agents/orchestrator/config.example.yaml
+    line: 67
+    evidence: "The stop comment names INFERNO_LANE_PID and INFERNO_LANE_LOG; run-supersede.cjs:112-115 also sets INFERNO_LANE and INFERNO_GATE_CONFIG, runs it in the tree (:117) and runs it only after the flow has sent SIGTERM and SIGKILL to the job's process group (:135), so the host command proves a walk gone, it does not have to kill the local process. 'exit 0' stands as a fragment. The accept_check comment at :66 names INFERNO_LANE_LOG only; run-lanes.cjs:245-247 also sets INFERNO_LANE, INFERNO_LANE_RUN and INFERNO_GATE_CONFIG. A host writing either command learns its inputs only from the scripts."
+    fix: "stop: '# optional: the host check, run in the tree after the flow stops the lane's process group, that the superseded walk is gone; INFERNO_LANE, INFERNO_LANE_PID, INFERNO_LANE_LOG and INFERNO_GATE_CONFIG are set and exit 0 proves it; without it gate --detach --supersede refuses and the lane is waited on'. accept_check: name INFERNO_LANE, INFERNO_LANE_RUN, INFERNO_LANE_LOG and INFERNO_GATE_CONFIG."
+mutants:
+  - criterion: "AC1 planner drift case (inferno-flow.test.ts:53): the two planner copies stay identical"
+    test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'inferno-planner command body is identical', with commands/inferno-planner.md:163 'calls, tests, extends or rewrites' cut to 'calls, tests or rewrites'"
+    caught: yes
+  - criterion: "AC1 date and tally case (inferno-flow.test.ts:385): no counted duration in agent text"
+    test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'no flow md file carries a date', with agent.md:111 'and gates the fix.' made 'and gates the fix within 15 minutes.'"
+    caught: yes
+  - criterion: "Constraint: no em or en dash (inferno-flow.test.ts:366) in the new config comments"
+    test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'no file under the flow carries an em or en dash', with an em dash put into config.example.yaml:67"
+    caught: yes
+  - criterion: "AC1 gate text case (inferno-flow.test.ts:233): the pinned gate sentences kept"
+    test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'the orchestrator waits for the gate through gate --detach', with agent.md:109 'the tree it proves' made 'the tree it checks'"
+    caught: yes
+tree: 98ac4cf5598ceaab349694c5e6ecbafb898efc784ef2325347db42fcb16ae3f0
+commit: 711451036fe2894ed481f129eafe9b66cadad70d
+reviewer: a22408521c02d65a8
