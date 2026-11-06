@@ -1,0 +1,98 @@
+item: gs-supersede-proves-the-running-lanes-stopped
+verdict: fix
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-call.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
+findings:
+  - criterion: "item part 2: SIGTERM each live job's process group, poll jobs.alive up to 10 s, then SIGKILL; supersede proves the walk stopped (builder decision: a pid is signalled only while a job file names it and it is still a runner)"
+    severity: major
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.cjs
+    line: 106
+    evidence: "Probe on Delta (clone of 7114510, lanes fixture, smoke lane `node trap.cjs`, a stub that ignores SIGTERM, stop `node stop.cjs 0`): the trap child ran in the lane runner's group (pid 1817667, pgrp 1817629 = runner pid). `gate --detach --supersede` exited 0 and printed `superseded smoke lane pid 1817629: stopped, proven by its stop check`, then started a new smoke lane; afterwards the runner was dead and the trap child was still alive. stillRunning (:95-98) keeps only pids whose runner is alive, and a node runner dies on the first SIGTERM, so the SIGKILL at :106 never fires for a group whose leader died. It reaches only the case it is least needed for, and a lane child that traps TERM walks on beside the new lane."
+    fix: "Record each live job's pid as its process group when the pending file is written. After the grace period, send SIGKILL to every recorded group that still has a member, and find members by scanning /proc/*/stat for pgrp equal to the recorded pid. Linux keeps a pid number allocated while it names a live group, so kill(-pid) cannot reach a stranger while a member lives. In the final check (:143), count a live member of a recorded group as still running. Add a run-supersede.test.cjs case \"a lane child that ignores SIGTERM is killed before the gate restarts\": lane `node trap.cjs` writes its pid outside the tree and ignores SIGTERM, then supersede exits 0 and that pid is dead."
+  - criterion: "item part 2: INFERNO_LANE_LOG is set from the lane's run file (gs-a-running-lane-red-ends-the-wait)"
+    severity: minor
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.test.cjs
+    line: 51
+    evidence: "The test asserts only /^INFERNO_LANE_LOG=\\S+\\.log$/m, which the job log lane-smoke-job.log also matches. Mutant run-supersede.cjs:53 `return own ? run.log : job.log;` to `return job.log;`: node --test S/run-supersede.test.cjs on Delta stayed 6 pass 0 fail."
+    fix: "In the first test, read lane-smoke-job.run.json from cacheOf(f) before the supersede. Assert the stop env holds exactly `INFERNO_LANE_LOG=<run.log>`, and assert run.log differs from lane.log."
+  - criterion: "item part 2: a live gate job alone keeps today's GATE_RUNNING under --supersede"
+    severity: minor
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.cjs
+    line: 60
+    evidence: "No test drives --supersede with only the gate job alive. Mutant: delete `if (live.length > 0) throw running(tree, live[0]);`. run-supersede, run-lanes-wait and run-gate-cli on Delta stayed 31 pass 0 fail, so the call then answers NOTHING_TO_SUPERSEDE. Probe P5 shows the behaviour holds at 7114510 and is testable: finalize `node lane.cjs fin wait`, smoke scope docs/** so no lane starts, a commit to src/, and --supersede exits 2 with `a gate is already running for this tree`."
+    fix: "Add that probe as a run-supersede.test.cjs case \"a running gate with no lane keeps GATE_RUNNING\". Use config({ smoke: 'wait' }, ['node lane.cjs fin wait'], ['docs/**'], { smoke: { stop: 'node stop.cjs 0' } }). Assert exit 2, /a gate is already running for this tree/, and that the gate job is still alive."
+  - criterion: "item part 2: release the tree's ticket (slot.release) before today's detach takes a new one (brief Decisions: supersede takes a new ticket at the back)"
+    severity: minor
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.cjs
+    line: 149
+    evidence: "No test runs supersede under merge_slot. Mutant: delete `if (mergeSlot(config)) slot.release(tree);`. run-supersede, run-slot-gate and run-slot-cli on Delta stayed 0 fail in each of two runs. One earlier run had one unattributed failure, which did not recur in eight unmutated rounds of the same three suites."
+    fix: "Add a run-supersede.test.cjs case on `${withStop(0)}  merge_slot: true\\n`. While the smoke lane walks, take a second ticket with `slot --take --holder other`. After a commit to src/, `gate --detach --supersede` exits 4 with `superseded smoke lane pid <pid>` and `queued behind other`, and the queue lists other before the tree's branch."
+  - criterion: "item part 2: release the tree's ticket, then today's detach takes a new one (builder decision: released only under merge_slot)"
+    severity: minor
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.cjs
+    line: 149
+    evidence: "Probe P1 on Delta: merge_slot on, `slot --take --holder <the branch>`, `gate --detach --lanes-only` with the smoke lane walking, a commit to src/, then `gate --detach --lanes-only --supersede`. It exited 0. The queue was [\"inferno-intent/demo-00000000T000000Z\"] before and [] after, because the lanes-only path takes no ticket back ('lanes only: no fold, no finalize command, no ticket'). A driver whose holder is its branch silently loses the slot while its lanes walk."
+    fix: "Release only on the gate path. Pass options.lanes_only into supersede and skip slot.release when it is set, because the driver holds its own ticket and releases it itself. Add a run-supersede.test.cjs case for P1 that asserts the queue still holds the driver's holder after the lanes-only supersede."
+mutants:
+  - criterion: "supersede stops a walking lane: the process groups are signalled (run-supersede.cjs:85 process.kill(-pid, name) to void pid)"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the stop stub saw the old pid (run-supersede.cjs:113 INFERNO_LANE_PID to String(process.pid))"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the stop stub saw INFERNO_LANE=smoke (run-supersede.cjs:113 INFERNO_LANE to 'x')"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "INFERNO_GATE_CONFIG is set (run-supersede.cjs:114 to 'x')"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "INFERNO_LANE_LOG from the lane's run file (run-supersede.cjs:53 to return job.log)"
+    test: "remote-run.sh delta <clone of 7114510> node --test S/run-supersede.test.cjs"
+    caught: no
+  - criterion: "lane jobs record their head (run-lanes.cjs:101 drop head)"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the gate job records its head (run-gate.cjs:318 drop head)"
+    test: "remote-run.sh delta <clone of 7114510> node --test S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a fix outside every running lane's scope is refused (run-supersede.cjs:76 if (!touched) to if (false))"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern \"a fix outside every running lane's scope\" S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the scope test reads the lane scope (run-supersede.cjs:75 matchesAny to true)"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern \"a fix outside every running lane's scope\" S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a running lane with no stop is refused before any signal (run-supersede.cjs:69 to if (false))"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'a running lane with no stop is refused before any signal' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a pending supersede blocks a plain detach (run-supersede.cjs:42 to if (false))"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'a failing stop keeps the supersede pending' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a failing stop keeps the supersede pending (run-supersede.cjs:118 to return null)"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'a failing stop keeps the supersede pending' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a running job without head is refused (run-supersede.cjs:63 to if (false))"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern 'a running job without head is refused' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "--supersede without --detach is BAD_ARGS (run-gate.cjs:387 to if (false))"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern '--supersede without --detach' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "no live lane: nothing to supersede (run-supersede.cjs:59 to if (false))"
+    test: "remote-run.sh delta <clone of 7114510> node --test --test-name-pattern '--supersede without --detach' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a live gate job alone keeps GATE_RUNNING (run-supersede.cjs:60 deleted)"
+    test: "remote-run.sh delta <clone of 7114510> node --test S/run-supersede.test.cjs S/run-lanes-wait.test.cjs S/run-gate-cli.test.cjs"
+    caught: no
+  - criterion: "the plain detach refusal while a lane runs stays (run-supersede.cjs:46 deleted)"
+    test: "remote-run.sh delta <clone of 7114510> node --test S/run-lanes-wait.test.cjs S/run-gate-cli.test.cjs"
+    caught: yes
+  - criterion: "the tree's ticket is released before the new detach (run-supersede.cjs:149 deleted)"
+    test: "remote-run.sh delta <clone of 7114510> node --test S/run-supersede.test.cjs S/run-slot-gate.test.cjs S/run-slot-cli.test.cjs"
+    caught: no
+tree: 3213221c11098db7f680ce293689f0efe9b1e471b3256fa84275b9d4068bc634
+commit: f36675c2dba4f2dc31bec836e1690a6eed43a555
+reviewer: abdf00367765f9964
