@@ -131,6 +131,12 @@ On resume, read that note, reconcile state from disk, and dispatch ready halted 
 Finalize automatically once no work remains.
 
 1. Fold the base branch into the intent branch first (`git fetch origin <base>` then `git merge --no-edit origin/<base>`), resolving any conflict there so both goals survive. Then `run.cjs review --tree <path> --config .specs-inferno/config.codex.yaml` reviews the intent cold: exit 3 prints the reviewer dispatch; 2 sends each finding to its owner item's builder, then review again. Gate that folded tree once: `run.cjs gate --detach --tree <path> --config .specs-inferno/config.codex.yaml`, then `run.cjs gate --wait --tree <path> --config .specs-inferno/config.codex.yaml`. The runner skips a `finalize_scopes` command no changed path matches; that list is the gate and it runs once per intent. Run a work-item `finalize_check` only for a scoped invariant the list does not cover. A run tests a binary only through the configured lanes the gate starts and waits on; nothing else in a run builds a binary for testing or dispatches a tester. Non-zero blocks close. Never de-parallelize the gate, regate to mask flake, or poll in a loop.
+
+   With `verification.merge_slot` set, `gate --detach` folds and starts only when its ticket heads the repository's merge queue; behind another, detach and wait exit 4 queued. At the head, a queued wait folds and starts the gate itself, so on 4 call the same wait again.
+
+   A lane whose `red_line` matches a line of its log turns the wait red at once, while the lane walks on. Once its fix is committed, `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml` stops the running lanes, proves each stopped by its `stop` check, and gates the fix. It refuses when the fix changes nothing a running lane proves.
+
+   An instrument red passes only against a harness fix already on the base branch, through the step `gate --wait` prints, and only when the lane's `accept_check`, where set, exits 0.
 2. Run ledger reconciliation:
 
    ```sh

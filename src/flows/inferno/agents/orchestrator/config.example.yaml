@@ -38,6 +38,7 @@ models:
 
 review:
   model: claude-opus-5-5          # the cold reviewer run.cjs review dispatches after every item and before the gate
+  # outside: ["wiki/**"]          # optional: globs of a knowledge base the base branch syncs; a folded change there that the intent never touched keeps the intent review current; without it any folded change voids the review
 
 scan:
   model: claude-opus-5-5          # the four cold scanners run.cjs scan dispatches before the intent review; absent, roles.scanner, else the scanner role's own pin. On Codex the role entry alone decides
@@ -47,6 +48,8 @@ verification:
     - npm run check
     - cargo test --workspace
     - npm run test:e2e
+  # merge_slot: true              # optional: gate --detach folds and starts only when its ticket heads one queue shared by every worktree of the repository; without it every gate folds and starts at once
+  # ship_cleanup: "node scripts/ship-cleanup.mjs"   # optional: the host command ship and teardown run from the primary checkout once the worktree and branch are gone, with INFERNO_BRANCH and INFERNO_TREE set; a failure prints its line and never undoes the ship; without it ship ends at the teardown
   integrate:                      # optional: the cheap checks, run by `run.cjs integrate` after every item lands, on the committed tree with the base folded in; a red goes back to the warm builder instead of waiting for the gate
     - npm run check
   finalize_scopes:                # optional: a listed command runs only when the diff since the merge base touches a matching path, an unlisted command always runs
@@ -60,6 +63,9 @@ verification:
   smoke:                          # a short smoke run of the built app
     command: npm run smoke
     scope: ["src/**", "src-tauri/**"]
+    # accept_check: npm run smoke:accept   # optional: the host check an instrument red must pass before it is accepted, run in the tree with INFERNO_LANE_LOG set; any exit but 0 refuses with its last line; without it the harness fix alone accepts
+    # stop: npm run smoke:stop             # optional: proves a superseded walk stopped, with INFERNO_LANE_PID and INFERNO_LANE_LOG set, exit 0; without it gate --detach --supersede refuses and the lane is waited on
+    # red_line: '^PRODUCT RED '            # optional: a regex in single quotes; a log line matching it turns gate --wait red while the lane walks on; without it a red shows when the lane ends
   windows:                        # the suite on a Windows machine
     command: npm run test:windows
     scope: ["src/**", "src-tauri/**"]

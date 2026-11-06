@@ -44,7 +44,7 @@ Run the Codex finalize gate with `node
 .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs gate
 --config .specs-inferno/config.codex.yaml`. The config path is relative to the
 selected worktree. The option applies to `integrate`, `gate`, `gate --detach`,
-`gate --wait`, `green` and `ship`. Without it, the runner reads `.specs-inferno/config.yaml`.
+`gate --wait`, `green`, `slot` and `ship`. Without it, the runner reads `.specs-inferno/config.yaml`.
 Each command reuses its last successful result while its scope is unchanged.
 Proofs from different config files remain separate.
 
