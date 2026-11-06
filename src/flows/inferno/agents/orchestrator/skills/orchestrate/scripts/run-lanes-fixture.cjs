@@ -82,10 +82,10 @@ if (code === 'wait' || code === 'movewait') {
 }
 process.exit(Number(code === 'file' ? fs.readFileSync(release, 'utf8') : code));
 `);
-  write(tree, 'check.cjs', `const fs = require('node:fs');
+  write(tree, 'check.cjs', `const { writeFile } = require(${JSON.stringify(path.join(__dirname, 'test-write.cjs'))});
 const code = Number(process.argv[2]);
 const seen = Object.keys(process.env).filter((key) => key.startsWith('INFERNO_')).sort();
-fs.writeFileSync('../check-env', seen.map((key) => key + '=' + process.env[key] + '\\n').join(''));
+writeFile('../check-env', seen.map((key) => key + '=' + process.env[key] + '\\n').join(''));
 console.log('reading the lane log');
 console.log(code === 0 ? 'the lane closed on its own line' : 'no closing line in the lane log');
 console.log('');

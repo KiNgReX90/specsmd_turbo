@@ -251,7 +251,7 @@ test('an accept_check that exits 0 accepts and saw the lane, its run, its log an
   passed(run(f, 'green'));
 });
 
-test('the smoke proof changes when the windows lane\'s command changes, and with no windows lane keys as before', (t) => {
+test('the smoke proof changes when the windows lane\'s command or scope changes, and with no windows lane keys as before', (t) => {
   const lib = require('./run-lib.cjs');
   const proofs = require('./run-proofs.cjs');
   const { laneProof } = require('./run-lanes.cjs');
@@ -263,17 +263,26 @@ test('the smoke proof changes when the windows lane\'s command changes, and with
     if (before === undefined) delete process.env.XDG_CACHE_HOME;
     else process.env.XDG_CACHE_HOME = before;
   });
+  write(f.tree, 'win/run.txt', 'one\n');
+  commit(f.tree, 'windows input');
   const both = lib.readConfig(f.tree);
+  // The windows lane covers a path the smoke lane does not, so its scope shows in the smoke key.
+  both.verification.windows.scope = ['win/**'];
   const smoke = configuredLanes(both).find((lane) => lane.name === 'smoke');
   const other = structuredClone(both);
   other.verification.windows.command = 'node lane.cjs windows 11';
+  const wider = structuredClone(both);
+  wider.verification.windows.scope = ['win/**', 'docs/**'];
   const none = structuredClone(both);
   delete none.verification.windows;
   const plain = proofs.commandProof(f.tree, {}, null, smoke.command, smoke.scope).file;
-  const first = laneProof(f.tree, null, smoke, both).file;
-  assert.notEqual(first, laneProof(f.tree, null, smoke, other).file);
-  assert.notEqual(first, plain);
+  const first = laneProof(f.tree, null, smoke, both);
+  assert.notEqual(first.file, laneProof(f.tree, null, smoke, other).file);
+  assert.notEqual(first.file, laneProof(f.tree, null, smoke, wider).file);
+  assert.notEqual(first.file, plain);
   assert.equal(laneProof(f.tree, null, smoke, none).file, plain);
+  write(f.tree, 'win/run.txt', 'two\n');
+  assert.notEqual(laneProof(f.tree, null, smoke, both).hash, first.hash);
 });
 
 test('the lane command sees INFERNO_GATE_CONFIG', (t) => {
