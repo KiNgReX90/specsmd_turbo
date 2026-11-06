@@ -390,9 +390,9 @@ test('a proof a flake gate result names is revoked at the next lookup, and only 
   const command = 'bash remote-run.sh host tree npm run test:e2e';
   const branch = 'inferno-intent/demo-20260101T000000Z';
   const greens = path.join(cache, 'green-commands');
-  const proof = (name, seconds) => {
+  const proof = (name, seconds, owner = { command, branch }) => {
     const file = path.join(greens, name);
-    write(greens, name, `${JSON.stringify({ command, config: CONFIG, hash: 'h', stamp: new Date().toISOString(), seconds, branch })}\n`);
+    write(greens, name, `${JSON.stringify({ command: owner.command, config: CONFIG, hash: 'h', stamp: new Date().toISOString(), seconds, branch: owner.branch })}\n`);
     return file;
   };
   const result = path.join(cache, branch, 'gate-job.result.json');
@@ -402,10 +402,14 @@ test('a proof a flake gate result names is revoked at the next lookup, and only 
   write(cache, 'inferno-intent/other/gate-job.result.json', '{ not json');
   const minted = proof('minted-by-flake', 904);
   const other = proof('other-run', 903);
+  const otherCommand = proof('other-command', 904, { command: 'npm run test:unit', branch });
+  const otherBranch = proof('other-branch', 904, { command, branch: 'inferno-intent/other-20260101T000000Z' });
   const config = { verification: { finalize: [command] } };
   proofs.commandProof(dir, config, null, command);
   assert.equal(fs.existsSync(minted), false);
   assert.equal(fs.existsSync(other), true);
+  assert.equal(fs.existsSync(otherCommand), true, 'a proof of another command at the same seconds stands');
+  assert.equal(fs.existsSync(otherBranch), true, 'a proof of another branch at the same seconds stands');
   const revoked = JSON.parse(fs.readFileSync(path.join(greens, '.flake-revoked.json'), 'utf8'));
   assert.deepEqual(revoked, [{ result, log: '/logs/0.log' }]);
   assert.equal(JSON.parse(fs.readFileSync(result, 'utf8')).results[0].result, 'flake', 'a result file is never rewritten');
