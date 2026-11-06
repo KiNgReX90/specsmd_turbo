@@ -113,6 +113,13 @@ intents:
         complexity: high
         mode: autopilot
         status: pending
+        review: fix
+        review_hash: 223a608a55cac9a0fa097ae739604296d6000c064fd965e63f73f8d76a9b7ab8
+        review_commit: 1cc13b3df7b3f49b784afdd74c9e9db93ae287f5
+        review_tier: strong
+        review_rejections: 1
+        review_weight: serious
+        reviewed_at: 2026-11-06T17:10:07Z
         depends_on: []
       - id: gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows
         title: "Accept asks the host's check, and the smoke proof binds the Windows lane"
