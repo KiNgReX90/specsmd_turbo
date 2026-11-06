@@ -192,6 +192,12 @@ test("each call builder prints its exact line from its own flags, the site's dec
   const rows = {
     gateStartCall: [[["/w"], `run.cjs gate --detach --tree /w${tail}`]],
     gateWaitCall: [[["/w"], `node ${calls.RUNNER_PATH} gate --wait --tree /w${tail}`]],
+    gateSupersedeCall: [[["/w"], `run.cjs gate --detach --supersede --tree /w${tail}`]],
+    slotCall: [
+      [["/w", "take", "driver"], `node ${calls.RUNNER_PATH} slot --take --holder driver --tree /w${tail}`],
+      [["/w", "release", "driver"], `node ${calls.RUNNER_PATH} slot --release --holder driver --tree /w${tail}`],
+      [["/w"], `node ${calls.RUNNER_PATH} slot --tree /w${tail}`],
+    ],
     itemReviewCall: [
       [["/w", "a-one"], `run.cjs review --item a-one --tree /w${tail}`],
       [["/w", "a-one", "beta"], `run.cjs review --item a-one --tree /w --intent beta --config ${CODEX}`],

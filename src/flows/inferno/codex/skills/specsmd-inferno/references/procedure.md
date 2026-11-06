@@ -134,7 +134,7 @@ Finalize automatically once no work remains.
 
    With `verification.merge_slot` set, `gate --detach` folds and starts only when its ticket heads the repository's merge queue; behind another, detach and wait exit 4 queued. At the head, a queued wait folds and starts the gate itself, so on 4 call the same wait again.
 
-   A lane whose `red_line` matches a line of its log turns the wait red at once, while the lane walks on. Once its fix is committed, `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml` stops the running lanes, proves each stopped by its `stop` check, and gates the fix. It refuses when the fix changes nothing a running lane proves.
+   A log line matching a lane's `red_line` turns the wait red at once, while the lane walks on. While a lane walks, a committed fix gates through `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml`: it stops the tree's running gate and lanes and proves each lane stopped by its `stop` check. It refuses when the fix changes nothing a running lane proves.
 
    An instrument red passes only against a harness fix already on the base branch, through the step `gate --wait` prints, and only when the lane's `accept_check`, where set, exits 0.
 2. Run ledger reconciliation:
