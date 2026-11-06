@@ -3,9 +3,10 @@
 /**
  * `gate --detach --supersede`: a fix restarts the gate only after the tree's running lanes are
  * proven stopped. Every refusal comes before any signal. Then the pending file is written, every
- * live job of the tree gets SIGTERM on its process group (a job is spawned detached, so its pid
- * leads its group), SIGKILL after a grace period, and each superseded lane's host `stop` command
- * proves its walk gone, because only the host knows where a walk runs. While the pending file
+ * live job's process group is recorded (a job is spawned detached, so its pid leads its group) and
+ * gets SIGTERM, every group with a member left gets SIGKILL after a grace period, and each
+ * superseded lane's host `stop` command proves its walk gone, because only the host knows where a
+ * walk runs outside those groups. While the pending file
  * stands, a plain detach is refused, so a half-stopped walk is never raced by a new one.
  *
  * Nothing proven stops being proven: a killed lane mints no proof (only a lane that finished
@@ -53,7 +54,7 @@ function laneLog(tree, job) {
   return own ? run.log : job.log;
 }
 
-/** Every refusal over the tree's live jobs, then the lanes to supersede and every pid to stop. */
+/** Every refusal over the tree's live jobs, then the lanes to supersede and every process group to stop. */
 function targets(tree, config, live) {
   const laneJobs = live.filter((job) => job.lane);
   if (laneJobs.length === 0) {
@@ -76,34 +77,57 @@ function targets(tree, config, live) {
   if (!touched) throw new RunError(`the fix changes nothing a running lane proves; wait for it: ${gateWaitCall(tree)}`, 'NOT_SUPERSEDED');
   return {
     lanes: lanes.map(({ job }) => ({ lane: job.lane, pid: job.pid, log: laneLog(tree, job) })),
-    pids: live.map((job) => job.pid),
+    groups: live.map((job) => job.pid),
   };
 }
 
-function signal(pid, name) {
+/**
+ * Signal a recorded process group. Only groups whose leader a job file of this tree named, as a
+ * live runner, when the pending file was written: Linux keeps that number allocated while any
+ * member of the group lives, so the signal reaches no stranger.
+ */
+function signal(group, name) {
   try {
-    process.kill(-pid, name);
+    process.kill(-group, name);
   } catch (error) {
     if (error.code !== 'ESRCH') throw error;
   }
 }
 
-/**
- * The recorded pids that still run as a job of this tree. A pid is signalled only while a job
- * file of the tree names it and it is still a runner, so a pid the kernel reused is left alone.
- */
-function stillRunning(tree, pids) {
-  const live = jobs.everyJob(tree).filter((job) => jobs.alive(job)).map((job) => job.pid);
-  return pids.filter((pid) => Number.isSafeInteger(pid) && pid > 1 && pid !== process.pid && live.includes(pid));
+/** Does any process of the group still live: signal 0 is refused with ESRCH once none is left. */
+function hasMember(group) {
+  try {
+    process.kill(-group, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
 }
 
-/** SIGTERM each live job's process group, then SIGKILL what still runs after the grace period. */
-function stopJobs(tree, pids) {
-  const live = () => stillRunning(tree, pids);
-  for (const pid of live()) signal(pid, 'SIGTERM');
-  const deadline = Date.now() + GRACE_MS;
-  while (live().length > 0 && Date.now() < deadline) jobs.sleepSync(POLL_MS);
-  for (const pid of live()) signal(pid, 'SIGKILL');
+const recorded = (groups) => groups.filter((group) => Number.isSafeInteger(group) && group > 1 && group !== process.pid);
+
+/** The recorded groups that still have a member, polled until none has or the grace period ends. */
+function membersAfter(groups, ms) {
+  const deadline = Date.now() + ms;
+  let left = groups.filter(hasMember);
+  while (left.length > 0 && Date.now() < deadline) {
+    jobs.sleepSync(POLL_MS);
+    left = left.filter(hasMember);
+  }
+  return left;
+}
+
+/**
+ * SIGTERM every recorded group, then SIGKILL each group with a member left after the grace
+ * period, which reaches a child that ignores SIGTERM after its runner died. Returns the groups
+ * that still have a member after both.
+ */
+function stopGroups(groups) {
+  const own = recorded(groups);
+  for (const group of own.filter(hasMember)) signal(group, 'SIGTERM');
+  const stubborn = membersAfter(own, GRACE_MS);
+  for (const group of stubborn) signal(group, 'SIGKILL');
+  return membersAfter(stubborn, GRACE_MS);
 }
 
 /** Run one lane's stop in the tree; returns null when it proved the walk gone, else its failing lines. */
@@ -124,7 +148,7 @@ function proveStopped(tree, lane, entry, selected) {
  * Supersede the tree's running lanes, or rerun the stop checks of a pending supersede. Returns
  * the lines that lead today's detach once every walk is proven stopped; throws otherwise.
  */
-function supersede(tree, config, selected) {
+function supersede(tree, config, selected, { lanesOnly = false } = {}) {
   const file = pendingPath(tree);
   let record = jobs.readJson(file);
   if (!record) {
@@ -132,7 +156,7 @@ function supersede(tree, config, selected) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, `${JSON.stringify(record)}\n`, 'utf8');
   }
-  stopJobs(tree, record.pids || []);
+  const left = stopGroups(record.groups || []);
   const configured = configuredLanes(config);
   const failed = [];
   for (const entry of record.lanes || []) {
@@ -140,13 +164,13 @@ function supersede(tree, config, selected) {
     if (!lane || !lane.stop) failed.push(`cannot prove the ${entry.lane} lane stopped: set verification.${entry.lane}.stop`);
     else failed.push(...(proveStopped(tree, lane, entry, selected) || []));
   }
-  const left = stillRunning(tree, record.pids || []);
-  if (left.length > 0) failed.push(`still running after SIGKILL: pid ${left.join(', ')}`);
+  if (left.length > 0) failed.push(`still running after SIGKILL: process group ${left.join(', ')}`);
   if (failed.length > 0) {
     throw new RunError([...failed, `the supersede stays pending; once fixed: ${gateSupersedeCall(tree)}`].join('\n'), 'SUPERSEDE_UNPROVEN');
   }
   fs.rmSync(file, { force: true });
-  if (mergeSlot(config)) slot.release(tree);
+  // A lanes-only driver holds its own ticket and releases it itself.
+  if (mergeSlot(config) && !lanesOnly) slot.release(tree);
   return record.lanes.map((entry) => `superseded ${entry.lane} lane pid ${entry.pid}: stopped, proven by its stop check`);
 }
 

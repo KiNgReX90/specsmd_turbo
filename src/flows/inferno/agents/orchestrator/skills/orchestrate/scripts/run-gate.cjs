@@ -286,7 +286,7 @@ function gateDetach(options) {
   const { config } = gateCommands(tree, options.config);
   const paths = jobs.jobPaths(tree);
   // A supersede stops the tree's running lanes first and leads the detach with what it proved.
-  if (options.supersede) restored.push(...supersede.supersede(tree, config, options.config));
+  if (options.supersede) restored.push(...supersede.supersede(tree, config, options.config, { lanesOnly: Boolean(options.lanes_only) }));
   else supersede.refusePlain(tree);
 
   if (options.lanes_only) {
