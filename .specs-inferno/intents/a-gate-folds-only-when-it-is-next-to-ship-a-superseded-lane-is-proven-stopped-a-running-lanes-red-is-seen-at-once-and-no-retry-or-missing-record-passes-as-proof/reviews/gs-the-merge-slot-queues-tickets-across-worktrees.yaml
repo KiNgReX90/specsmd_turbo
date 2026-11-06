@@ -1,0 +1,53 @@
+item: gs-the-merge-slot-queues-tickets-across-worktrees
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/state-store.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-slot.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-slot.test.cjs
+findings: []
+mutants:
+  - criterion: "tickets queue first come, first served, and a second take keeps its place (run-slot.cjs:119, a retake moves to the back)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "tickets queue first come, first served (run-slot.cjs:123, nothing ahead)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "release A, B is the head (run-slot.cjs:143, release a no-op)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "a ticket with no activity for 30 minutes is evicted with a line (run-slot.cjs:27, 40 minutes)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "a ticket with no activity for 30 minutes is evicted with a line (run-slot.cjs:134, renew keeps the old activity)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "an open review dispatch holds a ticket up to 120 minutes (run-slot.cjs:70, no hold)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "an open review dispatch holds a ticket up to 120 minutes (run-slot.cjs:71, no cap)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "a live job in a worktree with no ticket is the head (run-slot.cjs:124, take drops the shim)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "a live job in a worktree with no ticket is the head (run-slot.cjs:109, a ticket for the branch keeps the shim)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "a live job in a worktree with no ticket is the head (run-slot.cjs:99, a dead job counts)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "a live job in a worktree with no ticket is the head (run-slot.cjs:155, queue heads skip the shim)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "two processes taking at once both land in the queue (run-slot.cjs:90, no lock, run twice)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs"
+    caught: yes
+  - criterion: "the ledger and slot tests report 0 fail (state-store.cjs:129, withFileLock takes no lock)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs S/state-transactions.test.cjs S/state-transition.test.cjs"
+    caught: yes
+  - criterion: "the ledger and slot tests report 0 fail (state-store.cjs:144, withStateLock registers no transaction)"
+    test: "remote-run.sh delta <clean clone of 5138d91> node --test S/run-slot.test.cjs S/state-transactions.test.cjs S/state-transition.test.cjs"
+    caught: yes
+tree: 65f260a7f11fecd02da3afef4bf37192a38588e14b7b5b2004978caff7f2de13
+commit: acc6478a0fc2ec4107e9a9449cb3bcd9c389ef0c
+reviewer: a6f280b4e0f2b6f23
