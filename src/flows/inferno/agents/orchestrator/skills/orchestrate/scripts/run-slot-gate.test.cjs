@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 
 const { commit, config, fixture, git, passed, run, touch, write } = require('./run-lanes-fixture.cjs');
 const { reviewBefore } = require('./review-fixture.cjs');
@@ -50,6 +51,26 @@ function waited(at, minutes = '0.5') {
   return run(at, 'gate', '--wait', '--minutes', minutes);
 }
 
+/** A run that goes on while the test runs others, with the fixture's env; resolves with its exit and output. */
+function started(at, ...args) {
+  const child = spawn(process.execPath, [path.join(__dirname, 'run.cjs'), ...args], {
+    cwd: at.tree, env: { ...process.env, CLAUDE_BUILD_WRAPPED: '1', XDG_CACHE_HOME: at.cache },
+  });
+  let out = '';
+  let err = '';
+  child.stdout.on('data', (chunk) => { out += chunk; });
+  child.stderr.on('data', (chunk) => { err += chunk; });
+  return new Promise((resolve) => child.on('close', (code) => resolve({ code, out, err })));
+}
+
+const activity = (tree, holder) => (slot.queue(tree).tickets.find((ticket) => ticket.holder === holder) || {}).activity;
+
+/** Wait until the holder's ticket shows activity after `since`, as a wait's renew writes it. */
+async function renewedAfter(tree, holder, since) {
+  for (let i = 0; i < 200 && activity(tree, holder) === since; i += 1) await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.notEqual(activity(tree, holder), since, `${holder} never renewed`);
+}
+
 test('a second gate --detach queues behind the first and folds nothing', (t) => {
   const { primary, one, two } = twoTrees(t, slotConfig({ smoke: '0' }));
   passed(run(one, 'gate', '--detach'));
@@ -82,6 +103,39 @@ test("the queued tree's wait folds and starts once the head's wait is red", (t) 
   assert.deepEqual(holders(primary.tree), [TWO]);
 });
 
+test("a queued wait blocks until the head's wait is red", async (t) => {
+  const { primary, one, two } = twoTrees(t, slotConfig({ smoke: 'file' }));
+  writeFile(primary.code, '10');
+  passed(run(one, 'gate', '--detach'));
+  baseMoves(primary);
+  assert.equal(run(two, 'gate', '--detach').code, 4);
+  const since = activity(primary.tree, TWO);
+  const blocked = started(two, 'gate', '--wait', '--minutes', '0.5');
+  await renewedAfter(primary.tree, TWO, since);
+  const red = waited(one);
+  assert.equal(red.code, 2, red.out + red.err);
+  writeFile(primary.code, '0');
+  const result = await blocked;
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, new RegExp(`folded main into ${TWO}`));
+  assert.match(result.out, /gate started pid \d+/);
+  assert.match(result.out, /GREEN lane smoke/);
+});
+
+test('a queued wait exits 4 at its deadline and folds nothing', (t) => {
+  const { primary, one, two } = twoTrees(t, slotConfig({ smoke: '0' }));
+  passed(run(one, 'gate', '--detach'));
+  baseMoves(primary);
+  assert.equal(run(two, 'gate', '--detach').code, 4);
+  const before = head(two.tree);
+  const queued = waited(two, '0.05');
+  assert.equal(queued.code, 4, queued.out + queued.err);
+  assert.match(queued.out, new RegExp(`queued behind ${ONE} \\(1 ahead\\); nothing folded`));
+  assert.match(queued.out, /call node \S+run\.cjs gate --wait --tree \S+ again/);
+  assert.equal(head(two.tree), before);
+  assert.equal(fs.existsSync(gateJob(two, TWO)), false);
+});
+
 test('teardown and a red wait free the slot, an exit 3 keeps it', (t) => {
   const { primary, one, two } = twoTrees(t, slotConfig({ smoke: 'file' }));
   writeFile(primary.code, '11');
@@ -90,8 +144,18 @@ test('teardown and a red wait free the slot, an exit 3 keeps it', (t) => {
   assert.equal(unbounded.code, 3, unbounded.out + unbounded.err);
   assert.deepEqual(holders(primary.tree), [ONE]);
 
+  // An accepted instrument red renews the ticket.
+  write(primary.tree, 'harness.txt', `${Date.now()}\n`);
+  commit(primary.tree, 'harness fix');
+  git(one.tree, 'merge', '-q', '--no-edit', 'main');
+  const since = activity(primary.tree, ONE);
+  passed(run(one, 'smoke', '--accept', '--harness-fix', head(primary.tree)));
+  assert.ok(Date.parse(activity(primary.tree, ONE)) > Date.parse(since), `${since} -> ${activity(primary.tree, ONE)}`);
+
   assert.equal(run(two, 'gate', '--detach').code, 4);
   writeFile(primary.code, '10');
+  // A new in-scope change, so the accepted red no longer holds and the lane walks again.
+  touch(one);
   passed(run(one, 'gate', '--detach'));
   assert.equal(waited(one).code, 2);
   assert.deepEqual(holders(primary.tree), [TWO]);

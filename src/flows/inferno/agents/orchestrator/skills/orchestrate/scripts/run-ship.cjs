@@ -139,8 +139,8 @@ function ship(intentId, options) {
  */
 function removeWorktree(primary, tree, branch, out, left, options, command) {
   // The base holds the branch's work, so its merge slot ticket goes first: a failed removal never holds the slot.
-  if (mergeSlot(lib.readConfig(primary, options.config))) slot.release(primary, branch);
   left.push(`git -C ${primary} worktree remove ${tree}`, `git -C ${primary} branch -d ${branch}`);
+  if (mergeSlot(lib.readConfig(primary, options.config))) slot.release(primary, branch);
   if (command) left.push(`INFERNO_BRANCH=${branch} INFERNO_TREE=${tree} ${command} (in ${primary})`);
   const killed = stopOwnedProcesses(loadOwnership(tree), options.processTransport);
   if (killed.length > 0) out.push(`stopped ${killed.length} process(es) in the worktree`);
