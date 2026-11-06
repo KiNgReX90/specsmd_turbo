@@ -18,6 +18,16 @@ function onMain(t, source) {
 }
 
 const holders = (tree) => slot.queue(tree).tickets.map((ticket) => ticket.holder);
+const mainCache = (f) => path.join(f.cache, 'specsmd-inferno', 'app', 'main');
+const smokeJob = (f) => path.join(mainCache(f), 'lane-smoke-job.json');
+
+/** A bare origin that holds main as it stands, so the next local commit is unpushed. */
+function pushedOrigin(f) {
+  const remote = path.join(path.dirname(f.tree), 'origin.git');
+  git(path.dirname(f.tree), 'init', '-q', '--bare', remote);
+  git(f.tree, 'remote', 'add', 'origin', remote);
+  git(f.tree, 'push', '-q', 'origin', 'main');
+}
 
 test('slot --take exits 4 behind another holder and 0 at the head', (t) => {
   const f = onMain(t, slotConfig({ smoke: '0' }));
@@ -83,10 +93,11 @@ test('gate --detach --lanes-only on the base branch starts the lanes the diff si
   assert.match(started.out, /wait with: node \S+run\.cjs gate --wait --tree \S+/);
   // The driver holds its own ticket, so the lanes take none.
   assert.deepEqual(holders(f.tree), ['driver']);
-  const job = JSON.parse(fs.readFileSync(path.join(f.cache, 'specsmd-inferno', 'app', 'main', 'gate-job.json'), 'utf8'));
+  const job = JSON.parse(fs.readFileSync(path.join(mainCache(f), 'gate-job.json'), 'utf8'));
   assert.equal(job.pid, undefined);
   assert.equal(job.lanes_only, true);
   assert.deepEqual(job.lanes, ['smoke']);
+  assert.equal(job.holder, 'driver');
 
   const waited = run(f, 'gate', '--wait', '--minutes', '0.5');
   passed(waited);
@@ -99,6 +110,48 @@ test('gate --detach --lanes-only on the base branch starts the lanes the diff si
   passed(skipped);
   assert.match(skipped.out, /SKIP smoke/);
   passed(run(f, 'gate', '--wait', '--minutes', '0.5'));
+});
+
+test('gate --detach --lanes-only on the base branch without --since diffs the commits origin lacks', (t) => {
+  const f = onMain(t, slotConfig({ smoke: '0' }));
+  pushedOrigin(f);
+  touch(f);
+  const started = run(f, 'gate', '--detach', '--lanes-only');
+  passed(started);
+  assert.match(started.out, /smoke lane started pid \d+/);
+  const waited = run(f, 'gate', '--wait', '--minutes', '0.5');
+  passed(waited);
+  assert.match(waited.out, /GREEN lane smoke/);
+});
+
+test('gate --detach --lanes-only on the base branch with no origin and no --since is refused', (t) => {
+  const f = onMain(t, slotConfig({ smoke: '0' }));
+  touch(f);
+  const refused = run(f, 'gate', '--detach', '--lanes-only');
+  assert.equal(refused.code, 1, refused.out + refused.err);
+  assert.match(refused.err, /BAD_ARGS/);
+  assert.match(refused.err, /--since <the commit before your edit>/);
+  assert.equal(fs.existsSync(smokeJob(f)), false);
+});
+
+test('gate --detach --lanes-only --since an unknown ref is refused and starts no lane', (t) => {
+  const f = onMain(t, slotConfig({ smoke: '0' }));
+  touch(f);
+  const refused = run(f, 'gate', '--detach', '--lanes-only', '--since', 'nosuchref');
+  assert.equal(refused.code, 2, refused.out + refused.err);
+  assert.match(refused.err, /BAD_REF/);
+  assert.match(refused.err, /nosuchref/);
+  assert.equal(fs.existsSync(smokeJob(f)), false);
+});
+
+test("a red lanes-only wait releases the driver's ticket", (t) => {
+  const f = onMain(t, slotConfig({ smoke: '10' }));
+  passed(run(f, 'slot', '--take', '--holder', 'driver'));
+  touch(f);
+  passed(run(f, 'gate', '--detach', '--lanes-only', '--since', 'HEAD~1'));
+  const red = run(f, 'gate', '--wait', '--minutes', '0.5');
+  assert.equal(red.code, 2, red.out + red.err);
+  assert.deepEqual(holders(f.tree), []);
 });
 
 test('--since without --lanes-only is refused', (t) => {

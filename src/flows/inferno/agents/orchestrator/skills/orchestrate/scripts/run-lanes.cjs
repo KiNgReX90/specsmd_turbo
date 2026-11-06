@@ -192,7 +192,8 @@ function describeLane(tree, selected, config, entry) {
  * gate --wait over the gate and every lane it started: 2 as soon as the gate or a lane is red,
  * a running lane's red line included, 4 while anything runs at the deadline, else 0 when every
  * lane holds. `lead` are lines printed before the wait's own. A red releases the tree's merge
- * slot ticket; a 0 or 3 keeps it, since the tree is next to ship or owes an accept.
+ * slot ticket, or the holder a lanes-only job names; a 0 or 3 keeps it, since the tree is next to
+ * ship or owes an accept.
  */
 function waitAll(job, options, deadline, gateResult, lead = []) {
   const tree = job.tree;
@@ -210,7 +211,7 @@ function waitAll(job, options, deadline, gateResult, lead = []) {
     const lanePayload = { lanes: states };
     if ((gate && gate.exit !== 0) || lanes.some((entry) => entry.verdict === 'red')) {
       const gateOut = gate ? gate.out : [`gate still running pid ${job.pid}`];
-      if (mergeSlot(config)) slot.release(tree);
+      if (mergeSlot(config)) slot.release(tree, job.holder);
       return { exit: 2, payload: { ...(gate ? gate.payload : { ok: false }), ok: false, ...lanePayload }, out: fit(gateOut) };
     }
     const running = !gate || lanes.some((entry) => entry.verdict === 'running');

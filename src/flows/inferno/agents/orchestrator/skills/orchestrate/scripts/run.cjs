@@ -68,7 +68,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs cases --range <from>..<to> [--tree <dir>] [--config <file>] cases the range made stale or reached unanswered, and changed tests no case answers: 0 none, 2 refused
   node run.cjs gate [--tree <dir>] [--config <file>] [--force] run the finalize commands without matching proofs
   node run.cjs gate --detach [--tree <dir>]              start the gate and each lane the branch touched (verification.smoke, .windows) and return; 4 queued behind another intent's ticket (merge_slot)
-  node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base): no fold, no finalize command, no ticket
+  node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base, origin/<base> on the base branch): no fold, no finalize command, no ticket
   node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane's instrument red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
@@ -88,9 +88,11 @@ Options
   --config <file>   select, claim, unclaim, worktree, frontier, scan, review, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml)
   --base <branch>   integrate, doubles, gate, ship and teardown: the base branch to fold in (default: the config's base)
   --since <ref>     verify-item: compare against this ref instead of the item's accepted dispatch;
-                    gate --detach --lanes-only: pick the lanes from the diff since this ref instead of the merge base
+                    gate --detach --lanes-only: pick the lanes from the diff since this ref (default the merge base,
+                    or origin/<base> on the base branch)
   --lanes-only      gate --detach: start only the lanes, for a driver that holds its own slot ticket
-  --holder <name>   slot: the holder whose ticket is taken, renewed or released
+  --holder <name>   slot: the holder whose ticket is taken, renewed or released;
+                    gate --detach --lanes-only: the ticket a red wait releases (default the head ticket)
   --dispatch-id <id> verify-item: the accepted dispatch to check (default the item's latest)
   --peers <json>    verify-item: the dispatch ids that may explain a sibling's change (default every accepted one)
   --item <id>       integrate: the item this landing completes once the checks are green; review: the item reviewed;

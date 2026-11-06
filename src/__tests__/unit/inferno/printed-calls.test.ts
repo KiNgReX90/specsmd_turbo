@@ -26,7 +26,7 @@ const CODEX_CONFIG = '--config .specs-inferno/config.codex.yaml';
 const WRITER = ['claim-intent', 'unclaim-intent', 'block-intent', 'unblock-intent', 'complete-item', 'close-intent', 'review-item', 'archive-intent', 'check'];
 const STEPS = [
   'select', 'claim', 'unclaim', 'worktree', 'frontier', 'probes', 'verify-item', 'review', 'scan', 'mutate', 'integrate',
-  'doubles', 'real-app', 'gate', 'green', 'smoke', 'windows', 'ship', 'teardown', 'register-process', 'dispatch-log', 'accept-dispatch', ...WRITER,
+  'doubles', 'real-app', 'gate', 'green', 'smoke', 'windows', 'slot', 'ship', 'teardown', 'register-process', 'dispatch-log', 'accept-dispatch', ...WRITER,
 ];
 /** A script file name, or a constant run-call.cjs exports that holds one. */
 const SCRIPT = /\b(?:run|state-transition)\.cjs\b|\b(?:RUNNER|RUNNER_PATH|WRITER_SCRIPT)\b/;
@@ -162,6 +162,7 @@ describe('printed calls', () => {
     expect(flagged('out.push(`leftover ${id}; run teardown --tree ${entry.path}`);')).not.toEqual([]);
     expect(flagged("throw new E('Run run.cjs review ' +\n  `--item ${id} --tree <worktree>`);")).not.toEqual([]);
     expect(flagged("out.push('call gate --wait again');")).not.toEqual([]);
+    expect(flagged('out.push(`take again with: slot --take --holder ${holder}`);')).not.toEqual([]);
     expect(flagged("const w = `node ${path.join(__dirname, 'run.cjs')} gate --wait --tree ${tree}`;")).not.toEqual([]);
     expect(flagged('const w = `node ${RUNNER_PATH} ${rest}`;')).not.toEqual([]);
     expect(flagged('throw new E(`Close it with: close-intent --intent ${id}`);')).not.toEqual([]);
