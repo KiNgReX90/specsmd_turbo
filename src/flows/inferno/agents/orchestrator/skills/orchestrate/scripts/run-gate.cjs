@@ -17,6 +17,7 @@ const cases = require('./run-cases.cjs');
 const slot = require('./run-slot.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const { lanesSince, startLanesOnly } = require('./run-lanes-only.cjs');
+const supersede = require('./run-supersede.cjs');
 
 const { RunError } = lib;
 
@@ -284,13 +285,9 @@ function gateDetach(options) {
   const restored = refuseDirty(tree);
   const { config } = gateCommands(tree, options.config);
   const paths = jobs.jobPaths(tree);
-  const existing = jobs.everyJob(tree).find((job) => jobs.alive(job));
-  if (existing) {
-    throw new RunError(
-      `a ${existing.lane ? `${existing.lane} lane` : 'gate'} is already running for this tree (pid ${existing.pid}, started ${existing.started}); wait for it: ${gateWaitCall(tree)}`,
-      'GATE_RUNNING'
-    );
-  }
+  // A supersede stops the tree's running lanes first and leads the detach with what it proved.
+  if (options.supersede) restored.push(...supersede.supersede(tree, config, options.config));
+  else supersede.refusePlain(tree);
 
   if (options.lanes_only) {
     const base = options.base || resolveBase(config, null, tree);
@@ -317,7 +314,9 @@ function gateDetach(options) {
   if (options.config) args.push('--config', options.config);
   if (options.force) args.push('--force');
   // The gate is a process the run launched in its worktree, so teardown may stop it.
-  const job = jobs.detach(tree, args, paths, { config: options.config || `${lib.SPECS_DIR}/config.yaml`, lanes: laneStart.started });
+  const job = jobs.detach(tree, args, paths, {
+    config: options.config || `${lib.SPECS_DIR}/config.yaml`, lanes: laneStart.started, head: lib.git(tree, ['rev-parse', 'HEAD']),
+  });
   return {
     exit: 0,
     payload: { started: true, folded: foldLines.length > 0, ...job },
@@ -385,6 +384,7 @@ function gate(options) {
   if (options.lanes_only && !options.detach) throw new RunError('gate takes --lanes-only only with --detach', 'BAD_ARGS', 1);
   if (options.since && !options.lanes_only) throw new RunError('gate takes --since only with --detach --lanes-only', 'BAD_ARGS', 1);
   if (options.holder && !options.lanes_only) throw new RunError('gate takes --holder only with --detach --lanes-only', 'BAD_ARGS', 1);
+  if (options.supersede && !options.detach) throw new RunError('gate takes --supersede only with --detach', 'BAD_ARGS', 1);
   if (options.lane) return lanes.laneNow(options);
   if (options.detach) return gateDetach(options);
   if (options.wait) return gateWait(options);

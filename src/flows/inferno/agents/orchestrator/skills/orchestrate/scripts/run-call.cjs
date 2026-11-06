@@ -64,6 +64,9 @@ function writerCall(command, intent, flags = []) {
 /** Start the gate as its own process. */
 const gateStartCall = (tree) => runCall('gate', tree, null, ['--detach']);
 
+/** Start the gate after the tree's running lanes are proven stopped. */
+const gateSupersedeCall = (tree) => runCall('gate', tree, null, ['--detach', '--supersede']);
+
 /** Wait on the started gate and its lanes, by the runner's own path. */
 const gateWaitCall = (tree) => nodeCall('gate', tree, null, ['--wait']);
 
@@ -118,6 +121,6 @@ const blockIntentCall = (intent) => writerCall('block-intent', intent, ['--reaso
 const unclaimIntentCall = (intent) => writerCall('unclaim-intent', intent);
 
 module.exports = {
-  RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateWaitCall, integrateCall, intentRecordCall,
+  RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
   intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
 };

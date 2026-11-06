@@ -83,6 +83,8 @@ function laneOf(config, name, selected) {
 function startLanes(tree, options, config, changed) {
   const started = [];
   const out = [];
+  // Each lane job records the head it walks, so a supersede can tell what a fix changed since.
+  const head = lib.git(tree, ['rev-parse', 'HEAD']);
   for (const lane of configuredLanes(config)) {
     if (!touched(lane, changed)) {
       out.push(`SKIP ${lane.name} (no path in scope changed)`);
@@ -96,7 +98,7 @@ function startLanes(tree, options, config, changed) {
     if (green || accepted) continue;
     const args = ['gate', '--lane', lane.name, '--tree', tree, '--json'];
     if (options.config) args.push('--config', options.config);
-    const job = jobs.detach(tree, args, jobs.jobPaths(tree, lane.name), { lane: lane.name });
+    const job = jobs.detach(tree, args, jobs.jobPaths(tree, lane.name), { lane: lane.name, head });
     started.push(lane.name);
     out.push(`${lane.name} lane started pid ${job.pid}`, `log ${job.log}`);
   }

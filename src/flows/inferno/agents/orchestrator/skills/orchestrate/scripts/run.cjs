@@ -69,6 +69,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs gate [--tree <dir>] [--config <file>] [--force] run the finalize commands without matching proofs
   node run.cjs gate --detach [--tree <dir>]              start the gate and each lane the branch touched (verification.smoke, .windows) and return; 4 queued behind another intent's ticket (merge_slot)
   node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base, origin/<base> on the base branch): no fold, no finalize command, no ticket
+  node run.cjs gate --detach --supersede [--tree <dir>] stop the tree's running lanes a fix touched, prove each stopped by its verification.<lane>.stop, then start the gate: 2 refused or not proven stopped
   node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane's instrument red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
@@ -91,6 +92,7 @@ Options
                     gate --detach --lanes-only: pick the lanes from the diff since this ref (default the merge base,
                     or origin/<base> on the base branch)
   --lanes-only      gate --detach: start only the lanes, for a driver that holds its own slot ticket
+  --supersede       gate --detach: stop the running lanes the fix touched first, proven by each lane's stop command
   --holder <name>   slot: the holder whose ticket is taken, renewed or released;
                     gate --detach --lanes-only: the ticket a red wait releases (default the one this tree took)
   --dispatch-id <id> verify-item: the accepted dispatch to check (default the item's latest)
@@ -164,7 +166,7 @@ const COMMANDS = {
 const OWNING = new Set(['frontier', 'probes', 'verify-item', 'scan', 'review', 'integrate', 'gate', 'green', 'ship', 'dispatch-log', 'accept-dispatch', ...LANES]);
 
 /** Options that take no value. Everything else starting with `--` takes the next argument. */
-const FLAGS = new Set(['--json', '--detach', '--wait', '--force', '--collect', '--accept', '--take', '--renew', '--release', '--lanes-only']);
+const FLAGS = new Set(['--json', '--detach', '--wait', '--force', '--collect', '--accept', '--take', '--renew', '--release', '--lanes-only', '--supersede']);
 
 function parseArgs(argv) {
   const options = { cwd: process.cwd() };
