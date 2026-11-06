@@ -94,6 +94,8 @@ function outsideHash(tree, config) {
   const globs = reviewOutside(config || {});
   if (globs.length === 0) return null;
   const base = resolveBase(config, null, tree);
+  // A base that is the tree's own branch moves with it, so no diff tells its kb edits from a sync.
+  if (base === lib.currentBranch(tree)) return null;
   const refs = [base];
   if (lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}`], { tolerate: true })) refs.push(`origin/${base}`);
   const reads = [

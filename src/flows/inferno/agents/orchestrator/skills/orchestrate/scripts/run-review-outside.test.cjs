@@ -96,6 +96,32 @@ test("the intent's own wiki edit after the review voids it", () => {
   assert.ok(JSON.parse(result.out).owed.includes("review"));
 });
 
+test("the intent's second edit of its own kb page after the review voids it", () => {
+  const { fixture, tree } = opened();
+  write(tree, "wiki/own.md", "the intent's own page\n");
+  git(tree, ["add", "-A"]);
+  git(tree, ["commit", "-qm", "own wiki page"]);
+  intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));
+  assert.equal(gate(fixture, tree).code, 0);
+  write(tree, "wiki/own.md", "the intent's own page, edited again\n");
+  git(tree, ["commit", "-qam", "own wiki page again"]);
+  const result = gate(fixture, tree);
+  assert.equal(result.code, 3, result.out + result.err);
+  assert.match(result.out, /intent review owed: the code changed since the review/);
+});
+
+test("a tree whose base resolves to its own branch judges the kb with the code", () => {
+  const { fixture, tree } = opened(OUTSIDE.replace("delivery:\n  base_branch: main\n", ""));
+  intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));
+  write(tree, "wiki/own.md", "the intent's own page\n");
+  git(tree, ["add", "-A"]);
+  git(tree, ["commit", "-qm", "own wiki page"]);
+  const result = gate(fixture, tree);
+  assert.equal(result.code, 3, result.out + result.err);
+  assert.match(result.out, /intent review owed: the code changed since the review/);
+  assert.doesNotMatch(fs.readFileSync(path.join(tree, REVIEW), "utf8"), /tree_outside/);
+});
+
 test("a base commit outside the kb voids the review even with review.outside set", () => {
   const { fixture, tree } = opened();
   intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));
