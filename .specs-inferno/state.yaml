@@ -206,7 +206,10 @@ intents:
         kind: api
         complexity: medium
         mode: autopilot
-        status: pending
+        status: completed
+        completed_at: 2026-11-06T22:46:33Z
+        integrated_at: 2026-11-06T22:46:33Z
+        integrated_sha: 697be50
         review: clean
         review_hash: f76a8b8286e7b105ebd80b35057dfc6f284745585c508c4d1db02d450bf3e29a
         review_commit: ab3284662fe93a6ba425fd93f4fa1b1d1475c1a0
