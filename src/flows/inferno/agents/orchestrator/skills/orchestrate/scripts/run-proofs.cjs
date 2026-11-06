@@ -18,12 +18,13 @@ function gitFields(tree, args) {
 /**
  * Hash the effective code contents under a command's globs. With `exact`, the scope is a list
  * of literal paths instead, which is how an item review binds exactly the files it read: a
- * glob without a slash would match the same name in every folder.
+ * glob without a slash would match the same name in every folder. A file `options.skip`
+ * returns true for is left out, which is how the intent review leaves out a kb the base synced.
  */
 function scopeHash(tree, scope, options = {}) {
   const inScope = (file) => (options.exact ? scope.includes(file) : lib.matchesAny(file, scope));
   const included = (file) => file !== lib.SPECS_DIR && !file.startsWith(`${lib.SPECS_DIR}/`) &&
-    (!scope || inScope(file));
+    (!scope || inScope(file)) && !(options.skip && options.skip(file));
   const entries = new Map();
   for (const row of gitFields(tree, ['ls-tree', '-rz', 'HEAD'])) {
     const separator = row.indexOf('\t');

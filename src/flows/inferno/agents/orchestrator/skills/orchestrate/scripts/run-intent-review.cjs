@@ -118,7 +118,9 @@ function record(tree, context, commit, restored) {
   const review = owed.parseFor(tree, rel, intent, false);
   const abs = path.join(tree, rel);
   const text = fs.readFileSync(abs, 'utf8');
-  fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${proofs.scopeHash(tree)}\ncommit: ${commit}\nreviewer: ${reviewer}\n`);
+  const outside = owed.outsideHash(tree, context.config);
+  const kept = outside === null ? '' : `tree_outside: ${outside}\n`;
+  fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${proofs.scopeHash(tree)}\n${kept}commit: ${commit}\nreviewer: ${reviewer}\n`);
   lib.git(tree, ['add', '--', rel]);
   lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent}): intent review ${review.verdict}`, '--', rel]);
   const result = verdict(tree, context, review, `intent review ${review.verdict}, recorded at ${short(tree, commit)}`);
@@ -161,7 +163,7 @@ function reviewIntent(options) {
   const folded = [...restored, ...gate.foldBase(tree, base)];
   if (owed.scanOwed(tree, intent)) return scanRefusal(tree, context, folded);
   const state = owed.intentReviewState(tree, config, intent);
-  const current = state.review && state.review.tree === proofs.scopeHash(tree);
+  const current = state.review && owed.reviewCurrent(tree, config, state.review);
   if (current) {
     const head = `intent review ${state.review.verdict} for the current tree (read at ${state.review.commit.slice(0, 7)})`;
     return verdict(tree, context, state.review, `${folded.length ? `${folded[0]}; ` : ''}${head}`);
