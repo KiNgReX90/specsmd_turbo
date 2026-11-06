@@ -10,55 +10,28 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs
 findings:
-  - criterion: "Amendment 4 (binding) and Technical Notes: a kb path is exempt only while the branch's version equals the base's; an intent's own wiki or grok edit still voids its review"
+  - criterion: "the intent's own wiki edit after the review voids it"
     file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-intent-owed.cjs
-    line: 108
-    evidence: "On Delta, in a private clone at 8265a81, run-review-outside.test.cjs:57 was replaced by: commit wiki/page.md on main, merge main into the branch, record the review with the OUTSIDE config, git rm wiki/page.md and commit, then gate. The gate exited 0 ('PASS 0s echo gated') where 3 was asserted, so the intent's own deletion of a base wiki page kept the review current. Cause: scopeHash (run-proofs.cjs:29-37) hashes only paths present in ls-tree HEAD or dirty, so a kb path skipped at the review and the same path deleted by the intent both leave no entry; own.has(file) is never asked about a path that is gone. git diff main...HEAD -- wiki/page.md is not empty, so amendment 4 does not exempt it, and the whole-tree rule this replaces did void it."
-    fix: "In outsideHash, put the intent's own kb paths into the hash so a deletion changes it: const ownKb = [...own].filter((file) => lib.matchesAny(file, globs)).sort(); return a sha256 over JSON.stringify([proofs.scopeHash(tree, null, { skip }), ownKb]) (or add each own kb path missing from the tree as a tombstone entry). Add the case 'the intent's own deletion of a base wiki page after the review voids it' to run-review-outside.test.cjs: wiki/page.md committed on main and merged into the branch, review recorded with the OUTSIDE config, the branch deletes and commits wiki/page.md, gate exits 3 with 'intent review owed'."
-    severity: major
-  - criterion: "Description 2: a kb path in git diff --name-only origin/<base>...HEAD (when origin/<base> resolves) stays in the hash"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-intent-owed.cjs
-    line: 97
-    evidence: "run.cjs mutate --batch replaced refs.push(`origin/${base}`) with void 0 and ran node --test run-review-outside.test.cjs on Delta: 7 pass, 0 fail (caught no). No case in run-review-outside.test.cjs sets up a remote, so the origin read, the half of the rule that keeps a doubtful path in the hash, is unproven."
-    fix: "Add a case with an origin remote: a bare repo as origin with main pushed, the review recorded with the OUTSIDE config, then a wiki/page.md commit on local main only (not pushed), so the path differs from origin/main's merge base; gate exits 3 with 'intent review owed'. The mutant at :97 must then make it fail."
+    line: 111
+    evidence: "On Delta, in a private clone at 381f2df, the mutant that drops '&& !own.has(file)' from the skip at :111 left run-review-outside.test.cjs at 9 pass, 0 fail (the first review caught the same mutant at 8265a81). The correction's own-kb name list at :110 now voids the existing case by itself, because that case commits a new path, so nothing pins that an own kb page's content stays in the hash. A probe case (the branch commits wiki/own.md before the review, the review is recorded with the OUTSIDE config, gate exits 0, the branch edits and commits wiki/own.md again, gate) exits 3 on the real code and 0 under the mutant: the review stays current over the intent's own kb edit."
+    fix: "Add the case 'the intent's second edit of its own kb page after the review voids it' to run-review-outside.test.cjs: the branch writes and commits wiki/own.md together with the work, intentReviewed(tree, 'alpha', 'verdict: clean\\n', lib.readConfig(tree)), gate exits 0, the branch rewrites wiki/own.md and commits, gate exits 3 and prints 'intent review owed: the code changed since the review'. Dropping '&& !own.has(file)' at run-intent-owed.cjs:111 must then make it fail."
     severity: minor
 mutants:
-  - criterion: "a base commit that only changes wiki/ keeps a clean review current (run-intent-owed.cjs:114 compares tree_outside with the whole-tree hash)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
+  - criterion: "earlier finding 1: the intent deleting a kb page the base gave it voids the review (run-intent-owed.cjs:110 kb = [])"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
     caught: yes
-  - criterion: "a base commit that only changes wiki/ keeps a clean review current (run-proofs.cjs:27 drops the options.skip check)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
+  - criterion: "earlier finding 2: the origin/<base> diff is read when origin resolves (run-intent-owed.cjs:98 refs.push(origin/<base>) replaced by void 0)"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
     caught: yes
-  - criterion: "the same base commit voids the review when review.outside is unset (run-config-gates.cjs:59 defaults to ['wiki/**'])"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "the intent's own wiki edit after the review voids it (run-intent-owed.cjs:108 drops && !own.has(file))"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "a base commit outside the kb voids the review even with review.outside set (run-intent-owed.cjs:108 drops the glob match)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "a review recorded without tree_outside keeps today's rule (run-intent-owed.cjs:114 falls back to review.tree against outsideHash)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "run.cjs review records tree_outside (run-intent-review.cjs:122 never writes the line)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "run.cjs review records tree_outside (run-intent-review.cjs:166 judges currency by the whole-tree hash again)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "merge_slot 'yes' refuses with BAD_CONFIG (run-config-gates.cjs:23 accepts 'yes')"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "review.outside as a string refuses with BAD_CONFIG (run-config-gates.cjs:30 accepts a string)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "a --config file setting neither key reads both from the project config (run-config-gates.cjs:46 never inherits)"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 8265a81)"
-    caught: yes
-  - criterion: "Description 2: the origin/<base> diff is read when origin resolves (run-intent-owed.cjs:97 drops the origin ref)"
-    test: "run.cjs mutate --batch, test bash rr-kbc.sh node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs through remote-run delta (private clone at 8265a81)"
+  - criterion: "the intent's own wiki edit after the review voids it (run-intent-owed.cjs:111 drops && !own.has(file))"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
     caught: no
+  - criterion: "a base commit outside the kb voids the review even with review.outside set (run-intent-owed.cjs:111 drops the glob match)"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
+    caught: yes
+  - criterion: "a base commit that only changes wiki/ keeps a clean review current, and an own kb change voids it (run-intent-owed.cjs:118 compares tree_outside with itself)"
+    test: "node --test --test-reporter=tap src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-outside.test.cjs (Delta, private clone at 381f2df)"
+    caught: yes
 tree: 223a608a55cac9a0fa097ae739604296d6000c064fd965e63f73f8d76a9b7ab8
-commit: 1cc13b3df7b3f49b784afdd74c9e9db93ae287f5
-reviewer: ae664c720e4021a26
+commit: 6e88268e28ac1188feadf7cac36ed8ce6b273def
+reviewer: a654b21842a0f6b86
