@@ -1,0 +1,15 @@
+# INFERNO per-project config for specsmd_new, the flow's own source repo.
+# Every key is optional; only the non-default ones are set here.
+
+verification:
+  # CLAUDE.md step 2. Agent tests never run on Alpha, so the gate runs it on Delta
+  # through remote-run.sh, which mirrors this tree (".") and keeps src/node_modules there.
+  finalize:
+    - "SSH_AUTH_SOCK=/run/user/1000/gcr/ssh bash $HOME/.local/share/skoft-agent-hooks/remote-run.sh delta . bash -c 'cd src && { [ -d node_modules ] || npm ci --no-audit --no-fund; } && npm run validate:all'"
+
+dispatch:
+  constraints:
+    - "Agent tests never run on this machine (Alpha). Run every test on Delta with export SSH_AUTH_SOCK=/run/user/1000/gcr/ssh; bash ~/.local/share/skoft-agent-hooks/remote-run.sh delta <worktree path> bash -c 'cd <dir relative to the worktree> && <test command>'. It mirrors the worktree, uncommitted edits included, and prints the exit code."
+    - "remote-run allows one run per tree from Alpha, so a refusal that a run of this tree is already going means a sibling builder holds it, and you run the same command again. Never kill a remote-run you did not start."
+    - "Run only the verification budget this dispatch names, the test files you wrote or changed, run with node --test. The full vitest and validate:all suites are the orchestrator's gate, so never run one."
+    - "No git mutation of any kind (no add, no commit, no branch, no worktree), because the orchestrator integrates."
