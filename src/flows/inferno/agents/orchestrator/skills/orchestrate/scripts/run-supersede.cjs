@@ -15,6 +15,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const lib = require('./run-lib.cjs');
 const jobs = require('./run-jobs.cjs');
@@ -128,6 +129,17 @@ function strangers(tree, groups) {
   return groups.filter((group) => hasMember(group) && !named.includes(group));
 }
 
+/** The pids of a group's members by `ps`, which Linux and macOS both answer; null when ps fails. */
+function members(group) {
+  try {
+    return execFileSync('ps', ['-A', '-o', 'pid=,pgid='], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\n').map((line) => line.trim().split(/\s+/).map(Number))
+      .filter(([pid, pgid]) => pgid === group && Number.isSafeInteger(pid)).map(([pid]) => pid);
+  } catch (error) {
+    return null;
+  }
+}
+
 /**
  * SIGTERM every recorded group, then SIGKILL each group with a member left after the grace
  * period, which reaches a child that ignores SIGTERM after its runner died. Returns the groups
@@ -171,10 +183,12 @@ function supersede(tree, config, selected, { lanesOnly = false } = {}) {
   const groups = recorded(record.groups || []);
   const unknown = fresh ? [] : strangers(tree, groups);
   if (unknown.length > 0) {
-    throw new RunError([
-      ...unknown.map((group) => `process group ${group} still has members the flow did not start; no signal sent`),
-      `the supersede stays pending; once it is gone: ${gateSupersedeCall(tree)}`,
-    ].join('\n'), 'SUPERSEDE_UNPROVEN');
+    throw new RunError(unknown.map((group) => {
+      const pids = members(group);
+      const listed = pids && pids.length > 0 ? ` (pid ${pids.join(', ')})` : '';
+      return `process group ${group} still has members${listed} and no live job of this tree leads it; no signal sent. ` +
+        `Stop them, then run: ${gateSupersedeCall(tree)}`;
+    }).join('\n'), 'SUPERSEDE_UNPROVEN');
   }
   const left = stopGroups(groups);
   const configured = configuredLanes(config);

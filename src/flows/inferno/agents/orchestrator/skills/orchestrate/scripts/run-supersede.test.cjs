@@ -253,7 +253,8 @@ test('a rerun never signals a recorded group no job file of the tree names', { s
   }));
   const result = run(f, 'gate', '--detach', '--supersede');
   assert.equal(result.code, 2, result.out + result.err);
-  assert.match(result.err, new RegExp(`process group ${stranger.pid} still has members the flow did not start`));
+  assert.match(result.err, new RegExp(`process group ${stranger.pid} still has members \\(pid ([\\d, ]*\\b)?${stranger.pid}\\b[\\d, ]*\\) ` +
+    'and no live job of this tree leads it; no signal sent\\. Stop them, then run: \\S*run\\.cjs gate --detach --supersede --tree \\S+'));
   assert.ok(fs.existsSync(pending(f)), 'the supersede stays pending');
   assert.equal(gone(stranger.pid), false, 'the stranger survives');
 });
