@@ -1,0 +1,140 @@
+verdict: fix
+criteria:
+  - criterion: "node --test *.test.cjs in the orchestrate scripts dir with a fresh XDG_CACHE_HOME reports 0 fail, and its suites include run-slot, run-slot-gate, run-slot-cli, run-supersede and run-review-outside"
+    proof: test
+    where: "cd src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts && XDG_CACHE_HOME=$(mktemp -d) node --test *.test.cjs (the five new suites exist at 07f4b8d)"
+  - criterion: "npx vitest run __tests__/unit/inferno, run in src/, reports 0 failed"
+    proof: test
+    where: "cd src && npx vitest run __tests__/unit/inferno"
+  - criterion: "The nine suites measured on 2026-11-06 pass with only the three flake cases of run-gate.test.cjs replaced, so a config with no new key behaves as today"
+    proof: test
+    where: "node --test run-lanes.test.cjs run-lanes-wait.test.cjs run-lanes-config.test.cjs run-gate.test.cjs run-gate-cli.test.cjs run-gate-review.test.cjs run-ship.test.cjs run-proofs.test.cjs run-intent-review.test.cjs in the scripts dir; git diff 6c320ce..07f4b8d removes from these nine only the three flake cases of run-gate.test.cjs and one import line of run-lanes.test.cjs"
+  - criterion: "grep -c recordFlake run-gate.cjs prints 0"
+    proof: code
+    where: "src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs:204 (grep -c recordFlake prints 0 at 07f4b8d; the leftover key is only read by ignoredKeys)"
+  - criterion: "The key grep over Skoft_Files config.yaml and config.codex.yaml prints 0 for each, so no behaviour of Skoft_Files changes"
+    proof: code
+    where: "/home/ruben/dev/Skoft_Files/.specs-inferno/config.yaml:1 and config.codex.yaml:1 (the grep prints 0 for each); every new path is behind mergeSlot, shipCleanup, reviewOutside or a lane key, run-config-gates.cjs:59-74"
+  - criterion: "After the reinstall recipe, check-lock exits 0, flow-text-budget prints ok on six rows, and the installed scripts tests report 0 fail"
+    proof: code
+    where: "src/flows/inferno/agents/orchestrator/agent.md:1 is 3370 words, so the Claude orchestrator measures 4887-3285+3370=4972 of 5000; src/flows/inferno/commands/inferno-planner.md:1 is 3124, planner 4487 of 4500; codex procedure.md:1 is 2870, codex orchestrator 4723 of 5000; the installed scripts are these files, proven by the first criterion; the install itself runs after ship by the brief's own recipe"
+findings:
+  - criterion: "A fix restarts a gate only after the running lanes are proven stopped; until a host stop command exists, supersede refuses and the orchestrator waits, as today (brief, Interface with Skoft_CRA's lane intent)"
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
+    line: 161
+    evidence: "Scratch clone at 07f4b8d, one test on Delta: lane smoke on redwait with red_line '^PRODUCT RED ' and no stop, the setup the reinstall recipe gives Skoft_CRA until its stop commands land. gate --wait exits 2 on the red line. After a fix commit to src/, gate --detach --supersede refuses NO_STOP, a plain gate --detach refuses GATE_RUNNING with 'wait for it: run.cjs gate --wait', and that gate --wait --minutes 0.2 exits 2 again after 84 ms while the lane job stays alive. laneState reports running-red on every poll for as long as the walk lasts, so no wait can block on the lane, and the orchestrator spins full-context rounds of wait and refusal until the walk ends, up to two hours on Skoft_CRA. The NOT_SUPERSEDED refusal at run-supersede.cjs:78 sends it into the same spin."
+    fix: "In laneState (run-lanes.cjs:156-161) report running-red only while lib.git(tree, ['rev-parse', 'HEAD']) still equals the lane job's head; once a commit lands after the red, the lane reads running, so gate --wait blocks on it until it ends and its result decides, or exits 4, as the GATE_RUNNING, NO_STOP and NOT_SUPERSEDED refusals tell the orchestrator. A job without head keeps today's running-red. Add to run-lanes-wait.test.cjs the case 'after a committed fix a red-line lane with no stop is waited on': redwait with red_line, the wait exits 2, touch src/, gate --detach --supersede refuses NO_STOP, then gate --wait --minutes 0.1 exits 4 and prints 'smoke lane still running'."
+    severity: blocker
+    owner: gs-a-running-lane-red-ends-the-wait
+scanner:
+  - id: "wiring-1"
+    answer: struck
+    reason: "The lanes-only driver is a host script that runs its own fixed calls; the printed call followed on the base branch proves the stops, clears the pending file and then refuses NO_INTENT, so nothing runs that should not."
+  - id: "wiring-2"
+    answer: struck
+    reason: "The same printed call as wiring-1, after a refusal that sent no signal; on the base branch it ends in NO_INTENT and fails safe."
+  - id: "wiring-3"
+    answer: struck
+    reason: "As wiring-1: the plain supersede call it names fails safe on the base branch with NO_INTENT."
+  - id: "wiring-4"
+    answer: struck
+    reason: "While the driver's lanes walk, the primary checkout is a shim head (running without a ticket: <base>), and once they end a queued tree folds local <base>, which already holds the driver's commit, so an evicted driver ticket costs no second walk."
+  - id: "wiring-5"
+    answer: struck
+    reason: "As wiring-4: an accept follows a lane that already ended, and the next fold reads local <base> with the driver's commit in it."
+  - id: "wiring-6"
+    answer: struck
+    reason: "gateNow is the body the detached gate job runs after gateDetach took the ticket, and no orchestrator text calls the foreground gate."
+  - id: "wiring-7"
+    answer: struck
+    reason: "README.codex.md is the human install note no orchestrator loads; the Codex procedure at procedure.md:133 gates through --detach and --wait."
+  - id: "wiring-8"
+    answer: struck
+    reason: "No host combines merge_slot with merge-request delivery (Skoft_CRA delivers auto-close), and idle eviction bounds the hold."
+  - id: "wiring-9"
+    answer: struck
+    reason: "None of the Skoft_CRA flake results belongs to a branch with a live worktree, and for any such tree the revoked proof makes green owe the gate, so the FAIL line errs on the safe side."
+  - id: "wiring-10"
+    answer: struck
+    reason: "The ticket is printed whole in the slot --json payload (run-slot.cjs:202), where the intent tells a person whose work holds the slot."
+  - id: "wiring-11"
+    answer: struck
+    reason: "started is diagnostic data in the pending file a person reads when a supersede stays pending; nothing decides on it."
+  - id: "contract-1"
+    answer: struck
+    reason: "A loud SUPERSEDE_UNPROVEN refusal that keeps the pending file; the branch cannot fail silently."
+  - id: "contract-2"
+    answer: struck
+    reason: "A loud refusal that keeps the supersede pending; the same text is proven on the fresh pass."
+  - id: "contract-3"
+    answer: struck
+    reason: "It prints its line and the pushed merge stands; it cannot fail silently."
+  - id: "contract-4"
+    answer: struck
+    reason: "An added --json payload field no flow code reads; the printed cleanup lines are tested in run-ship-cleanup.test.cjs."
+  - id: "contract-5"
+    answer: struck
+    reason: "A printed exit-0 line for a renew that changes nothing; it cannot hide a failure."
+  - id: "contract-6"
+    answer: struck
+    reason: "A printed exit-0 line for a release that changes nothing; it cannot hide a failure."
+  - id: "contract-7"
+    answer: struck
+    reason: "A printed line for an empty queue; nothing decides on it."
+  - id: "contract-8"
+    answer: struck
+    reason: "The label only renames a loud STATE_LOCKED refusal whose ledger form state-transactions.test.cjs runs unchanged."
+  - id: "contract-9"
+    answer: struck
+    reason: "As contract-8: a loud refusal under a new label."
+  - id: "contract-10"
+    answer: struck
+    reason: "The same refusal path as tree, with tree_outside added to INTENT_RECORDED; a loud refusal."
+  - id: "contract-11"
+    answer: struck
+    reason: "The wait returns gateDetach's own refusal unchanged, and each such refusal is proven in its own suite."
+  - id: "contract-12"
+    answer: struck
+    reason: "The hand-written job models a job an older installed runner started, the case the shim exists for, after the live-job fixture of run-lanes-config.test.cjs; run-slot-gate.test.cjs drives real detached jobs."
+  - id: "live-path-1"
+    answer: struck
+    reason: "The queue is written only by an atomic rename under its own lock, so a torn file needs a writer outside the flow."
+  - id: "live-path-2"
+    answer: struck
+    reason: "STATE_LOCKED is a loud refusal that names the lock path, as the ledger's always has."
+  - id: "live-path-3"
+    answer: struck
+    reason: "A worktree whose directory is gone has no job the flow can read (its cache dir throws NO_REPO), so skipping it is correct."
+  - id: "live-path-4"
+    answer: struck
+    reason: "Tearing it takes a crash inside one small write, and the torn file fails closed: detach refuses until a person removes it."
+  - id: "live-path-5"
+    answer: struck
+    reason: "Every group signalled is one the runner spawned as the same user, so EPERM needs an outside actor, and the raw error is loud with the pending file kept."
+  - id: "live-path-6"
+    answer: struck
+    reason: "A loud SUPERSEDE_UNPROVEN line that keeps the pending file; it cannot pass as proven."
+  - id: "live-path-7"
+    answer: struck
+    reason: "Without ps the refusal still names the group and sends no signal; only the pid list is dropped."
+  - id: "live-path-8"
+    answer: struck
+    reason: "Every host command the flow runs, finalize and lane included, goes through runShell without a timeout; a hanging host stop is the host's contract and shows as a call that never returns."
+  - id: "live-path-9"
+    answer: struck
+    reason: "As live-path-8: accept_check is a host command under the same contract as every finalize and lane command."
+  - id: "live-path-10"
+    answer: struck
+    reason: "As live-path-8, and it runs after the merge, push and ancestor proof, so a hang never undoes a ship."
+  - id: "live-path-11"
+    answer: struck
+    reason: "It prints ship cleanup failed and keeps the ship's exit 0; nothing rests on it."
+  - id: "live-path-12"
+    answer: struck
+    reason: "A misread ledger only deletes a proof again, which costs a rerun and never mints one."
+  - id: "live-path-13"
+    answer: struck
+    reason: "A failed diff returns null, so the review is judged by the whole tree, the stricter of the two rules."
+tree: 3615a060338af3422ee4c9f317a357291f4b6871fe79da6c4e74740c445b18fc
+commit: 07f4b8d86845d4ca9e31726f31f9173b88af97dd
+reviewer: ab61eed33c7cb1e22
