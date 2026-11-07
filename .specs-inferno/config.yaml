@@ -4,8 +4,9 @@
 verification:
   # CLAUDE.md step 2. Agent tests never run on Alpha, so the gate runs it on Delta
   # through remote-run.sh, which mirrors this tree (".") and keeps src/node_modules there.
+  # The mirror carries no ignored build output, so the webview bundle the sync check reads is built there once.
   finalize:
-    - "SSH_AUTH_SOCK=/run/user/1000/gcr/ssh bash $HOME/.local/share/skoft-agent-hooks/remote-run.sh delta . bash -c 'cd src && { [ -d node_modules ] || npm ci --no-audit --no-fund; } && npm run validate:all'"
+    - "SSH_AUTH_SOCK=/run/user/1000/gcr/ssh bash $HOME/.local/share/skoft-agent-hooks/remote-run.sh delta . bash -c 'cd vs-code-extension && { [ -f dist/webview/bundle.js ] || { npm ci --no-audit --no-fund && npm run compile:webview; }; } && cd ../src && { [ -d node_modules ] || npm ci --no-audit --no-fund; } && npm run validate:all'"
 
 dispatch:
   constraints:
