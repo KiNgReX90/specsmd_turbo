@@ -260,7 +260,10 @@ intents:
         kind: docs-only
         complexity: medium
         mode: autopilot
-        status: pending
+        status: completed
+        completed_at: 2026-11-07T00:25:41Z
+        integrated_at: 2026-11-07T00:25:41Z
+        integrated_sha: 099fa6c
         review: clean
         review_hash: ba04c25a25637329c3a29814c41dbb9034ded3b717fc3b9564b2384bff15ec31
         review_commit: d4e50c3d6df62dee795c7e9f231f78b8913276a1

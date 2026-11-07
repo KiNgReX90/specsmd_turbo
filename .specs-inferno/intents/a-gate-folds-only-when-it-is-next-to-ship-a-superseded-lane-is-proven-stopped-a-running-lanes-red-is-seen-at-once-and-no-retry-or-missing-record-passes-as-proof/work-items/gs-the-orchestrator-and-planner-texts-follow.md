@@ -5,7 +5,8 @@ intent: a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-st
 kind: docs-only
 complexity: medium
 mode: autopilot
-status: pending
+status: completed
+completed_at: 2026-11-07T00:25:41Z
 depends_on: [gs-supersede-proves-the-running-lanes-stopped, gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone]
 created: 2026-11-06
 ---
