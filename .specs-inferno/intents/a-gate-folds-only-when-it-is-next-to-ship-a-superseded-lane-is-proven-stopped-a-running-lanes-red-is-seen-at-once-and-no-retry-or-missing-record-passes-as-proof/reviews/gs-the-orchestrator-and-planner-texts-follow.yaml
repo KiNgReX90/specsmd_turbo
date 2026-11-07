@@ -1,5 +1,5 @@
 item: gs-the-orchestrator-and-planner-texts-follow
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/README.codex.md
   - src/flows/inferno/agents/orchestrator/agent.md
@@ -9,19 +9,7 @@ files:
   - src/flows/inferno/agents/planner/agent.md
   - src/flows/inferno/codex/skills/specsmd-inferno/references/procedure.md
   - src/flows/inferno/commands/inferno-planner.md
-findings:
-  - criterion: "Description 3: config.example says what each lane key does, as the scripts behave"
-    severity: major
-    file: src/flows/inferno/agents/orchestrator/config.example.yaml
-    line: 67
-    evidence: "ba545d0 rewrote the stop comment as 'proves a superseded walk gone wherever it runs, exit 0, and kills nothing. It runs in the tree after the flow has sent SIGTERM and SIGKILL to the lane job's process group'. At d93eb74 run-supersede.cjs:8-9 says the host stop proves the walk gone 'because only the host knows where a walk runs outside those groups', and the supersede item's notes (gs-supersede-proves-the-running-lanes-stopped.md:81) say the host's stop 'kills the walk pids and the Beta task and proves the Delta lock free'. A host that follows 'kills nothing' writes a check that waits on a remote walk the flow cannot reach, and supersede stays pending until that walk ends. Also, stopGroups (run-supersede.cjs:125-131) sends SIGKILL only to a group that still has a member after the grace period, so 'sent SIGTERM and SIGKILL' is not what always happens."
-    fix: "stop comment: '# optional: the host command that stops a superseded walk wherever it runs outside the lane job's process group, and exits 0 once the walk is gone. It runs in the tree after the flow has sent SIGTERM to that group and SIGKILL to any member left, with INFERNO_LANE, INFERNO_LANE_PID, INFERNO_LANE_LOG and INFERNO_GATE_CONFIG set. Without it gate --detach --supersede refuses and the lane is waited on.' Drop 'and kills nothing'."
-  - criterion: "Scope: edits stay inside the item's ownership.editable"
-    severity: minor
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-printed-calls.test.cjs
-    line: 195
-    evidence: "ba545d0, this item's correction, adds the gateSupersedeCall and slotCall rows to run-printed-calls.test.cjs:195-200. That file is not in the item's ownership.editable (work item spec, ownership block), and the earlier review gave the fix to gs-supersede-proves-the-running-lanes-stopped and gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes. The rows are right: node --test on the suite at d93eb74 prints # pass 10, # fail 0, and both mutants below are caught."
-    fix: "Keep the rows and record the file where it belongs: add src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-printed-calls.test.cjs to this item's ownership.editable (planner or orchestrator repair of the spec), or credit the change to gs-supersede-proves-the-running-lanes-stopped, so verify-item's ownership check and the item record agree with the commit."
+findings: []
 mutants:
   - criterion: "AC1 via run-printed-calls.test.cjs: gateSupersedeCall prints --supersede"
     test: "remote-run.sh delta <clone of d93eb74> node --test --test-reporter=tap S/run-printed-calls.test.cjs, with run-call.cjs:68 ['--detach', '--supersede'] cut to ['--detach']"
@@ -32,15 +20,15 @@ mutants:
   - criterion: "AC1 date and tally case (inferno-flow.test.ts:385) over the rewritten Finalize step 3"
     test: "remote-run.sh delta <clone of d93eb74> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'no flow md file carries a date', with agent.md:111 'stopped by its `stop` check.' made '... check within 10 minutes.'"
     caught: yes
-  - criterion: "Constraint: no em or en dash (inferno-flow.test.ts:366) in the rewritten config comments"
+  - criterion: "Constraint: no em or en dash (inferno-flow.test.ts:366) in the config comments"
     test: "remote-run.sh delta <clone of d93eb74> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'no file under the flow carries an em or en dash', with an em dash put into config.example.yaml:67"
     caught: yes
-  - criterion: "AC1 planner drift case (inferno-flow.test.ts:53), lines unchanged by the correction"
+  - criterion: "AC1 planner drift case (inferno-flow.test.ts:53)"
     test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'inferno-planner command body is identical', with commands/inferno-planner.md:163 'calls, tests, extends or rewrites' cut to 'calls, tests or rewrites'"
     caught: yes
-  - criterion: "AC1 gate text case (inferno-flow.test.ts:233), lines unchanged by the correction"
+  - criterion: "AC1 gate text case (inferno-flow.test.ts:233)"
     test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'the orchestrator waits for the gate through gate --detach', with agent.md:109 'the tree it proves' made 'the tree it checks'"
     caught: yes
-tree: 13dd3cc7f98738f98bf994bf2cb8d9df92ed10e5492303aa55846e12487f7103
-commit: d93eb74fd89a16bd0e79f84eae3e8c5ed5e768ad
+tree: ba04c25a25637329c3a29814c41dbb9034ded3b717fc3b9564b2384bff15ec31
+commit: d4e50c3d6df62dee795c7e9f231f78b8913276a1
 reviewer: a22408521c02d65a8
