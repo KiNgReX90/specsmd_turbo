@@ -171,13 +171,13 @@ intents:
         completed_at: 2026-11-06T18:39:16Z
         integrated_at: 2026-11-06T18:39:16Z
         integrated_sha: 03b0b33
-        review: clean
-        review_hash: 90e3bc565af9b42a4b34052b76988ee3567642dd2195597242f8a60f2c86c112
-        review_commit: 665062ec79ab9816298d83f4875b38ee05ca79f1
+        review: fix
+        review_hash: e3e972f4c1029042f0b89855d81991fd4de738f9c169deb42a2e7b65d9ce4f31
+        review_commit: a232902a0c1ec92648637955647c16dba95fbfc7
         review_tier: strong
-        review_rejections: 0
-        review_weight: none
-        reviewed_at: 2026-11-06T18:24:32Z
+        review_rejections: 1
+        review_weight: serious
+        reviewed_at: 2026-11-07T01:06:16Z
         depends_on:
           - gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows
       - id: gs-the-gate-folds-only-at-the-head-of-the-slot

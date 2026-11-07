@@ -1,30 +1,22 @@
 item: gs-a-running-lane-red-ends-the-wait
-verdict: clean
+verdict: fix
 files:
-  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-jobs.cjs
-  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-fixture.cjs
-  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
-findings: []
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs
+findings:
+  - criterion: "intent review blocker fix: a commit after the red line turns the walking lane back to running, so the wait blocks on it"
+    severity: major
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs
+    line: 151
+    evidence: "The new test commits (touch, :152) as soon as the first wait exits 2 on the lane's red line, and the gate job may still be running then. Its finalize then fails with 'verification inputs changed while the command ran', and the second wait exits 2 on the gate instead of 4 on the lane. I ran five unchanged copies of the test in one Delta batch at a232902. R2 failed: gate-running-at-red=true, '2 !== 4', with 'FAIL 0s node proof.cjs whole ... verification inputs changed while the command ran'. R4 had the gate still running too and passed only because the gate ended first. Copy S had the same test with the 'whole' finalize held 1.5 s, and it fails every time with the same 2. The product is right here: a commit in scope while the gate runs is red. The test is the flaky part, one red in five in the finalize suite."
+    fix: "Before touch(f) at :152, wait until the gate job itself has ended, so the commit lands while only the lane walks. For example, poll `jobs.alive(jobs.readJson(path.join(cacheOf(f), 'gate-job.json')))` with jobs.sleepSync(50), up to 10 s, then assert it is false. After that loop, assert red.code 2 and that red.out does not match /gate still running/. Alternatively, take `red` from a loop of `gate --wait --minutes 0.05` until the out has no 'gate still running' line, as gateDone does at :13-19, with more slices than its 20."
 mutants:
-  - criterion: "a running lane's red line ends the wait with exit 2 while the lane walks on (run-lanes.cjs:114 laneNow writes no run file)"
-    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M1/run-lanes-wait.test.cjs (wait exited 4, not 2)"
+  - criterion: "a commit after the red line turns the walking lane back to running (run-lanes.cjs:164 'if (red && walked())' becomes 'if (red)')"
+    test: "remote-run.sh delta <clone of a232902> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-HM/run-lanes-wait.test.cjs (second wait exited 2 on 'RED lane smoke while it walks', not 4)"
     caught: yes
-  - criterion: "a running lane's red line ends the wait with exit 2 while the lane walks on (run-lanes.cjs:174 running-red maps to verdict running)"
-    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M2/run-lanes-wait.test.cjs (RED line printed, wait exited 4, not 2)"
+  - criterion: "run-lanes-wait, run-lanes and run-supersede report 0 fail at a232902 (unmutated, same Delta batch)"
+    test: "remote-run.sh delta <clone of a232902> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.test.cjs (41 pass, 0 fail)"
     caught: yes
-  - criterion: "without red_line the same lane keeps the wait at 4 (run-lanes.cjs:137 drops the red_line check)"
-    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M3/run-lanes-wait.test.cjs (wait exited 2, not 4)"
-    caught: yes
-  - criterion: "a line the pattern does not match keeps the wait at 4 (run-lanes.cjs:147 any non-empty line counts instead of pattern.test)"
-    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M4/run-lanes-wait.test.cjs (wait exited 2, not 4)"
-    caught: yes
-  - criterion: "a red line from an earlier run of the lane is not read (run-lanes.cjs:139 drops the run.started >= job.started guard)"
-    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-M5/run-lanes-wait.test.cjs (wait exited 2 on the earlier log, not 4)"
-    caught: yes
-  - criterion: "node --test run-lanes-wait, run-lanes, run-lanes-config reports 0 fail (unmutated baseline in the same Delta batch)"
-    test: "remote-run.sh delta <clone of fe2ae2a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-config.test.cjs (35 pass, 0 fail)"
-    caught: yes
-tree: 90e3bc565af9b42a4b34052b76988ee3567642dd2195597242f8a60f2c86c112
-commit: 665062ec79ab9816298d83f4875b38ee05ca79f1
+tree: e3e972f4c1029042f0b89855d81991fd4de738f9c169deb42a2e7b65d9ce4f31
+commit: a232902a0c1ec92648637955647c16dba95fbfc7
 reviewer: a58378b54d47f918d
