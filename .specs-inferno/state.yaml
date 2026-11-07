@@ -76,9 +76,9 @@ intents:
         depends_on: [decompose-fanout, config-wizard-ux, delivery-mode-impl]
   - id: a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-stopped-a-running-lanes-red-is-seen-at-once-and-no-retry-or-missing-record-passes-as-proof
     title: "A gate folds only when it is next to ship, a superseded lane is proven stopped, a running lane's red is seen at once, and no retry or missing record passes as proof"
-    status: in_progress
+    status: completed
+    completed_at: 2026-11-07T02:02:50Z
     claimed_at: 2026-11-06T12:49:41Z
-    claimed_by: inferno-intent/a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-stopped-a-running-lanes-red-is-seen-at-once-and-no-retry-or-missing-record-passes-as-proof-20261106T124941Z
     created: 2026-11-06
     base_branch: main
     depends_on_intents: []
