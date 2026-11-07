@@ -5,7 +5,8 @@ intent: a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-st
 kind: behavior
 complexity: high
 mode: autopilot
-status: pending
+status: completed
+completed_at: 2026-11-07T00:25:40Z
 depends_on: [gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes]
 created: 2026-11-06
 ---
