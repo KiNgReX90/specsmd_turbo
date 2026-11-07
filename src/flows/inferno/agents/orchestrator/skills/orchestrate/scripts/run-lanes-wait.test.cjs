@@ -149,6 +149,12 @@ test('a commit after the red line turns the walking lane back to running, so the
   passed(run(f, 'gate', '--detach'));
   const red = run(f, 'gate', '--wait', '--minutes', '0.1');
   assert.equal(red.code, 2, red.out + red.err);
+  // The commit lands only once the gate has ended green, so the walking lane is all that is left.
+  const gate = JSON.parse(fs.readFileSync(path.join(cacheOf(f), 'gate-job.json'), 'utf8'));
+  for (let i = 0; i < 400 && jobs.alive(gate); i += 1) jobs.sleepSync(50);
+  assert.ok(!jobs.alive(gate), 'the gate never ended');
+  const result = jobs.readJson(gate.result);
+  assert.ok(result && result.ok === true, `the gate is not green: ${JSON.stringify(result)}`);
   touch(f);
   const after = run(f, 'gate', '--wait', '--minutes', '0.05');
   assert.equal(after.code, 4, after.out + after.err);
