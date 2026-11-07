@@ -158,7 +158,10 @@ function laneState(tree, name, config) {
   const job = jobs.readJson(paths.job);
   if (jobs.alive(job)) {
     const red = redLine(tree, configuredLanes(config).find((entry) => entry.name === name), job);
-    if (red) return { lane: name, state: 'running-red', pid: job.pid, log: red.log, line: red.line };
+    // A red line speaks for the head the lane walks. Once a commit lands after it, the lane reads
+    // running, so the wait blocks on it until its result decides instead of exiting 2 on every call.
+    const walked = () => typeof job.head !== 'string' || !job.head || lib.git(tree, ['rev-parse', 'HEAD']) === job.head;
+    if (red && walked()) return { lane: name, state: 'running-red', pid: job.pid, log: red.log, line: red.line };
     return { lane: name, state: 'running', pid: job.pid, log: paths.log };
   }
   const result = jobs.readJson(paths.result);

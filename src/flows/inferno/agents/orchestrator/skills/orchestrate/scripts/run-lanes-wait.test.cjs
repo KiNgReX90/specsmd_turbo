@@ -142,3 +142,17 @@ test('a red line from an earlier run of the lane is not read', (t) => {
   assert.equal(result.code, 4, result.out + result.err);
   assert.doesNotMatch(result.out, /while it walks/);
 });
+
+test('a commit after the red line turns the walking lane back to running, so the wait blocks on it', (t) => {
+  const f = fixture(t, config({ smoke: 'redwait' }, undefined, undefined, RED_LINE));
+  touch(f);
+  passed(run(f, 'gate', '--detach'));
+  const red = run(f, 'gate', '--wait', '--minutes', '0.1');
+  assert.equal(red.code, 2, red.out + red.err);
+  touch(f);
+  const after = run(f, 'gate', '--wait', '--minutes', '0.05');
+  assert.equal(after.code, 4, after.out + after.err);
+  assert.doesNotMatch(after.out, /while it walks/);
+  assert.match(after.out, /smoke lane still running pid \d+/);
+  assert.ok(jobs.alive(laneJob(f)), 'the lane still walks');
+});
