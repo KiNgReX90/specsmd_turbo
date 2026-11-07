@@ -82,9 +82,10 @@ function targets(tree, config, live) {
 }
 
 /**
- * Signal a recorded process group. Only groups whose leader a job file of this tree named, as a
- * live runner, when the pending file was written: Linux keeps that number allocated while any
- * member of the group lives, so the signal reaches no stranger.
+ * Signal a recorded process group: on the pass that writes the pending file, a group whose
+ * leader a job file of this tree names as a live runner. Linux keeps that number allocated while
+ * any member of the group lives, so the signal reaches no stranger. A rerun may find the number
+ * free and reused, so it signals only what a job file still names (see `strangers`).
  */
 function signal(group, name) {
   try {
@@ -115,6 +116,16 @@ function membersAfter(groups, ms) {
     left = left.filter(hasMember);
   }
   return left;
+}
+
+/**
+ * The recorded groups a rerun finds with members that no job file of this tree names as a live
+ * runner. Once a first pass emptied a group its number is free, so a member there may be a
+ * process the flow never started: a rerun refuses rather than signal it.
+ */
+function strangers(tree, groups) {
+  const named = jobs.everyJob(tree).filter((job) => jobs.alive(job)).map((job) => job.pid);
+  return groups.filter((group) => hasMember(group) && !named.includes(group));
 }
 
 /**
@@ -151,12 +162,21 @@ function proveStopped(tree, lane, entry, selected) {
 function supersede(tree, config, selected, { lanesOnly = false } = {}) {
   const file = pendingPath(tree);
   let record = jobs.readJson(file);
-  if (!record) {
+  const fresh = !record;
+  if (fresh) {
     record = { ...targets(tree, config, jobs.everyJob(tree).filter((job) => jobs.alive(job))), started: new Date().toISOString() };
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, `${JSON.stringify(record)}\n`, 'utf8');
   }
-  const left = stopGroups(record.groups || []);
+  const groups = recorded(record.groups || []);
+  const unknown = fresh ? [] : strangers(tree, groups);
+  if (unknown.length > 0) {
+    throw new RunError([
+      ...unknown.map((group) => `process group ${group} still has members the flow did not start; no signal sent`),
+      `the supersede stays pending; once it is gone: ${gateSupersedeCall(tree)}`,
+    ].join('\n'), 'SUPERSEDE_UNPROVEN');
+  }
+  const left = stopGroups(groups);
   const configured = configuredLanes(config);
   const failed = [];
   for (const entry of record.lanes || []) {

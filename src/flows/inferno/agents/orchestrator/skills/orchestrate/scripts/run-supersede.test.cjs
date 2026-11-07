@@ -239,3 +239,21 @@ test("a lanes-only supersede keeps the driver's ticket", { skip: !LINUX }, (t) =
   assert.notEqual(laneJob(f).pid, lane.pid, 'a new lane walks the fix');
   assert.deepEqual(holders(f), [BRANCH]);
 });
+
+test('a rerun never signals a recorded group no job file of the tree names', { skip: !LINUX }, async (t) => {
+  const f = fixture(t, withStop(0));
+  write(f.tree, 'stop.cjs', STOP);
+  touch(f);
+  const stranger = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 15000)'], { detached: true, stdio: 'ignore' });
+  t.after(() => stranger.kill('SIGKILL'));
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  fs.mkdirSync(cacheOf(f), { recursive: true });
+  writeFile(pending(f), JSON.stringify({
+    lanes: [{ lane: 'smoke', pid: stranger.pid, log: path.join(cacheOf(f), 'lane-smoke-job.log') }], groups: [stranger.pid], started: new Date().toISOString(),
+  }));
+  const result = run(f, 'gate', '--detach', '--supersede');
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.match(result.err, new RegExp(`process group ${stranger.pid} still has members the flow did not start`));
+  assert.ok(fs.existsSync(pending(f)), 'the supersede stays pending');
+  assert.equal(gone(stranger.pid), false, 'the stranger survives');
+});
