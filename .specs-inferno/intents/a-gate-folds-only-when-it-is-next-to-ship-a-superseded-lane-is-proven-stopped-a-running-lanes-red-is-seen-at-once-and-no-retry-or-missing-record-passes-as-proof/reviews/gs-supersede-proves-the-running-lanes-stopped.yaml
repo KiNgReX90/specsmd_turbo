@@ -8,12 +8,12 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
 findings:
-  - criterion: "item part 2/3: a pending supersede reruns with --supersede, and a signal reaches only a process group the tree started (d93eb74 docstring on signal: Linux keeps that number allocated while any member of the group lives, so the signal reaches no stranger)"
+  - criterion: "reader-facing copy: the refusal a rerun prints for a recorded process group with members (the 526eaa7 refusal)"
     severity: minor
     file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.cjs
-    line: 159
-    evidence: "On a rerun, stopGroups(record.groups) signals every recorded number that has any member now, read from a pending file of any age. The guarantee in the comment holds only while the group never empties. In a typical case the first pass kills every group and a stop check fails. The numbers are then free, the pending file stays, and a later rerun SIGTERMs and SIGKILLs whatever group holds them by then. The flow's own gate and lane jobs of other worktrees are detached group leaders, so they are the likely holders. Probe P6 on Delta (clone of d93eb74): a detached `node -e setInterval` process stood in for a reused number. It was written into supersede-pending.json as groups [its pid] with smoke stop `node stop.cjs 0`, then `gate --detach --supersede` ran. The rerun signalled it, and the process was dead afterwards. At 7114510 the same record left it alone, because a pid was signalled only while a job file of the tree named it as a live runner."
-    fix: "Bind each recorded group to the moment it was recorded. When the pending file is written (:157), also store the boot_id and this process's own /proc/self/stat starttime as `ticks`. On every pass, treat a recorded group as the tree's only while some process with that pgrp (a scan of /proc/[0-9]*/stat, field 5) has a starttime no later than `ticks` on the same boot_id. Signal only those groups, and count only those as still running. A group whose members are all younger is a reused number: drop it from the record and never signal it. After each pass, rewrite the pending file with groups set to the ones still holding such a member. Add a run-supersede.test.cjs case \"a pending rerun leaves a reused group number alone\". Make the record real with a failing stop (`node stop.cjs 1`, exit 2). Then spawn a detached stranger, set the record's groups to [its pid], switch stop to 0 and rerun `--supersede`. It exits 0, and the stranger is alive (read /proc/<pid>/stat and treat state Z as dead)."
+    line: 175
+    evidence: "The P6 finding is closed. On Delta (clone of 526eaa7), probe P6 and the new case 'a rerun never signals a recorded group no job file of the tree names' both pass, and the stranger lives. The trap-child case and probe P2 pass, and the four AC2 suites run 43 pass 0 fail. Mutants S1 and S2 are caught. What remains is the line the rerun prints: `process group <n> still has members the flow did not start; no signal sent`, then `once it is gone: <call>`. strangers() (:125-129) knows only that no live job of this tree leads the group. It cannot tell a reused number from the tree's own leftover. The rerun exists for the second case: a first pass printed `still running after SIGKILL: process group <n>` (:186), and the rerun then calls the same group something the flow did not start. Neither line names a member, so a maker cannot tell what to stop before rerunning."
+    fix: "Word the refusal as what the code knows, and list the members. For each group, scan /proc/[0-9]*/stat for pgrp (field 5) equal to the group, and print `process group <n> still has members and no job of this tree leads it, so the flow sends it no signal: pid <pid> <command from /proc/<pid>/cmdline>`, at most five members. End with `if they are the old walk, stop them, then: <gateSupersedeCall(tree)>`. In the rerun test, assert the line names `pid <stranger pid>`, and assert it no longer claims the flow did not start the group."
 mutants:
   - criterion: "supersede stops a walking lane: the process groups are signalled (run-supersede.cjs:91 process.kill(-group, name) to void group)"
     test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
@@ -84,6 +84,12 @@ mutants:
   - criterion: "a group is signalled only while it has a member (run-supersede.cjs:100 hasMember to return false)"
     test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
     caught: yes
-tree: f0a23f67c66d2975eb3628b36a6410aa9659b2e06503e097aa863f29c658d60c
-commit: 1e1b564f8046141a3432f9d6b9e15459e206d3d2
+  - criterion: "a rerun signals no recorded group that has members and no live job of the tree leads (run-supersede.cjs:172 unknown to [])"
+    test: "remote-run.sh delta <clone of 526eaa7> node --test --test-name-pattern='a rerun never signals a recorded group no job file of the tree names' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a rerun over emptied groups still reruns the stop checks (run-supersede.cjs:128 hasMember(group) && dropped)"
+    test: "remote-run.sh delta <clone of 526eaa7> node --test --test-name-pattern='a failing stop keeps the supersede pending' S/run-supersede.test.cjs"
+    caught: yes
+tree: 3faf012b65ab0e965d37f5dfdd68e9726e81337760d47f252b31a60f77f1c982
+commit: 526eaa7556681f0d888883d95f745bc8fbaa9e4c
 reviewer: abdf00367765f9964

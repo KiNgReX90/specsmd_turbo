@@ -226,12 +226,12 @@ intents:
         mode: autopilot
         status: pending
         review: fix
-        review_hash: f0a23f67c66d2975eb3628b36a6410aa9659b2e06503e097aa863f29c658d60c
-        review_commit: 1e1b564f8046141a3432f9d6b9e15459e206d3d2
+        review_hash: 3faf012b65ab0e965d37f5dfdd68e9726e81337760d47f252b31a60f77f1c982
+        review_commit: 526eaa7556681f0d888883d95f745bc8fbaa9e4c
         review_tier: strong
         review_rejections: 1
         review_weight: minor
-        reviewed_at: 2026-11-07T00:09:21Z
+        reviewed_at: 2026-11-07T00:23:43Z
         depends_on:
           - gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes
       - id: gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone
