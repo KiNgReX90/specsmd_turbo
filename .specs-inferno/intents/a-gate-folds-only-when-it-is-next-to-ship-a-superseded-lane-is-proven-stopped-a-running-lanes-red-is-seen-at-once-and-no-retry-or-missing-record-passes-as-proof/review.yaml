@@ -1,4 +1,4 @@
-verdict: fix
+verdict: clean
 criteria:
   - criterion: "node --test *.test.cjs in the orchestrate scripts dir with a fresh XDG_CACHE_HOME reports 0 fail, and its suites include run-slot, run-slot-gate, run-slot-cli, run-supersede and run-review-outside"
     proof: test
@@ -18,14 +18,7 @@ criteria:
   - criterion: "After the reinstall recipe, check-lock exits 0, flow-text-budget prints ok on six rows, and the installed scripts tests report 0 fail"
     proof: code
     where: "src/flows/inferno/agents/orchestrator/agent.md:1 is 3370 words, so the Claude orchestrator measures 4887-3285+3370=4972 of 5000; src/flows/inferno/commands/inferno-planner.md:1 is 3124, planner 4487 of 4500; codex procedure.md:1 is 2870, codex orchestrator 4723 of 5000; the installed scripts are these files, proven by the first criterion; the install itself runs after ship by the brief's own recipe"
-findings:
-  - criterion: "A fix restarts a gate only after the running lanes are proven stopped; until a host stop command exists, supersede refuses and the orchestrator waits, as today (brief, Interface with Skoft_CRA's lane intent)"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
-    line: 161
-    evidence: "Scratch clone at 07f4b8d, one test on Delta: lane smoke on redwait with red_line '^PRODUCT RED ' and no stop, the setup the reinstall recipe gives Skoft_CRA until its stop commands land. gate --wait exits 2 on the red line. After a fix commit to src/, gate --detach --supersede refuses NO_STOP, a plain gate --detach refuses GATE_RUNNING with 'wait for it: run.cjs gate --wait', and that gate --wait --minutes 0.2 exits 2 again after 84 ms while the lane job stays alive. laneState reports running-red on every poll for as long as the walk lasts, so no wait can block on the lane, and the orchestrator spins full-context rounds of wait and refusal until the walk ends, up to two hours on Skoft_CRA. The NOT_SUPERSEDED refusal at run-supersede.cjs:78 sends it into the same spin."
-    fix: "In laneState (run-lanes.cjs:156-161) report running-red only while lib.git(tree, ['rev-parse', 'HEAD']) still equals the lane job's head; once a commit lands after the red, the lane reads running, so gate --wait blocks on it until it ends and its result decides, or exits 4, as the GATE_RUNNING, NO_STOP and NOT_SUPERSEDED refusals tell the orchestrator. A job without head keeps today's running-red. Add to run-lanes-wait.test.cjs the case 'after a committed fix a red-line lane with no stop is waited on': redwait with red_line, the wait exits 2, touch src/, gate --detach --supersede refuses NO_STOP, then gate --wait --minutes 0.1 exits 4 and prints 'smoke lane still running'."
-    severity: blocker
-    owner: gs-a-running-lane-red-ends-the-wait
+findings: []
 scanner:
   - id: "wiring-1"
     answer: struck
@@ -135,6 +128,214 @@ scanner:
   - id: "live-path-13"
     answer: struck
     reason: "A failed diff returns null, so the review is judged by the whole tree, the stricter of the two rules."
-tree: 3615a060338af3422ee4c9f317a357291f4b6871fe79da6c4e74740c445b18fc
-commit: 07f4b8d86845d4ca9e31726f31f9173b88af97dd
+mutants:
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='slot --take exits 4 behind another holder' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A2/run-slot-cli.test.cjs, with run-slot.cjs:190 'if (turn.head) {' made 'if (true) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='slot --take exits 4 behind another holder' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A2/run-slot-cli.test.cjs, with run-slot.cjs:190 'if (turn.head) {' made 'if (true) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='slot --release frees the head' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A3/run-slot-cli.test.cjs, with run-slot.cjs:222 'const held = release(tree, holder);' made 'const held = false;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='slot without merge_slot says there is no queue' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A4/run-slot-cli.test.cjs, with run-slot.cjs:210 'if (!mergeSlot(lib.readConfig(tree, options.config))) {' made 'if (false) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='the usage carries the three driver lines' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A5/run-slot-cli.test.cjs, with run.cjs:77 '--take --holder <name> [--tree <dir>]' made '--take --holder <holder> [--tree <dir>]'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='on the base branch starts the lanes the diff since' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A6/run-slot-cli.test.cjs, with run-gate.cjs:292 'if (options.lanes_only) {' made 'if (false) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:7"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='since without .lanes-only is refused' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A7/run-slot-cli.test.cjs, with run-gate.cjs:385 'if (options.since && !options.lanes_only) throw' made 'if (false) throw'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-direct-build-takes-the-slot-and-starts-only-the-lanes:8"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='slot --take exits 4 behind another holder' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-A2/run-slot-cli.test.cjs, with run-slot.cjs:190 'if (turn.head) {' made 'if (true) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a base commit that only changes wiki/ keeps a clean review current' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B2/run-review-outside.test.cjs, with run-intent-owed.cjs:120 'return typeof review.tree_outside === 'string' && review.tree_outside === outsideHash(tree, config);' made 'return false;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a base commit that only changes wiki/ keeps a clean review current' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B2/run-review-outside.test.cjs, with run-intent-owed.cjs:120 'return typeof review.tree_outside === 'string' && review.tree_outside === outsideHash(tree, config);' made 'return false;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='the same base commit voids the review when review.outside is unset' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B3/run-review-outside.test.cjs, with run-intent-owed.cjs:120 'return typeof review.tree_outside === 'string' && review.tree_outside' made 'return review.tree_outside'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='own wiki edit after the review voids it' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B4/run-review-outside.test.cjs, with run-intent-owed.cjs:103 '...refs.map(' made '...[].map('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a base commit outside the kb voids the review even with review.outside set' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B5/run-review-outside.test.cjs, with run-intent-owed.cjs:113 'skip: (file) => lib.matchesAny(file, globs) && !own.has(file)' made 'skip: (file) => !own.has(file)'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a review recorded without tree_outside keeps today' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B6/run-review-outside.test.cjs, with run-intent-owed.cjs:120 'return typeof review.tree_outside === 'string' && review.tree_outside === outsideHash(tree, config);' made 'return (review.tree_outside || outsideHash(tree, config)) === outsideHash(tree, config);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:7"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='run.cjs review records tree_outside' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B7/run-review-outside.test.cjs, with run-intent-review.cjs:125 'const kept = outside === null ? '' : `tree_outside: ${outside} newline`;' made 'const kept = '';'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:8"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='review.outside must be a list of globs and merge_slot a boolean' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B8/run-review-outside.test.cjs, with run-config-gates.cjs:38 'if (review.outside !== undefined && !globList(review.outside)) {' made 'if (false) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-kb-sync-keeps-the-intent-review-current:9"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a base commit that only changes wiki/ keeps a clean review current' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-B2/run-review-outside.test.cjs, with run-intent-owed.cjs:120 'return typeof review.tree_outside === 'string' && review.tree_outside === outsideHash(tree, config);' made 'return false;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-running-lane-red-ends-the-wait:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='red line ends the wait with exit 2 while the lane walks on' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-C2/run-lanes-wait.test.cjs, with run-lanes.cjs:181 'return { verdict: 'red', out: [`RED lane ${entry.lane} while it walks' made 'return { verdict: 'running', out: [`RED lane ${entry.lane} while it walks'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-running-lane-red-ends-the-wait:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='red line ends the wait with exit 2 while the lane walks on' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-C2/run-lanes-wait.test.cjs, with run-lanes.cjs:181 'return { verdict: 'red', out: [`RED lane ${entry.lane} while it walks' made 'return { verdict: 'running', out: [`RED lane ${entry.lane} while it walks'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-running-lane-red-ends-the-wait:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='without red_line the same lane keeps the wait at 4' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-C3/run-lanes-wait.test.cjs, with run-lanes.cjs:141 'if (!lane || !lane.red_line) return null;' made 'if (!lane) return null;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-running-lane-red-ends-the-wait:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a line the pattern does not match keeps the wait at 4' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-C4/run-lanes-wait.test.cjs, with run-lanes.cjs:151 'find((entry) => pattern.test(entry))' made 'find((entry) => entry.length > 0)'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-running-lane-red-ends-the-wait:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a red line from an earlier run of the lane is not read' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-C5/run-lanes-wait.test.cjs, with run-lanes.cjs:143 ' || !(Date.parse(run.started) >= Date.parse(job.started))) return null;' made ') return null;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-a-running-lane-red-ends-the-wait:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='red line ends the wait with exit 2 while the lane walks on' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-C2/run-lanes-wait.test.cjs, with run-lanes.cjs:181 'return { verdict: 'red', out: [`RED lane ${entry.lane} while it walks' made 'return { verdict: 'running', out: [`RED lane ${entry.lane} while it walks'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='accept runs the lane's accept_check and refuses on its non-zero exit' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D2/run-lanes.test.cjs, with run-lanes.cjs:278 'if (lane.accept_check) acceptCheck(' made 'if (false) acceptCheck('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='accept runs the lane's accept_check and refuses on its non-zero exit' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D2/run-lanes.test.cjs, with run-lanes.cjs:278 'if (lane.accept_check) acceptCheck(' made 'if (false) acceptCheck('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='an accept_check that exits 0 accepts and saw the lane' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D3/run-lanes.test.cjs, with run-lanes.cjs:249 'INFERNO_LANE: lane.name,' made 'INFERNO_LANE: 'x','; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='the smoke proof changes when the windows lane' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D4/run-lanes.test.cjs, with run-lanes.cjs:42 'if (windows) {' made 'if (false) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='the lane command sees INFERNO_GATE_CONFIG' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D5/run-lanes.test.cjs, with run-lanes.cjs:120 'process.env.INFERNO_GATE_CONFIG = proof.config;' made 'process.env.INFERNO_GATE_CONFIG = '';'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='accept_check, stop and red_line are optional strings' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D6/run-lanes-config.test.cjs, with run-lane-config.cjs:38 '(filled(value.red_line) && compiles(value.red_line))' made 'filled(value.red_line)'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:7"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='smoke --accept refuses a sha off the base branch and records one on it' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D7/run-lanes.test.cjs, with run-lanes.cjs:278 'if (lane.accept_check) acceptCheck(' made 'if (true) acceptCheck('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows:8"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='accept runs the lane's accept_check and refuses on its non-zero exit' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-D2/run-lanes.test.cjs, with run-lanes.cjs:278 'if (lane.accept_check) acceptCheck(' made 'if (false) acceptCheck('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-no-flake-rerun-passes-as-proof:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='gate stays red on a failed command with flake_rerun configured' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-E1/run-gate.test.cjs, with run-gate.cjs:207 '? ['IGNORED verification.flake_rerun: a red command stays red'] : [];' made '? [] : [];'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-no-flake-rerun-passes-as-proof:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a proof a flake gate result names is revoked' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-E2/run-proofs.test.cjs, with run-proofs.cjs:133 'revokeFlakeProofs(tree);' made 'void tree;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-no-flake-rerun-passes-as-proof:3"
+    test: "test 0 = grep -c -E 'recordFlake|failedCases|flake-in-quotes' run-gate.cjs, on a copy of cdb8f22 with run-gate.cjs:207 given a trailing comment naming 'flake' in quotes; the check fails, and passes on the restored file"
+    caught: yes
+  - criterion: "gs-no-flake-rerun-passes-as-proof:4"
+    test: "test 0 = the flake_rerun count over agent.md and procedure.md, on a copy of cdb8f22 with a sentence naming flake_rerun put into agent.md:109; the check fails, and passes on the restored file"
+    caught: yes
+  - criterion: "gs-no-flake-rerun-passes-as-proof:5"
+    test: "remote-run.sh delta <clone of cdb8f22> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'the orchestrator waits for the gate through gate --detach', with agent.md:109 'first folds the base branch in, so the tree it proves is the tree ship merges' cut to 'first folds the base in'; exit 1, the unmutated run exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='ship runs ship_cleanup once the worktree and branch are gone' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F2/run-ship-cleanup.test.cjs, with run-ship.cjs:166 'INFERNO_BRANCH: branch,' made 'INFERNO_BRANCH: 'x','; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='ship runs ship_cleanup once the worktree and branch are gone' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F2/run-ship-cleanup.test.cjs, with run-ship.cjs:166 'INFERNO_BRANCH: branch,' made 'INFERNO_BRANCH: 'x','; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a failing ship_cleanup prints its line' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F3/run-ship-cleanup.test.cjs, with run-ship.cjs:171 'else out.push(`ship cleanup exited ${run.code}: ${said}`, `log ${log}`);' made 'else out.push('ship cleanup done');'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='the cleanup's log outlives the branch's cache folder' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F4/run-ship-cleanup.test.cjs, with run-ship.cjs:167 'path.join(lib.cacheDir(primary), 'ship-cleanup',' made 'path.join(lib.cacheDir(primary), branch,'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='teardown runs ship_cleanup after removing a merged worktree' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F5/run-ship-cleanup.test.cjs, with run-ship.cjs:220 'options, gates.shipCleanup(config));' made 'options, null);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='without ship_cleanup nothing runs' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F6/run-ship-cleanup.test.cjs, with run-config-gates.cjs:67 'return command(value) ? value.trim() : null;' made 'return command(value) ? value.trim() : 'true';'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:7"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='inherits ship_cleanup, and a blank' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F7/run-ship-cleanup.test.cjs, with run-config-gates.cjs:49 '['verification', 'ship_cleanup'], ' deleted; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone:8"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='ship runs ship_cleanup once the worktree and branch are gone' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-F2/run-ship-cleanup.test.cjs, with run-ship.cjs:166 'INFERNO_BRANCH: branch,' made 'INFERNO_BRANCH: 'x','; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-supersede-proves-the-running-lanes-stopped:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='supersede stops a walking lane whose scope the fix touched' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-G2/run-supersede.test.cjs, with run-supersede.cjs:93 'process.kill(-group, name);' made 'process.kill(-group, 0);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-supersede-proves-the-running-lanes-stopped:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='supersede stops a walking lane whose scope the fix touched' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-G2/run-supersede.test.cjs, with run-supersede.cjs:93 'process.kill(-group, name);' made 'process.kill(-group, 0);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-supersede-proves-the-running-lanes-stopped:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a fix outside every running lane's scope is refused' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-G3/run-supersede.test.cjs, with run-supersede.cjs:78 'if (!touched) throw' made 'if (false) throw'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-supersede-proves-the-running-lanes-stopped:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a running lane with no stop is refused before any signal' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-G4/run-supersede.test.cjs, with run-supersede.cjs:71 'if (!lane || !lane.stop) {' made 'if (!lane) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-supersede-proves-the-running-lanes-stopped:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a failing stop keeps the supersede pending' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-G5/run-supersede.test.cjs, with run-supersede.cjs:165 'if (run.code === 0) return null;' made 'return null;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-supersede-proves-the-running-lanes-stopped:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a running job without head is refused' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-G6/run-supersede.test.cjs, with run-supersede.cjs:65 'if (live.some((job) => typeof job.head !== 'string' || !job.head)) {' made 'if (false) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-supersede-proves-the-running-lanes-stopped:7"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='supersede stops a walking lane whose scope the fix touched' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-G2/run-supersede.test.cjs, with run-supersede.cjs:93 'process.kill(-group, name);' made 'process.kill(-group, 0);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-gate-folds-only-at-the-head-of-the-slot:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a second gate --detach queues behind the first' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-H2/run-slot-gate.test.cjs, with run-gate.cjs:300 'if (!turn.head) return queued(' made 'if (false) return queued('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-gate-folds-only-at-the-head-of-the-slot:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a second gate --detach queues behind the first' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-H2/run-slot-gate.test.cjs, with run-gate.cjs:300 'if (!turn.head) return queued(' made 'if (false) return queued('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-gate-folds-only-at-the-head-of-the-slot:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='the queued tree's wait folds and starts once the head's wait is red' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-H3/run-slot-gate.test.cjs, with run-lanes.cjs:219 'if (mergeSlot(config)) slot.release(tree, job.holder);' made 'if (false) slot.release(tree, job.holder);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-gate-folds-only-at-the-head-of-the-slot:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='teardown and a red wait free the slot' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-H4/run-slot-gate.test.cjs, with run-ship.cjs:143 'if (mergeSlot(lib.readConfig(primary, options.config))) slot.release(primary, branch);' made 'if (false) slot.release(primary, branch);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-gate-folds-only-at-the-head-of-the-slot:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='an intent review call renews the ticket' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-H5/run-slot-gate.test.cjs, with run-intent-review.cjs:138 'if (mergeSlot(config)) slot.renew(tree);' made 'if (false) slot.renew(tree);'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-gate-folds-only-at-the-head-of-the-slot:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='without merge_slot both trees start at once' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-H6/run-slot-gate.test.cjs, with run-gate.cjs:298 'if (mergeSlot(config)) {' made 'if (true) {'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-gate-folds-only-at-the-head-of-the-slot:7"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a second gate --detach queues behind the first' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-H2/run-slot-gate.test.cjs, with run-gate.cjs:300 'if (!turn.head) return queued(' made 'if (false) return queued('; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-merge-slot-queues-tickets-across-worktrees:1"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='tickets queue first come, first served' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-I2/run-slot.test.cjs, with run-slot.cjs:125 'else kept.push({' made 'else kept.unshift({'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-merge-slot-queues-tickets-across-worktrees:2"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='tickets queue first come, first served' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-I2/run-slot.test.cjs, with run-slot.cjs:125 'else kept.push({' made 'else kept.unshift({'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-merge-slot-queues-tickets-across-worktrees:3"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a ticket with no activity for 30 minutes is evicted' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-I3/run-slot.test.cjs, with run-slot.cjs:73 'if (now - activity <= IDLE_MS) return null;' made 'if (true) return null;'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-merge-slot-queues-tickets-across-worktrees:4"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='an open review dispatch holds a ticket up to 120 minutes' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-I4/run-slot.test.cjs, with run-slot.cjs:76 'return now - dispatched < REVIEW_CAP_MS ? null : ' made 'return false ? null : '; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-merge-slot-queues-tickets-across-worktrees:5"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='a live job in a worktree with no ticket is the head' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-I5/run-slot.test.cjs, with run-slot.cjs:114 '&& liveJob(entry.path))' made '&& false)'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-merge-slot-queues-tickets-across-worktrees:6"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='two processes taking at once both land in the queue' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-I6/run-slot.test.cjs, with state-store.cjs:129 'acquire(lockFile, owner, candidate, options.timeoutMs || DEFAULT_LOCK_TIMEOUT_MS, options.label || 'ledger');' made 'void candidate;'; exit 1, the same test on the unmutated scripts exit 0; caught in 6 of 10 runs, the race it names is timing-bound"
+    caught: yes
+  - criterion: "gs-the-merge-slot-queues-tickets-across-worktrees:7"
+    test: "remote-run.sh delta <clone of cdb8f22> node --test --test-name-pattern='tickets queue first come, first served' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-I2/run-slot.test.cjs, with run-slot.cjs:125 'else kept.push({' made 'else kept.unshift({'; exit 1, the same test on the unmutated scripts exit 0"
+    caught: yes
+  - criterion: "gs-the-orchestrator-and-planner-texts-follow:1"
+    test: "remote-run.sh delta <clone of cdb8f22> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'inferno-planner command body is identical', with commands/inferno-planner.md:163 'calls, tests, extends' cut to 'calls, extends'; exit 1, the unmutated run exit 0"
+    caught: yes
+  - criterion: "gs-the-orchestrator-and-planner-texts-follow:2"
+    test: "the three wc -w bounds of the criterion as one check, on a copy of cdb8f22 with 120 words appended to agent.md:111 (3490 words); the check fails, and passes on the restored file"
+    caught: yes
+  - criterion: "gs-the-orchestrator-and-planner-texts-follow:3"
+    test: "the two grep -c counts of the criterion as one check, on a copy of cdb8f22 with planner/agent.md:163 'calls, tests, extends or rewrites' cut to 'calls or rewrites'; the check fails, and passes on the restored file"
+    caught: yes
+  - criterion: "gs-the-orchestrator-and-planner-texts-follow:4"
+    test: "the two grep -c -E counts of at least 3 as one check, on a copy of cdb8f22 with supersede renamed on agent.md:111 (count 2); the check fails, and passes on the restored file"
+    caught: yes
+tree: ea98ea865414dc39d6139370c08911c86c283329b1c98fb933d74dea294d3e37
+commit: cdb8f22f6dc65e75eb7cb4a58e21d1a8baafa491
 reviewer: ab61eed33c7cb1e22
