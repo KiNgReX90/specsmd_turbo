@@ -56,7 +56,6 @@ if (name === 'flaky') {
   process.stdout.write('  2 failed\\n    [chromium] › e2e/one.spec.ts:12:2 › first case\\n    [chromium] › e2e/two.spec.ts:34:2 › second case\\n  7 passed\\n');
   process.exit(1);
 }
-if (name === 'flaky-rerun-red') process.exit(1);
 `);
   commit(tree);
   git(tree, 'checkout', '-qb', BRANCH);
@@ -133,36 +132,22 @@ test('a wall clock that steps back while a command runs still leaves the proof g
   passed(run(f, 'green'));
 });
 
-test('gate accepts one green flake rerun, names every failed case and mints the command proof', (t) => {
+test('gate stays red on a failed command with flake_rerun configured, and mints no proof', (t) => {
+  // A leftover flake_rerun key is read and ignored: a red command stays red and is never rerun.
   const flaky = 'node proof.cjs flaky';
-  const rerun = 'node proof.cjs flaky-rerun-green';
-  const f = fixture(t, config([flaky], [], { [flaky]: ['src/**'] }, { [flaky]: rerun }));
-  const result = run(f, 'gate');
-  passed(result);
-  assert.match(result.out, /FLAKE \d+s node proof\.cjs flaky/);
-  assert.match(result.out, /e2e\/one\.spec\.ts:12:2 › first case/);
-  assert.match(result.out, /e2e\/two\.spec\.ts:34:2 › second case/);
-  assert.deepEqual(ran(f), ['flaky', 'flaky-rerun-green']);
-  passed(run(f, 'green'));
-  passed(run(f, 'gate'));
-  assert.deepEqual(ran(f), ['flaky', 'flaky-rerun-green']);
-});
-
-test('gate stays red when the one configured flake rerun fails', (t) => {
-  const flaky = 'node proof.cjs flaky';
-  const f = fixture(t, config([flaky], [], { [flaky]: ['src/**'] }, { [flaky]: 'node proof.cjs flaky-rerun-red' }));
+  const f = fixture(t, config([flaky], [], { [flaky]: ['src/**'] }, { [flaky]: 'node proof.cjs flaky-rerun-green' }));
   const result = run(f, 'gate');
   assert.equal(result.code, 2, result.out + result.err);
-  assert.deepEqual(ran(f), ['flaky', 'flaky-rerun-red']);
-  assert.equal(run(f, 'green').code, 3);
-});
-
-test('gate does not rerun a failed command without a flake entry', (t) => {
-  const flaky = 'node proof.cjs flaky';
-  const f = fixture(t, config([flaky]));
-  const result = run(f, 'gate');
-  assert.equal(result.code, 2, result.out + result.err);
+  assert.match(result.out, /FAIL \d+s node proof\.cjs flaky/);
+  assert.match(result.out, /IGNORED verification\.flake_rerun: a red command stays red/);
+  assert.doesNotMatch(result.out, /FLAKE/);
   assert.deepEqual(ran(f), ['flaky']);
+  assert.equal(run(f, 'green').code, 3);
+  const detached = run(f, 'gate', '--detach');
+  passed(detached);
+  assert.match(detached.out, /IGNORED verification\.flake_rerun: a red command stays red/);
+  assert.equal(run(f, 'gate', '--wait').code, 2);
+  assert.deepEqual(ran(f), ['flaky', 'flaky']);
   assert.equal(run(f, 'green').code, 3);
 });
 

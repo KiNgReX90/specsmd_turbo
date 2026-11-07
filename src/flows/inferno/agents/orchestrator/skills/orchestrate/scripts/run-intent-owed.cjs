@@ -5,12 +5,14 @@
  *
  * The review binds the whole tree by content (`proofs.scopeHash` with no scope), which leaves
  * out `.specs-inferno/`: a ledger commit, the review file itself and an archive move keep it
- * current, and any code change voids it. The gate checks it after its fold, so it never proves
+ * current, and any code change voids it, except a change to a `review.outside` kb that the
+ * base synced and the intent never touched (outsideHash). The gate checks it after its fold, so it never proves
  * a tree the reviewer did not read, and green checks it before every merge, which is the one
  * call both hosts and a hand merge make.
  */
 
 const fs = require('fs');
+const { createHash } = require('crypto');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
@@ -19,6 +21,8 @@ const { intentOf } = require('./run-worktrees.cjs');
 const { parseIntentReview } = require('./run-intent-review-file.cjs');
 const { itemProofs } = require('./run-mutant-coverage.cjs');
 const { intentReviewCall, scanCall } = require('./run-call.cjs');
+const { resolveBase } = require('./run-intents.cjs');
+const { reviewOutside } = require('./run-config-gates.cjs');
 
 const { RunError } = lib;
 
@@ -81,6 +85,42 @@ function parseFor(tree, rel, intentId, recorded) {
 }
 
 /**
+ * The tree hash that leaves out the kb the base synced, or null when `review.outside` is unset.
+ * A kb path is left out only while the branch holds the base's version of it: one that differs
+ * from the merge base of the base or of origin's base, or is dirty, is the intent's own edit and
+ * stays in, so a doubtful path voids the review rather than keeps it.
+ */
+function outsideHash(tree, config) {
+  const globs = reviewOutside(config || {});
+  if (globs.length === 0) return null;
+  const base = resolveBase(config, null, tree);
+  // A base that is the tree's own branch moves with it, so no diff tells its kb edits from a sync.
+  if (base === lib.currentBranch(tree)) return null;
+  const refs = [base];
+  if (lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}`], { tolerate: true })) refs.push(`origin/${base}`);
+  const reads = [
+    ['diff', '--name-only', '--no-renames', '-z', 'HEAD'], ['ls-files', '--others', '--exclude-standard', '-z'],
+    ...refs.map((ref) => ['diff', '--name-only', '--no-renames', '-z', `${ref}...HEAD`]),
+  ];
+  const own = new Set();
+  for (const args of reads) {
+    const out = lib.git(tree, args, { tolerate: true });
+    if (out === null) return null; // a base it cannot diff leaves the kb in: the review is judged by the whole tree
+    for (const file of out.split('\0').filter(Boolean)) own.add(file);
+  }
+  // The intent's own kb paths are named too: a page it deleted is in no hash of the files that exist.
+  const kb = [...own].filter((file) => lib.matchesAny(file, globs)).sort();
+  const hash = proofs.scopeHash(tree, null, { skip: (file) => lib.matchesAny(file, globs) && !own.has(file) });
+  return createHash('sha256').update(JSON.stringify([hash, kb])).digest('hex');
+}
+
+/** The review reads the tree as it stands, whole or with the kb the base synced left out. */
+function reviewCurrent(tree, config, review) {
+  if (review.tree === proofs.scopeHash(tree)) return true;
+  return typeof review.tree_outside === 'string' && review.tree_outside === outsideHash(tree, config);
+}
+
+/**
  * The review as it holds for the tree: `owed` lists every reason it does not, empty when a
  * recorded review reads clean for the current content.
  */
@@ -102,7 +142,7 @@ function intentReviewState(tree, config, intentId) {
     if (!(error instanceof RunError)) throw error;
     return { rel, review: null, owed: [...owed, error.message] };
   }
-  if (review.tree !== proofs.scopeHash(tree)) {
+  if (!reviewCurrent(tree, config, review)) {
     owed.push(`the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`);
   } else if (review.verdict !== 'clean') {
     owed.push('the review says fix and its findings are not fixed');
@@ -164,5 +204,6 @@ function mergeOwed(tree, config, intentId) {
 }
 
 module.exports = {
-  gateRefusal, intentFor, intentItems, intentReviewPath, intentReviewState, mergeOwed, parseFor, scanOwed, scanPath,
+  gateRefusal, intentFor, intentItems, intentReviewPath, intentReviewState, mergeOwed, outsideHash, parseFor, reviewCurrent,
+  scanOwed, scanPath,
 };

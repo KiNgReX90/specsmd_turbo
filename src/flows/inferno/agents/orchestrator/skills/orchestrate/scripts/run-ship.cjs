@@ -13,6 +13,9 @@
  * `run.cjs teardown` is ship's last step on its own, for the host that merges by hand and
  * for a worktree an interrupted ship left standing. It removes nothing the base branch
  * does not already hold.
+ *
+ * Both end with the host's `verification.ship_cleanup`, when set: one command run from the primary
+ * checkout once the tree and branch are gone. Its failure prints a line and never undoes the ship.
  */
 
 const fs = require('fs');
@@ -23,6 +26,10 @@ const { resolveBase } = require('./run-intents.cjs');
 const { intentOf, worktreeEntries } = require('./run-worktrees.cjs');
 const { green } = require('./run-gate.cjs');
 const { linkedTree, loadOwnership, stopOwnedProcesses } = require('./run-processes.cjs');
+const gates = require('./run-config-gates.cjs');
+
+const { mergeSlot } = gates;
+const slot = require('./run-slot.cjs');
 
 const { RunError } = lib;
 const TERMINAL = new Set(['completed', 'done']);
@@ -99,6 +106,7 @@ function ship(intentId, options) {
   out.push(`merged ${branch} into ${base} as ${sha}`);
 
   const left = [];
+  let cleanup = null;
   try {
     // (4) Push, and (5) prove the merge is an ancestor of what the base now points at.
     if (remote) {
@@ -113,29 +121,59 @@ function ship(intentId, options) {
     out.push(`${base} verified against ${target}`);
 
     // (6) Teardown, safe because step 5 proved the work is reachable from the base branch.
-    removeWorktree(primary, tree, branch, out, left, options);
+    cleanup = removeWorktree(primary, tree, branch, out, left, options, gates.shipCleanup(config));
   } catch (error) {
     out.push(`${error.message}`, `left to do: ${left.join('; ')}`);
     return { exit: 2, payload: { ok: false, step: 'after-merge', sha, left }, out };
   }
 
   out.push('shipped');
-  return { exit: 0, payload: { ok: true, intent: intentId, branch, base, sha, tip }, out };
+  return { exit: 0, payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup }, out };
 }
 
 /**
- * Stop the processes the run registered in the worktree, remove it, delete its branch. A
- * process that merely sits in the tree is never signalled; see run-processes.cjs. `left` names
- * what a failure leaves owed.
+ * Stop the processes the run registered in the worktree, remove it, delete its branch, then run
+ * the host's ship cleanup when one is set. A process that merely sits in the tree is never
+ * signalled; see run-processes.cjs. `left` names what a failure leaves owed. Returns the
+ * cleanup's `{ code, log }`, or null without one.
  */
-function removeWorktree(primary, tree, branch, out, left, options) {
+function removeWorktree(primary, tree, branch, out, left, options, command) {
+  // The base holds the branch's work, so its merge slot ticket goes first: a failed removal never holds the slot.
   left.push(`git -C ${primary} worktree remove ${tree}`, `git -C ${primary} branch -d ${branch}`);
+  if (mergeSlot(lib.readConfig(primary, options.config))) slot.release(primary, branch);
+  if (command) left.push(`INFERNO_BRANCH=${branch} INFERNO_TREE=${tree} ${command} (in ${primary})`);
   const killed = stopOwnedProcesses(loadOwnership(tree), options.processTransport);
   if (killed.length > 0) out.push(`stopped ${killed.length} process(es) in the worktree`);
   lib.git(primary, ['worktree', 'remove', tree]);
   left.shift();
   lib.git(primary, ['branch', '-d', branch]);
   left.shift();
+  if (!command) return null;
+  const cleanup = shipCleanup(primary, tree, branch, command, out);
+  left.shift();
+  return cleanup;
+}
+
+/**
+ * Run the host's ship cleanup from the primary checkout, with the branch and the tree in its
+ * environment. Its log sits in the primary's cache, outside the branch's folder the host removes.
+ * Nothing here throws: the ship already stands, so a failure is one printed line.
+ */
+function shipCleanup(primary, tree, branch, command, out) {
+  let log = null;
+  try {
+    // runShell inherits this one-shot process's environment.
+    Object.assign(process.env, { INFERNO_BRANCH: branch, INFERNO_TREE: path.resolve(tree) });
+    log = path.join(lib.cacheDir(primary), 'ship-cleanup', `${branch.replace(/[^A-Za-z0-9._-]/g, '-')}-${lib.stamp()}.log`);
+    const run = lib.runShell(command, primary, log);
+    const said = fs.readFileSync(log, 'utf8').split('\n').map((line) => line.trim()).filter(Boolean).pop() || '(no output)';
+    if (run.code === 0) out.push(`ship cleanup: ${said}`);
+    else out.push(`ship cleanup exited ${run.code}: ${said}`, `log ${log}`);
+    return { code: run.code, log };
+  } catch (error) {
+    out.push(`ship cleanup failed: ${error.message}`);
+    return { code: null, log };
+  }
 }
 
 /**
@@ -165,7 +203,8 @@ function teardown(options) {
     throw new RunError(`refusing to tear down ${tree}: it carries ${dirty.slice(0, 5).join(', ')}`, 'DIRTY');
   }
 
-  const base = options.base || resolveBase(lib.readConfig(primary, options.config), null, primary);
+  const config = lib.readConfig(primary, options.config);
+  const base = options.base || resolveBase(config, null, primary);
   const remote = lib.git(primary, ['remote'], { tolerate: true });
   if (remote) lib.git(primary, ['fetch', '--quiet', 'origin', base], { tolerate: true });
   const target = remote ? `origin/${base}` : base;
@@ -176,14 +215,15 @@ function teardown(options) {
 
   const out = [];
   const left = [];
+  let cleanup = null;
   try {
-    removeWorktree(primary, tree, branch, out, left, options);
+    cleanup = removeWorktree(primary, tree, branch, out, left, options, gates.shipCleanup(config));
   } catch (error) {
     out.push(`${error.message}`, `left to do: ${left.join('; ')}`);
     return { exit: 2, payload: { ok: false, tree, branch, left }, out };
   }
   out.push(`removed ${tree}`, `deleted ${branch}`);
-  return { exit: 0, payload: { ok: true, tree, branch, base, tip }, out };
+  return { exit: 0, payload: { ok: true, tree, branch, base, tip, cleanup }, out };
 }
 
 module.exports = { ship, teardown };

@@ -5,8 +5,9 @@ intent: a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-st
 kind: docs-only
 complexity: medium
 mode: autopilot
-status: pending
-depends_on: [gs-supersede-proves-the-running-lanes-stopped]
+status: completed
+completed_at: 2026-11-07T00:25:41Z
+depends_on: [gs-supersede-proves-the-running-lanes-stopped, gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone]
 created: 2026-11-06
 ---
 
@@ -23,6 +24,7 @@ The texts for plan items 2a to 2g, and plan item 2h. Every behaviour named here 
    Keep every sentence the inferno-flow test pins (`src/__tests__/unit/inferno/inferno-flow.test.ts:233-240`).
 2. **Codex orchestrator.** The same facts in `src/flows/inferno/codex/skills/specsmd-inferno/references/procedure.md:133`, every call with `--config .specs-inferno/config.codex.yaml`.
 3. **Script map and config template.** `src/flows/inferno/agents/orchestrator/skills/orchestrate/SKILL.md:13` names the `slot` command and `gate --detach --supersede` and `--lanes-only`. `src/flows/inferno/agents/orchestrator/config.example.yaml` documents, commented out beside the lanes (:45-64), `verification.merge_slot`, `review.outside` and each lane's `accept_check`, `stop` and `red_line`, one comment line each saying what the key switches on and that a host without it runs as before. `src/flows/inferno/README.codex.md:46` adds `slot` to the commands `--config` applies to.
+   The same block documents `verification.ship_cleanup`, commented out under `verification:`, in one comment line: the host command ship and teardown run from the primary checkout once the worktree and branch are gone, with `INFERNO_BRANCH` and `INFERNO_TREE` set, whose failure prints its line and never undoes the ship (`S/run-ship.cjs` from `gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone`).
 4. **Planner.** In `src/flows/inferno/agents/planner/agent.md:163` and its copy `src/flows/inferno/commands/inferno-planner.md:163`, replace "A file shared with a pending intent is intent-level `depends_on_intents`, which may point at an `on_hold` intent but never at a completed one and never in a cycle." with "A file shared with a pending intent is an intent-level `depends_on_intents` edge only when the later intent calls, tests, extends or rewrites what the earlier adds; it may point at an `on_hold` intent, never at a completed one or in a cycle."
 
 Budget: measured on Skoft_CRA on 2026-11-06, the Claude orchestrator loads 4887 of 5000 words with `agent.md` at 3285 and the Claude planner 4474 of 4500 with `commands/inferno-planner.md` at 3111; `gs-no-flake-rerun-passes-as-proof` already cut about 29 words from step 1. No date, counted duration or tally enters any of these files: the slot's bounds are the script's.
@@ -65,6 +67,7 @@ ownership:
     - src/flows/inferno/README.codex.md
     - src/flows/inferno/agents/planner/agent.md
     - src/flows/inferno/commands/inferno-planner.md
+    - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-printed-calls.test.cjs
 probes:
     - run: "grep -c 'A file shared with a pending intent is intent-level' src/flows/inferno/commands/inferno-planner.md"
       shows: "1"
@@ -81,3 +84,4 @@ probes:
 ## Dependencies
 
 - gs-supersede-proves-the-running-lanes-stopped
+- gs-ship-runs-the-host-cleanup-once-the-worktree-is-gone

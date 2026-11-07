@@ -2,9 +2,13 @@
 
 /**
  * Test fixtures for the smoke and Windows lanes: a throwaway host repo on an intent branch whose
- * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | file>`. `wait`
- * holds until the release file exists, `movewait` then writes an in-scope file, and `file` exits
- * with the code written to the code file outside the tree.
+ * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | redwait | file>`.
+ * `wait` holds until the release file exists, `movewait` then writes an in-scope file, `redwait`
+ * first prints a product red class line and then holds like `wait`, and `file` exits
+ * with the code written to the code file outside the tree. Every lane run appends its name and
+ * INFERNO_GATE_CONFIG to the lane-env file outside the tree. A lane's `accept_check` stub,
+ * `node check.cjs <exit>`, writes its INFERNO_* environment to the check-env file outside the
+ * tree, prints its verdict as its last line and exits with that code.
  */
 
 const assert = require('node:assert/strict');
@@ -36,10 +40,14 @@ function commit(tree, message = 'change') {
   git(tree, 'commit', '-qm', message);
 }
 
-/** A config whose lanes are the stub commands above, one `<lane>: <token>` entry each. */
-function config(lanes = { smoke: '0' }, finalize = [whole], scope = ['src/**']) {
+/**
+ * A config whose lanes are the stub commands above, one `<lane>: <token>` entry each; `extra`
+ * adds raw keys to a lane, as `{ smoke: { accept_check: 'node check.cjs 0' } }`.
+ */
+function config(lanes = { smoke: '0' }, finalize = [whole], scope = ['src/**'], extra = {}) {
+  const keys = (name) => Object.entries(extra[name] || {}).map(([key, value]) => `    ${key}: ${value}\n`).join('');
   const blocks = Object.entries(lanes).map(([name, code]) =>
-    `  ${name}:\n    command: node lane.cjs ${name} ${code}\n    scope: ${JSON.stringify(scope)}\n`).join('');
+    `  ${name}:\n    command: node lane.cjs ${name} ${code}\n    scope: ${JSON.stringify(scope)}\n${keys(name)}`).join('');
   return `delivery:\n  base_branch: main\nverification:\n  finalize:\n${finalize.map((c) => `    - ${c}\n`).join('')}${blocks}`;
 }
 
@@ -59,7 +67,7 @@ function fixture(t, source = config()) {
   write(tree, 'src/input.txt', 'one\n');
   write(tree, 'docs/readme.txt', 'one\n');
   const code = path.join(dir, 'code');
-  write(tree, DEFAULT, source.replace(/ (wait|movewait)\n/g, ` $1 ${release}\n`).replace(/ file\n/g, ` file ${code}\n`));
+  write(tree, DEFAULT, source.replace(/ (wait|movewait|redwait)\n/g, ` $1 ${release}\n`).replace(/ file\n/g, ` file ${code}\n`));
   write(tree, 'proof.cjs', `const fs = require('node:fs');
 fs.appendFileSync('.runs', process.argv[2] + '\\n');
 if (process.argv[2] === 'red') process.exit(1);
@@ -67,16 +75,29 @@ if (process.argv[2] === 'red') process.exit(1);
   write(tree, 'lane.cjs', `const fs = require('node:fs');
 const [name, code, release] = process.argv.slice(2);
 fs.appendFileSync('.lane-runs', name + '\\n');
-if (code === 'wait' || code === 'movewait') {
+fs.appendFileSync('../lane-env', name + ' ' + (process.env.INFERNO_GATE_CONFIG || '') + '\\n');
+if (code === 'redwait') console.log('PRODUCT RED demo: red on the branch');
+if (code === 'wait' || code === 'movewait' || code === 'redwait') {
   while (!fs.existsSync(release) && fs.existsSync('lane.cjs')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   if (code === 'movewait') fs.writeFileSync('src/moved.txt', 'moved\\n');
   process.exit(0);
 }
 process.exit(Number(code === 'file' ? fs.readFileSync(release, 'utf8') : code));
 `);
+  write(tree, 'check.cjs', `const { writeFile } = require(${JSON.stringify(path.join(__dirname, 'test-write.cjs'))});
+const code = Number(process.argv[2]);
+const seen = Object.keys(process.env).filter((key) => key.startsWith('INFERNO_')).sort();
+writeFile('../check-env', seen.map((key) => key + '=' + process.env[key] + '\\n').join(''));
+console.log('reading the lane log');
+console.log(code === 0 ? 'the lane closed on its own line' : 'no closing line in the lane log');
+console.log('');
+process.exit(code);
+`);
   commit(tree, 'fixture');
   git(tree, 'checkout', '-qb', BRANCH);
-  return { tree, release, code, cache: path.join(dir, 'cache') };
+  return {
+    tree, release, code, cache: path.join(dir, 'cache'), checkEnv: path.join(dir, 'check-env'), laneEnv: path.join(dir, 'lane-env'),
+  };
 }
 
 function run(f, ...args) {

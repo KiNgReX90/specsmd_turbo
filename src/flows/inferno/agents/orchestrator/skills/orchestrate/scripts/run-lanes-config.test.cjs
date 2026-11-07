@@ -118,3 +118,24 @@ test('select names a live lane job in its running line', { skip: !LINUX }, async
   writeFile(jobFile, JSON.stringify({ pid: child.pid, lane: 'windows', started: new Date().toISOString() }));
   assert.match(run(fixture, ['select']).out, new RegExp(`running alpha {2}windows lane pid ${child.pid} still running since`));
 });
+
+test('accept_check, stop and red_line are optional strings, and a red_line that is no pattern is refused', (t) => {
+  for (const extra of ['    red_line: "("\n', '    accept_check: ""\n', '    stop: ""\n']) {
+    const body = `verification:\n${LANE('smoke')}${extra}`;
+    assert.throws(() => lib.readConfig(configs(t, body)), (error) => {
+      assert.equal(error.code, 'BAD_CONFIG');
+      assert.match(error.message, /accept_check and stop, each one shell command, and red_line, a pattern/);
+      return true;
+    }, body);
+  }
+  const keys = '    accept_check: node scripts/lane-fold.mjs\n    stop: pkill -f lane-runner\n    red_line: "^FAIL \\\\d+"\n';
+  const read = lib.readConfig(configs(t, `verification:\n${LANE('smoke')}${keys}${LANE('windows')}`));
+  assert.deepEqual(read.verification.smoke, {
+    command: 'npm run smoke', scope: ['src/**'], accept_check: 'node scripts/lane-fold.mjs', stop: 'pkill -f lane-runner', red_line: '^FAIL \\d+',
+  });
+  const { configuredLanes } = require('./run-lane-config.cjs');
+  assert.deepEqual(configuredLanes(read), [
+    { name: 'smoke', command: 'npm run smoke', scope: ['src/**'], accept_check: 'node scripts/lane-fold.mjs', stop: 'pkill -f lane-runner', red_line: '^FAIL \\d+' },
+    { name: 'windows', command: 'npm run smoke', scope: ['src/**'] },
+  ]);
+});

@@ -2,7 +2,6 @@
 
 /** Verification commands retain a proof for each unchanged scope. */
 
-const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
@@ -15,6 +14,10 @@ const intentReview = require('./run-intent-owed.cjs');
 const { gateStartCall, gateWaitCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const cases = require('./run-cases.cjs');
+const slot = require('./run-slot.cjs');
+const { mergeSlot } = require('./run-config-gates.cjs');
+const { lanesSince, startLanesOnly } = require('./run-lanes-only.cjs');
+const supersede = require('./run-supersede.cjs');
 
 const { RunError } = lib;
 
@@ -178,43 +181,12 @@ function describe(results) {
     if (entry.result === 'skip') out.push(`SKIP ${entry.command} (no path in scope changed)`);
     else if (entry.result === 'green') out.push(`GREEN ${entry.seconds}s ${entry.command} (unchanged since ${entry.stamp})`);
     else if (entry.result === 'pass') out.push(`PASS ${entry.seconds}s ${entry.command}`);
-    else if (entry.result === 'flake') {
-      out.push(`FLAKE ${entry.seconds}s ${entry.command} -> ${entry.log}`);
-      out.push(...entry.cases.map((name) => `  ${name}`));
-    }
     else {
       out.push(`FAIL ${entry.seconds}s ${entry.command} -> ${entry.log}`);
       out.push(...lib.tail(entry.log, 5));
-      if (entry.rerunLog) {
-        out.push(`FAIL rerun ${entry.rerunCommand} -> ${entry.rerunLog}`);
-        out.push(...lib.tail(entry.rerunLog, 5));
-      }
     }
   }
   return out;
-}
-
-/** The Playwright failure summary names the cases after its count, before the pass count. */
-function failedCases(log) {
-  const lines = fs.readFileSync(log, 'utf8').split('\n');
-  const summary = lines.findIndex((line) => /^  \d+ failed(?: \([^)]+\))?\s*$/.test(line));
-  if (summary < 0) return [];
-  const cases = [];
-  for (const line of lines.slice(summary + 1)) {
-    if (!/^    \[[^\]]+\] › .+/.test(line)) break;
-    cases.push(line.trim());
-  }
-  return cases;
-}
-
-/** A passing rerun proves the original command only while its inputs remain unchanged. */
-function recordFlake(tree, config, selected, command, seconds) {
-  const { file, ...identity } = proofs.commandProof(tree, config, selected, command);
-  const record = { ...identity, stamp: new Date().toISOString(), seconds, branch: lib.currentBranch(tree) };
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const pending = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(pending, `${JSON.stringify(record)}\n`);
-  fs.renameSync(pending, file);
 }
 
 function gateCommands(tree, selected) {
@@ -229,6 +201,12 @@ function gateCommands(tree, selected) {
   return { config, commands };
 }
 
+/** A leftover flake_rerun key from a running session's config is read and ignored, never refused. */
+function ignoredKeys(config) {
+  return config.verification && config.verification.flake_rerun !== undefined
+    ? ['IGNORED verification.flake_rerun: a red command stays red'] : [];
+}
+
 /** Run the finalize commands in this process. `gate` below dispatches between this, --detach and --wait. */
 function gateNow(options) {
   const tree = treeOf(options);
@@ -238,8 +216,8 @@ function gateNow(options) {
   const intent = intentReview.intentFor(tree, options);
   const before = lib.git(tree, ['rev-parse', 'HEAD']);
   const folded = foldBase(tree, base);
-  const shown = [...restored, ...folded];
   const { config, commands } = gateCommands(tree, options.config);
+  const shown = [...restored, ...folded, ...ignoredKeys(config)];
   // The whole branch answers for its tester cases, and for each case its brief says the tester proves.
   const brief = path.join(tree, lib.SPECS_DIR, 'intents', intent, 'brief.md');
   const stale = cases.refusal(tree, config, `${mergeBase(tree, base)}..HEAD`, brief);
@@ -250,32 +228,15 @@ function gateNow(options) {
   if (unreviewed) return unreviewed;
   // Reject a verdict if the inputs change while the gate runs.
   const codeHash = lib.codeTreeHash(tree);
-  const head = lib.git(tree, ['rev-parse', 'HEAD']);
   const started = proofs.scopeHash(tree);
   const definition = JSON.stringify(config.verification);
   const branch = lib.currentBranch(tree);
   const dir = path.join(lib.cacheDir(tree), branch, `gate-${lib.stamp()}`);
 
   const results = [];
-  const unchanged = () => lib.git(tree, ['rev-parse', 'HEAD']) === head &&
-    lib.dirtyPaths(tree).length === 0 && proofs.scopeHash(tree) === started &&
-    JSON.stringify(lib.readConfig(tree, options.config).verification) === definition;
+  // A failed command is red on its first failure: no rerun mints a proof.
   for (const [index, command] of commands.entries()) {
     const result = proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), Boolean(options.force));
-    const rerunCommand = config.verification.flake_rerun && config.verification.flake_rerun[command];
-    if (result.result === 'fail' && rerunCommand) {
-      if (unchanged()) {
-        const rerun = lib.runShell(rerunCommand, tree, path.join(dir, `${index}-rerun.log`));
-        result.rerunCommand = rerunCommand;
-        result.rerunLog = rerun.log;
-        result.seconds += rerun.seconds;
-        if (rerun.code === 0 && unchanged()) {
-          recordFlake(tree, config, options.config, command, result.seconds);
-          result.cases = failedCases(result.log);
-          result.result = 'flake';
-        } else if (!unchanged()) result.moved = true;
-      } else result.moved = true;
-    }
     results.push(result);
     if (result.result === 'fail') {
       const out = [...shown, ...describe(results)];
@@ -305,27 +266,44 @@ function gateNow(options) {
 // wrote "I'll continue when it exits" and the process exited with it, gate and all). So the
 // gate runs as its own detached process and the orchestrator blocks on it in slices that fit
 // the cap: `--wait` exits 0 green, 2 red, 4 still running, and 4 means call it again.
+//
+// With `verification.merge_slot` on, a gate folds and starts only at the head of the merge
+// slot (run-slot.cjs), so an intent behind another folds a base that no longer moves under it.
+// A queued detach exits 4 too, and its `--wait` starts the gate once the ticket is at the head.
 // ---------------------------------------------------------------------------
+
+const QUEUE_POLL_MS = 5000;
+
+const queuedLine = (ahead) => `queued behind ${ahead[0]} (${ahead.length} ahead); nothing folded`;
+
+function queued(tree, ahead, out, next) {
+  return { exit: 4, payload: { queued: true, tree, ahead }, out: [...out, queuedLine(ahead), next] };
+}
 
 function gateDetach(options) {
   const tree = treeOf(options);
   const restored = refuseDirty(tree);
   const { config } = gateCommands(tree, options.config);
   const paths = jobs.jobPaths(tree);
-  const existing = jobs.everyJob(tree).find((job) => jobs.alive(job));
-  if (existing) {
-    throw new RunError(
-      `a ${existing.lane ? `${existing.lane} lane` : 'gate'} is already running for this tree (pid ${existing.pid}, started ${existing.started}); wait for it: ${gateWaitCall(tree)}`,
-      'GATE_RUNNING'
-    );
-  }
+  // A supersede stops the tree's running lanes first and leads the detach with what it proved.
+  if (options.supersede) restored.push(...supersede.supersede(tree, config, options.config, { lanesOnly: Boolean(options.lanes_only) }));
+  else supersede.refusePlain(tree);
 
+  if (options.lanes_only) {
+    const base = options.base || resolveBase(config, null, tree);
+    const since = lanesSince(tree, options.since, base) || mergeBase(tree, base);
+    return startLanesOnly(tree, options, config, restored, changedPaths(tree, since));
+  }
   const intent = intentReview.intentFor(tree, options);
+  if (mergeSlot(config)) {
+    const turn = slot.take(tree, { intent });
+    if (!turn.head) return queued(tree, turn.ahead, [...restored, ...turn.out], `wait with: ${gateWaitCall(tree)}`);
+  }
   const before = lib.git(tree, ['rev-parse', 'HEAD']);
   const base = options.base || resolveBase(config, null, tree);
   const foldLines = foldBase(tree, base);
-  const folded = [...restored, ...foldLines];
   const current = gateCommands(tree, options.config).config;
+  const folded = [...restored, ...foldLines, ...ignoredKeys(current)];
   // Refused here too, or the child dies refusing and --wait reports a gate with no result.
   const unreviewed = intentReview.gateRefusal(tree, current, intent, before, folded);
   if (unreviewed) return unreviewed;
@@ -336,7 +314,9 @@ function gateDetach(options) {
   if (options.config) args.push('--config', options.config);
   if (options.force) args.push('--force');
   // The gate is a process the run launched in its worktree, so teardown may stop it.
-  const job = jobs.detach(tree, args, paths, { config: options.config || `${lib.SPECS_DIR}/config.yaml`, lanes: laneStart.started });
+  const job = jobs.detach(tree, args, paths, {
+    config: options.config || `${lib.SPECS_DIR}/config.yaml`, lanes: laneStart.started, head: lib.git(tree, ['rev-parse', 'HEAD']),
+  });
   return {
     exit: 0,
     payload: { started: true, folded: foldLines.length > 0, ...job },
@@ -359,8 +339,34 @@ function finished(job) {
   };
 }
 
+/**
+ * gate --wait under the merge slot: block while the tree's ticket waits behind the head, then
+ * start the gate at the head unless one started since the ticket was taken. Returns the result
+ * to print instead of the wait, or the lines that lead the wait; a tree with no ticket waits as today.
+ */
+function slotWait(tree, options, deadline) {
+  slot.renew(tree);
+  const out = [];
+  let turn = slot.standing(tree);
+  for (; turn.ticket && turn.ahead.length > 0; turn = slot.standing(tree)) {
+    out.push(...turn.out);
+    if (Date.now() >= deadline) return { result: queued(tree, turn.ahead, out, `call ${gateWaitCall(tree)} again`) };
+    jobs.sleepSync(Math.min(QUEUE_POLL_MS, Math.max(1, deadline - Date.now())));
+  }
+  out.push(...turn.out);
+  if (!turn.ticket) return { lead: out };
+  const job = jobs.readJson(jobs.jobPaths(tree).job);
+  if (job && Date.parse(job.started) >= Date.parse(turn.ticket.taken)) return { lead: out };
+  const started = gateDetach(options);
+  if (started.exit !== 0) return { result: { ...started, out: [...out, ...started.out] } };
+  return { lead: [...out, ...started.out.filter((line) => !line.startsWith('wait with: '))] };
+}
+
 function gateWait(options) {
   const tree = treeOf(options);
+  const deadline = Date.now() + Number(options.minutes || 9) * 60000;
+  const turn = mergeSlot(lib.readConfig(tree, options.config)) ? slotWait(tree, options, deadline) : { lead: [] };
+  if (turn.result) return turn.result;
   const job = jobs.readJson(jobs.jobPaths(tree).job);
   if (!job) {
     throw new RunError(`no gate has been started for this tree; start one with ${gateStartCall(tree)}`, 'NO_GATE_JOB');
@@ -370,12 +376,15 @@ function gateWait(options) {
   if (selected !== configured) {
     throw new RunError(`the started gate uses config ${job.config}. Wait with the same --config file.`, 'GATE_CONFIG');
   }
-  const deadline = Date.now() + Number(options.minutes || 9) * 60000;
-  return lanes.waitAll(job, options, deadline, () => finished(job));
+  return lanes.waitAll(job, options, deadline, () => finished(job), turn.lead);
 }
 
 function gate(options) {
   if (options.detach && options.wait) throw new RunError('gate takes --detach or --wait, not both', 'BAD_ARGS', 1);
+  if (options.lanes_only && !options.detach) throw new RunError('gate takes --lanes-only only with --detach', 'BAD_ARGS', 1);
+  if (options.since && !options.lanes_only) throw new RunError('gate takes --since only with --detach --lanes-only', 'BAD_ARGS', 1);
+  if (options.holder && !options.lanes_only) throw new RunError('gate takes --holder only with --detach --lanes-only', 'BAD_ARGS', 1);
+  if (options.supersede && !options.detach) throw new RunError('gate takes --supersede only with --detach', 'BAD_ARGS', 1);
   if (options.lane) return lanes.laneNow(options);
   if (options.detach) return gateDetach(options);
   if (options.wait) return gateWait(options);

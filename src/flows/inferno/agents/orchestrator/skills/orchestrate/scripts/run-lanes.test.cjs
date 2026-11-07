@@ -5,7 +5,7 @@ const path = require('node:path');
 const { writeFile } = require('./test-write.cjs');
 
 const {
-  BRANCH, acceptLine, commit, config, fixture, gated, git, harnessFix, laneRuns, passed, red, run, touch, write,
+  BRANCH, acceptLine, cacheOf, commit, config, fixture, gated, git, harnessFix, laneRuns, passed, red, run, touch, whole, write,
 } = require('./run-lanes-fixture.cjs');
 
 test('a lane starts only when the branch touched its scope', (t) => {
@@ -39,6 +39,19 @@ test('gate --wait exits 4 while a lane runs and 0 once the gate and every lane a
   passed(done);
   assert.match(done.out, /GREEN lane smoke/);
   assert.match(done.out, /GREEN lane windows/);
+});
+
+test('with a windows lane configured, a green smoke run holds for green and for the next gate', (t) => {
+  const f = fixture(t, config({ smoke: '0', windows: '0' }));
+  touch(f);
+  passed(gated(f));
+  // green reads the smoke proof under the key the lane minted, folded windows lane and all.
+  passed(run(f, 'green'));
+  const again = run(f, 'gate', '--detach');
+  passed(again);
+  assert.match(again.out, /GREEN lane smoke \(unchanged since [^)]+\)/);
+  passed(run(f, 'gate', '--wait', '--minutes', '0.5'));
+  assert.deepEqual(laneRuns(f).sort(), ['smoke', 'windows']);
 });
 
 test('gate --wait exits 2 on a product red lane and on a red gate', (t) => {
@@ -213,4 +226,88 @@ test('smoke --accept binds only the tree the instrument red ran on', (t) => {
   const verdict = run(f, 'green', '--json');
   assert.equal(verdict.code, 3);
   assert.deepEqual(JSON.parse(verdict.out).owed, ['smoke']);
+});
+
+/** Every file under `dir` whose name ends with `suffix`. */
+function filesEnding(dir, suffix) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { recursive: true }).map(String).filter((file) => file.endsWith(suffix));
+}
+
+const checked = (exit) => config({ smoke: '11' }, [whole], ['src/**'], { smoke: { accept_check: `node check.cjs ${exit}` } });
+
+test("accept runs the lane's accept_check and refuses on its non-zero exit, writing no record", (t) => {
+  const f = fixture(t, checked(1));
+  touch(f);
+  const fix = harnessFix(f);
+  assert.equal(gated(f).code, 3);
+  const refused = run(f, 'smoke', '--accept', '--harness-fix', fix);
+  assert.equal(refused.code, 2, refused.out + refused.err);
+  assert.match(refused.err, /refused: the smoke lane's accept_check exited 1: no closing line in the lane log$/m);
+  assert.match(refused.err, /^log \S+lane-smoke-accept-\S+\.log$/m);
+  assert.deepEqual(filesEnding(f.cache, '.instrument-red'), []);
+  assert.equal(run(f, 'green').code, 3);
+});
+
+test('an accept_check that exits 0 accepts and saw the lane, its run, its log and the config', (t) => {
+  const f = fixture(t, checked(0));
+  touch(f);
+  const fix = harnessFix(f);
+  assert.equal(gated(f).code, 3);
+  passed(run(f, 'smoke', '--accept', '--harness-fix', fix));
+  const result = JSON.parse(fs.readFileSync(path.join(cacheOf(f), 'lane-smoke-job.result.json'), 'utf8'));
+  const seen = fs.readFileSync(f.checkEnv, 'utf8').split('\n');
+  for (const line of ['INFERNO_LANE=smoke', `INFERNO_LANE_RUN=${result.run}`, `INFERNO_LANE_LOG=${result.log}`,
+    'INFERNO_GATE_CONFIG=.specs-inferno/config.yaml']) {
+    assert.ok(seen.includes(line), `${line} not in ${seen.join(' | ')}`);
+  }
+  passed(run(f, 'green'));
+});
+
+test('the smoke proof changes when the windows lane\'s command or scope changes, and with no windows lane, as the windows lane itself, keys as before', (t) => {
+  const lib = require('./run-lib.cjs');
+  const proofs = require('./run-proofs.cjs');
+  const { laneProof } = require('./run-lanes.cjs');
+  const { configuredLanes } = require('./run-lane-config.cjs');
+  const f = fixture(t, config({ smoke: '0', windows: '0' }));
+  const before = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = f.cache;
+  t.after(() => {
+    if (before === undefined) delete process.env.XDG_CACHE_HOME;
+    else process.env.XDG_CACHE_HOME = before;
+  });
+  write(f.tree, 'win/run.txt', 'one\n');
+  commit(f.tree, 'windows input');
+  const both = lib.readConfig(f.tree);
+  // The windows lane covers a path the smoke lane does not, so its scope shows in the smoke key.
+  both.verification.windows.scope = ['win/**'];
+  const smoke = configuredLanes(both).find((lane) => lane.name === 'smoke');
+  const other = structuredClone(both);
+  other.verification.windows.command = 'node lane.cjs windows 11';
+  const wider = structuredClone(both);
+  wider.verification.windows.scope = ['win/**', 'docs/**'];
+  const none = structuredClone(both);
+  delete none.verification.windows;
+  const plain = proofs.commandProof(f.tree, {}, null, smoke.command, smoke.scope).file;
+  const first = laneProof(f.tree, null, smoke, both);
+  assert.notEqual(first.file, laneProof(f.tree, null, smoke, other).file);
+  assert.notEqual(first.file, laneProof(f.tree, null, smoke, wider).file);
+  assert.notEqual(first.file, plain);
+  assert.equal(laneProof(f.tree, null, smoke, none).file, plain);
+  const win = configuredLanes(both).find((lane) => lane.name === 'windows');
+  assert.equal(laneProof(f.tree, null, win, both).file, proofs.commandProof(f.tree, {}, null, win.command, win.scope).file);
+  write(f.tree, 'win/run.txt', 'two\n');
+  assert.notEqual(laneProof(f.tree, null, smoke, both).hash, first.hash);
+});
+
+test('the lane command sees INFERNO_GATE_CONFIG', (t) => {
+  const f = fixture(t);
+  touch(f);
+  passed(gated(f));
+  const lines = () => fs.readFileSync(f.laneEnv, 'utf8').trim().split('\n');
+  assert.equal(lines().pop(), 'smoke .specs-inferno/config.yaml');
+  write(f.tree, '.specs-inferno/config.codex.yaml', `delivery:\n  base_branch: main\nverification:\n  finalize:\n    - ${whole}\n`);
+  commit(f.tree, 'host config');
+  passed(gated(f, '--config', '.specs-inferno/config.codex.yaml'));
+  assert.equal(lines().pop(), 'smoke .specs-inferno/config.codex.yaml');
 });

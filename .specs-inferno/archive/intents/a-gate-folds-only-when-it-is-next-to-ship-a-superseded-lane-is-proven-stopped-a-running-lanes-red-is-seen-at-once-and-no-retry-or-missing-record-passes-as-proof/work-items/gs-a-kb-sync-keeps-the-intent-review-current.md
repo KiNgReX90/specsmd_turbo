@@ -5,7 +5,8 @@ intent: a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-st
 kind: behavior
 complexity: high
 mode: autopilot
-status: pending
+status: completed
+completed_at: 2026-11-06T18:44:49Z
 depends_on: []
 created: 2026-11-06
 ---

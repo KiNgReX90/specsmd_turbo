@@ -1,0 +1,55 @@
+item: gs-accept-asks-the-host-check-and-the-smoke-proof-binds-windows
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lane-config.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-fixture.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-config.test.cjs
+findings: []
+mutants:
+  - criterion: "the smoke proof key folds the union of both scopes (run-lanes.cjs:41 `const scope = lane.scope;`)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=proof.changes src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "the smoke proof changes when the windows lane's command changes (run-lanes.cjs:42 key without windows.command)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=proof.changes src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "any lane other than smoke keys as today (run-lanes.cjs:39 drops `lane.name === 'smoke' && `, windows folds itself); fails run-lanes.test.cjs:298"
+    test: "remote-run.sh delta <scratch clone of 7bb0b1a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-m39/run-lanes.test.cjs (mutant copy of scripts/, one batch with the baseline)"
+    caught: yes
+  - criterion: "startLanes passes its config (run-lanes.cjs:89 passes {}); fails run-lanes.test.cjs:52, smoke lane started again instead of GREEN unchanged"
+    test: "remote-run.sh delta <scratch clone of 7bb0b1a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-m89/run-lanes.test.cjs (mutant copy of scripts/, one batch with the baseline)"
+    caught: yes
+  - criterion: "laneNow's moved check passes the re-read config (run-lanes.cjs:117 passes {})"
+    test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "describeLane passes its config (run-lanes.cjs:154 passes {})"
+    test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "accept passes its config (run-lanes.cjs:233 passes {})"
+    test: "remote-run.sh delta <tree> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "smokeOwed passes its config (run-lanes.cjs:257 passes {}); fails run-lanes.test.cjs:49, green exits 3 with smoke owed"
+    test: "remote-run.sh delta <scratch clone of 7bb0b1a> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-m257/run-lanes.test.cjs (mutant copy of scripts/, one batch with the baseline)"
+    caught: yes
+  - criterion: "accept runs the lane's accept_check and refuses on its non-zero exit, writing no record (run-lanes.cjs:214 `if (run.code === 0) return;` -> `return;`)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=refuses.on.its.non-zero.exit src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "an accept_check that exits 0 accepts and saw the lane, its run, its log and the config (run-lanes.cjs:210 INFERNO_LANE_RUN set to 'run')"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=exits.0.accepts src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "the lane command sees INFERNO_GATE_CONFIG, the --config file's relative path when one is selected (run-lanes.cjs:114 hard-coded to .specs-inferno/config.yaml)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=sees.INFERNO_GATE_CONFIG src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+  - criterion: "a red_line that is no pattern is refused with BAD_CONFIG (run-lane-config.cjs:38 compiles() dropped)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=are.optional.strings src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-config.test.cjs"
+    caught: yes
+  - criterion: "a lane with accept_check, stop and red_line set is read with all three (run-lane-config.cjs:71 loops over no key)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=are.optional.strings src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-config.test.cjs"
+    caught: yes
+  - criterion: "a lane without accept_check accepts as today (run-lanes.cjs:239 runs acceptCheck unconditionally)"
+    test: "remote-run.sh delta <tree> node --test --test-name-pattern=refuses.a.sha.off.the.base src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.test.cjs"
+    caught: yes
+tree: aeaf5a2c8c9f1b71168eab98630a9b18602fb210dc6fec67fe6ccd355f99c29d
+commit: 381f2df123fdc4a23e162c2cc505ffdb37e6dedc
+reviewer: a49cf9539f77df06e

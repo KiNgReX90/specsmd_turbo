@@ -21,6 +21,8 @@ const { reviewerId } = require('./run-review-file.cjs');
 const owed = require('./run-intent-owed.cjs');
 const { gateStartCall, intentRecordCall, intentReviewCall, itemReviewCall, scanCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
+const { mergeSlot } = require('./run-config-gates.cjs');
+const slot = require('./run-slot.cjs');
 
 const { RunError } = lib;
 
@@ -28,9 +30,10 @@ const short = (tree, ref) => lib.git(tree, ['rev-parse', '--short', ref]);
 
 /**
  * The tree the reviewer was dispatched on. A record binds that tree, so a commit that lands
- * between the dispatch and the record is never recorded as read.
+ * between the dispatch and the record is never recorded as read. The merge slot reads the same
+ * file, so an open dispatch holds the tree's ticket.
  */
-const dispatchPath = (tree) => path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'intent-review-dispatch.json');
+const dispatchPath = slot.reviewDispatchPath;
 
 function readDispatch(tree, intent) {
   try {
@@ -118,7 +121,9 @@ function record(tree, context, commit, restored) {
   const review = owed.parseFor(tree, rel, intent, false);
   const abs = path.join(tree, rel);
   const text = fs.readFileSync(abs, 'utf8');
-  fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${proofs.scopeHash(tree)}\ncommit: ${commit}\nreviewer: ${reviewer}\n`);
+  const outside = owed.outsideHash(tree, context.config);
+  const kept = outside === null ? '' : `tree_outside: ${outside}\n`;
+  fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${proofs.scopeHash(tree)}\n${kept}commit: ${commit}\nreviewer: ${reviewer}\n`);
   lib.git(tree, ['add', '--', rel]);
   lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent}): intent review ${review.verdict}`, '--', rel]);
   const result = verdict(tree, context, review, `intent review ${review.verdict}, recorded at ${short(tree, commit)}`);
@@ -129,6 +134,8 @@ function reviewIntent(options) {
   const tree = options.tree || lib.repoRoot(options.cwd);
   const intent = owed.intentFor(tree, options);
   const config = lib.readConfig(tree, options.config);
+  // Every review call is activity of the tree's merge slot ticket.
+  if (mergeSlot(config)) slot.renew(tree);
   const rel = owed.intentReviewPath(tree, intent);
   const context = { intent, config, rel, reviewer: options.reviewer };
 
@@ -161,7 +168,7 @@ function reviewIntent(options) {
   const folded = [...restored, ...gate.foldBase(tree, base)];
   if (owed.scanOwed(tree, intent)) return scanRefusal(tree, context, folded);
   const state = owed.intentReviewState(tree, config, intent);
-  const current = state.review && state.review.tree === proofs.scopeHash(tree);
+  const current = state.review && owed.reviewCurrent(tree, config, state.review);
   if (current) {
     const head = `intent review ${state.review.verdict} for the current tree (read at ${state.review.commit.slice(0, 7)})`;
     return verdict(tree, context, state.review, `${folded.length ? `${folded[0]}; ` : ''}${head}`);

@@ -88,14 +88,14 @@ function atomicWrite(file, content, options = {}) {
  * lock is removed only under a short guard, so two processes reclaiming the same stale lock
  * cannot remove the lock the first of them just took.
  */
-function acquire(lock, owner, candidate, timeoutMs) {
+function acquire(lock, owner, candidate, timeoutMs, label) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     let guard;
     try { guard = fs.openSync(`${lock}.guard`, 'wx', 0o600); } catch (error) {
       if (error.code !== 'EEXIST') throw error;
       if (Date.now() > deadline) {
-        throw new TransitionError(`the ledger lock recovery guard is held: inspect ${lock}.guard before removing it`, 'STATE_LOCKED');
+        throw new TransitionError(`the ${label} lock recovery guard is held: inspect ${lock}.guard before removing it`, 'STATE_LOCKED');
       }
       sleep(10);
       continue;
@@ -112,8 +112,27 @@ function acquire(lock, owner, candidate, timeoutMs) {
       fs.unlinkSync(`${lock}.guard`);
     }
     if (acquired) return;
-    if (Date.now() > deadline) throw new TransitionError(`the ledger is held by another writer: ${lock}`, 'STATE_LOCKED');
+    if (Date.now() > deadline) throw new TransitionError(`the ${label} is held by another writer: ${lock}`, 'STATE_LOCKED');
     sleep(10);
+  }
+}
+
+/**
+ * Run `fn` holding the lock at `lockFile`, against every process of this machine. `label`
+ * names the held thing in a refusal; the ledger's is the default.
+ */
+function withFileLock(lockFile, fn, options = {}) {
+  const owner = { pid: process.pid, start: processIdentity(process.pid), token: crypto.randomUUID() };
+  const candidate = `${lockFile}.${owner.token}`;
+  fs.writeFileSync(candidate, JSON.stringify(owner), { flag: 'wx', mode: 0o600 });
+  try {
+    acquire(lockFile, owner, candidate, options.timeoutMs || DEFAULT_LOCK_TIMEOUT_MS, options.label || 'ledger');
+    return fn();
+  } finally {
+    try {
+      if (JSON.parse(fs.readFileSync(lockFile, 'utf8')).token === owner.token) fs.unlinkSync(lockFile);
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    fs.rmSync(candidate, { force: true });
   }
 }
 
@@ -121,21 +140,14 @@ function acquire(lock, owner, candidate, timeoutMs) {
 function withStateLock(file, fn, options = {}) {
   const key = canonicalFile(file);
   if (active.has(key)) return fn();
-  const lock = lockPath(key);
-  const owner = { pid: process.pid, start: processIdentity(process.pid), token: crypto.randomUUID() };
-  const candidate = `${lock}.${owner.token}`;
-  fs.writeFileSync(candidate, JSON.stringify(owner), { flag: 'wx', mode: 0o600 });
-  try {
-    acquire(lock, owner, candidate, options.lockTimeoutMs || DEFAULT_LOCK_TIMEOUT_MS);
+  return withFileLock(lockPath(key), () => {
     active.set(key, { generation: digest(key), options, read: false });
-    return fn();
-  } finally {
-    active.delete(key);
     try {
-      if (JSON.parse(fs.readFileSync(lock, 'utf8')).token === owner.token) fs.unlinkSync(lock);
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
-    fs.rmSync(candidate, { force: true });
-  }
+      return fn();
+    } finally {
+      active.delete(key);
+    }
+  }, { timeoutMs: options.lockTimeoutMs, label: 'ledger' });
 }
 
 /** Called by the ledger reader; lets a test act between a transition's read and its write. */
@@ -160,4 +172,4 @@ function writeState(file, lines) {
   return undefined;
 }
 
-module.exports = { afterRead, atomicWrite, canonicalFile, lockPath, withStateLock, writeState };
+module.exports = { afterRead, atomicWrite, canonicalFile, lockPath, withFileLock, withStateLock, writeState };

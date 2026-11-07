@@ -5,7 +5,8 @@ intent: a-gate-folds-only-when-it-is-next-to-ship-a-superseded-lane-is-proven-st
 kind: api
 complexity: medium
 mode: autopilot
-status: pending
+status: completed
+completed_at: 2026-11-06T22:46:33Z
 depends_on: [gs-the-gate-folds-only-at-the-head-of-the-slot]
 created: 2026-11-06
 ---

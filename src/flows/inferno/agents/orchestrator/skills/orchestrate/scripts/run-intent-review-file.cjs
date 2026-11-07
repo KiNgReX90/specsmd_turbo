@@ -15,6 +15,8 @@ const {
 const { mutantGaps } = require('./run-mutant-coverage.cjs');
 
 const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants'];
+/** An intent review also records the hash that leaves out the kb the base synced (review.outside). */
+const INTENT_RECORDED = [...RECORDED_KEYS, 'tree_outside'];
 const CRITERION_KEYS = ['criterion', 'proof', 'where'];
 const PROOFS = ['test', 'code', 'external'];
 const SCANNER_KEYS = ['id', 'answer', 'reason'];
@@ -61,8 +63,8 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
   const doc = readDoc(tree, rel);
   if (!isMap(doc)) throw bad(rel, `an intent review is a map of ${INTENT_KEYS.join(', ')}`);
   for (const key of Object.keys(doc)) {
-    if (INTENT_KEYS.includes(key) || (recorded && RECORDED_KEYS.includes(key))) continue;
-    if (RECORDED_KEYS.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
+    if (INTENT_KEYS.includes(key) || (recorded && INTENT_RECORDED.includes(key))) continue;
+    if (INTENT_RECORDED.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
     throw bad(rel, `unknown key ${key}: an intent review holds ${INTENT_KEYS.join(', ')} only`);
   }
   if (doc.verdict !== 'clean' && doc.verdict !== 'fix') throw bad(rel, 'verdict must be clean or fix');
@@ -82,6 +84,7 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
   return {
     verdict: doc.verdict, criteria, findings, mutants, survivors, scanner,
     tree: typeof doc.tree === 'string' ? doc.tree : null,
+    tree_outside: typeof doc.tree_outside === 'string' ? doc.tree_outside : null,
     commit: typeof doc.commit === 'string' ? doc.commit : null,
     reviewer: recorded ? recordedReviewer(doc) : null,
   };

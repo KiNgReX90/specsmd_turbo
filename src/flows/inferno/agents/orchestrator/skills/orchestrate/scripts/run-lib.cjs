@@ -21,6 +21,7 @@ const { listValues } = require('./state-lists.cjs');
 const { RunError } = require('./run-error.cjs');
 const owned = require('./run-owned.cjs');
 const lanes = require('./run-lane-config.cjs');
+const gates = require('./run-config-gates.cjs');
 const { parseYaml, stripQuotes } = require('./run-yaml.cjs');
 const { validateWiring } = require('./run-wiring.cjs');
 
@@ -195,10 +196,12 @@ function readConfig(root, selected) {
       }
     }
     lanes.inheritLanes(config, defaults);
+    gates.inheritGates(config, defaults);
   }
   config.host = resolveHost(config, file);
   validateRoles(config, file);
   validateVerification(config, file);
+  gates.validateGates(config, file);
   validateWiring(config, wiringFile);
   return config;
 }

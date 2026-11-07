@@ -1,0 +1,19 @@
+item: gs-a-running-lane-red-ends-the-wait
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs
+findings: []
+mutants:
+  - criterion: "a commit after the red line turns the walking lane back to running (run-lanes.cjs:164 'if (red && walked())' becomes 'if (red)')"
+    test: "remote-run.sh delta <clone of 90644e3> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-HM/run-lanes-wait.test.cjs (second wait exited 2 on 'RED lane smoke while it walks', not 4)"
+    caught: yes
+  - criterion: "earlier flaky-test finding: the case holds while the gate is still running at the red (five unchanged runs plus a copy whose finalize is held 1.5 s)"
+    test: "remote-run.sh delta <clone of 90644e3> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts-R1/run-lanes-wait.test.cjs ... scripts-R5/run-lanes-wait.test.cjs scripts-S/run-lanes-wait.test.cjs (6 of 6 pass with after=4; the gate was still running at the red in R2 and S)"
+    caught: yes
+  - criterion: "run-lanes-wait reports 0 fail at 90644e3 (unmutated, same Delta batch)"
+    test: "remote-run.sh delta <clone of 90644e3> node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-wait.test.cjs (12 pass, 0 fail)"
+    caught: yes
+tree: 325e486830a75a5425a386d1420986f79881d25bc053fc752cf8135ce5a4d771
+commit: 90644e3b45e1e7cee3aa1bbabd82a7a8e379e4ab
+reviewer: a58378b54d47f918d

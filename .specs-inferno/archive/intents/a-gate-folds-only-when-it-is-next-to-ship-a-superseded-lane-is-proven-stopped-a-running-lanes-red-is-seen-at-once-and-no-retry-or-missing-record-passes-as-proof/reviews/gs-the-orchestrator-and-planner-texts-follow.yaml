@@ -1,0 +1,34 @@
+item: gs-the-orchestrator-and-planner-texts-follow
+verdict: clean
+files:
+  - src/flows/inferno/README.codex.md
+  - src/flows/inferno/agents/orchestrator/agent.md
+  - src/flows/inferno/agents/orchestrator/config.example.yaml
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/SKILL.md
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-printed-calls.test.cjs
+  - src/flows/inferno/agents/planner/agent.md
+  - src/flows/inferno/codex/skills/specsmd-inferno/references/procedure.md
+  - src/flows/inferno/commands/inferno-planner.md
+findings: []
+mutants:
+  - criterion: "AC1 via run-printed-calls.test.cjs: gateSupersedeCall prints --supersede"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-reporter=tap S/run-printed-calls.test.cjs, with run-call.cjs:68 ['--detach', '--supersede'] cut to ['--detach']"
+    caught: yes
+  - criterion: "AC1 via run-printed-calls.test.cjs: slotCall prints --holder"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-reporter=tap S/run-printed-calls.test.cjs, with run-call.cjs:112 '--holder' made '--for'"
+    caught: yes
+  - criterion: "AC1 date and tally case (inferno-flow.test.ts:385) over the rewritten Finalize step 3"
+    test: "remote-run.sh delta <clone of d93eb74> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'no flow md file carries a date', with agent.md:111 'stopped by its `stop` check.' made '... check within 10 minutes.'"
+    caught: yes
+  - criterion: "Constraint: no em or en dash (inferno-flow.test.ts:366) in the config comments"
+    test: "remote-run.sh delta <clone of d93eb74> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'no file under the flow carries an em or en dash', with an em dash put into config.example.yaml:67"
+    caught: yes
+  - criterion: "AC1 planner drift case (inferno-flow.test.ts:53)"
+    test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'inferno-planner command body is identical', with commands/inferno-planner.md:163 'calls, tests, extends or rewrites' cut to 'calls, tests or rewrites'"
+    caught: yes
+  - criterion: "AC1 gate text case (inferno-flow.test.ts:233)"
+    test: "remote-run.sh delta <clone of 7114510> env -C src npx vitest run __tests__/unit/inferno/inferno-flow.test.ts -t 'the orchestrator waits for the gate through gate --detach', with agent.md:109 'the tree it proves' made 'the tree it checks'"
+    caught: yes
+tree: ba04c25a25637329c3a29814c41dbb9034ded3b717fc3b9564b2384bff15ec31
+commit: d4e50c3d6df62dee795c7e9f231f78b8913276a1
+reviewer: a22408521c02d65a8

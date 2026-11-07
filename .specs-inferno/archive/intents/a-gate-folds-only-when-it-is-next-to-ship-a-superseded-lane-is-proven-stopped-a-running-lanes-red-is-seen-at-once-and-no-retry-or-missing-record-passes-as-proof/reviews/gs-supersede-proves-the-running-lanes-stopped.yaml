@@ -1,0 +1,89 @@
+item: gs-supersede-proves-the-running-lanes-stopped
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-call.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-supersede.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
+findings: []
+mutants:
+  - criterion: "supersede stops a walking lane: the process groups are signalled (run-supersede.cjs:91 process.kill(-group, name) to void group)"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the stop stub saw the old pid (run-supersede.cjs:137 INFERNO_LANE_PID to String(process.pid))"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the stop stub saw INFERNO_LANE=smoke (run-supersede.cjs:137 INFERNO_LANE to 'x')"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "INFERNO_LANE_LOG from the lane's run file (run-supersede.cjs:54 to return job.log), earlier finding"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "INFERNO_GATE_CONFIG is set (run-supersede.cjs:138 to 'x')"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "lane jobs record their head (run-lanes.cjs:101 drop head)"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the gate job records its head (run-gate.cjs:318 drop head)"
+    test: "remote-run.sh delta <clone of d93eb74> node --test S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a fix outside every running lane's scope is refused (run-supersede.cjs:77 if (!touched) to if (false))"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern \"a fix outside every running lane's scope\" S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the scope test reads the lane scope (run-supersede.cjs:76 matchesAny to true)"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern \"a fix outside every running lane's scope\" S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a running lane with no stop is refused before any signal (run-supersede.cjs:70 to if (false))"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'a running lane with no stop is refused before any signal' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a pending supersede blocks a plain detach (run-supersede.cjs:43 to if (false))"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'a failing stop keeps the supersede pending' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a failing stop keeps the supersede pending (run-supersede.cjs:142 to return null)"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'a failing stop keeps the supersede pending' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a running job without head is refused (run-supersede.cjs:64 to if (false))"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'a running job without head is refused' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "--supersede without --detach is BAD_ARGS (run-gate.cjs:387 to if (false))"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'is a usage error, and with no lane running there is nothing to supersede' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "no live lane: nothing to supersede (run-supersede.cjs:60 to if (false))"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'is a usage error, and with no lane running there is nothing to supersede' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a live gate job alone keeps GATE_RUNNING (run-supersede.cjs:61 deleted), earlier finding"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'a running gate with no lane keeps GATE_RUNNING' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the tree's ticket is released before the new detach (run-supersede.cjs:173 deleted), earlier finding"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern \"supersede releases the tree's ticket\" S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a lanes-only supersede keeps the driver's ticket (run-supersede.cjs:173 && !lanesOnly dropped), earlier finding"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern \"a lanes-only supersede keeps the driver's ticket\" S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "gateDetach passes lanes-only into supersede (run-gate.cjs:289 lanesOnly to false), earlier finding"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern \"a lanes-only supersede keeps the driver's ticket\" S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "the plain detach refusal while a lane runs stays (run-supersede.cjs:47 deleted)"
+    test: "remote-run.sh delta <clone of d93eb74> node --test S/run-lanes-wait.test.cjs S/run-gate-cli.test.cjs"
+    caught: yes
+  - criterion: "a child that ignores SIGTERM gets SIGKILL (run-supersede.cjs:129 SIGKILL line deleted), earlier finding"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'a lane child that ignores SIGTERM' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "SIGKILL reaches a group whose leader died (run-supersede.cjs:129 SIGKILL only where jobs.alive(leader), the rule at 7114510), earlier finding"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'a lane child that ignores SIGTERM' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a group is signalled only while it has a member (run-supersede.cjs:100 hasMember to return false)"
+    test: "remote-run.sh delta <clone of d93eb74> node --test --test-name-pattern 'supersede stops a walking lane whose scope the fix touched' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a rerun signals no recorded group that has members and no live job of the tree leads (run-supersede.cjs:172 unknown to [])"
+    test: "remote-run.sh delta <clone of 526eaa7> node --test --test-name-pattern='a rerun never signals a recorded group no job file of the tree names' S/run-supersede.test.cjs"
+    caught: yes
+  - criterion: "a rerun over emptied groups still reruns the stop checks (run-supersede.cjs:128 hasMember(group) && dropped)"
+    test: "remote-run.sh delta <clone of 526eaa7> node --test --test-name-pattern='a failing stop keeps the supersede pending' S/run-supersede.test.cjs"
+    caught: yes
+tree: 82b3dd599cdcddbaea60783ef0245926ea3673665ebb9c394abb1277b336527e
+commit: 2d564226d8776dd404d1b549908c3c3345c60768
+reviewer: abdf00367765f9964
