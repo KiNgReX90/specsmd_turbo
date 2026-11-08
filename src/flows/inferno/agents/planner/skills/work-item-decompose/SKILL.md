@@ -24,6 +24,7 @@ Break an intent into discrete, executable work items for `/specsmd-inferno`.
   <mandate>Each work item MUST include depends_on, context.required, and ownership.editable</mandate>
   <mandate>Behavior, architecture, UI, and API work MUST include context.patterns</mandate>
   <mandate>All work except docs-only and config-only MUST include context.tests</mandate>
+  <mandate>Every load-bearing caveat in decisions.md MUST be INLINED into the `## Caveats` of at least one work item (the item(s) whose code it governs) AND that item MUST list decisions.md in context.required. Caveats are written once in the ledger and carried into the builder-facing item — never flattened away. A dropped caveat is the dominant cause of a confidently-wrong build.</mandate>
   <mandate>Record ownership and dependencies truthfully; never misreport them to manufacture parallelism</mandate>
   <mandate>Quality first, parallelism a close second: when slice boundaries are a free choice, prefer ones that give disjoint ownership and short depends_on chains so multiple builders run at once</mandate>
 </llm>
@@ -59,7 +60,8 @@ Break an intent into discrete, executable work items for `/specsmd-inferno`.
 <flow>
   <step n="1" title="Load Intent">
     <action>Read intent brief from .specs-inferno/intents/{intent-id}/brief.md</action>
-    <action>Understand goal, users, success criteria</action>
+    <action>Read the two ledgers `decisions-capture` wrote: `.specs-inferno/intents/{intent-id}/requirements.md` (the written scope every item must collectively cover) and `.specs-inferno/intents/{intent-id}/decisions.md` (dated decisions + load-bearing caveats + release gates). These are the source of truth — you LINK and INLINE from them, never re-derive or re-summarize.</action>
+    <action>Understand goal, users, success criteria, and the full caveat list (note which are `OPEN`)</action>
     <append_mode>
       When invoked in APPEND mode (an `integrate` outcome from intent-capture's cross-intent overlap check), the target intent already has work items. ALSO read its existing `.specs-inferno/intents/{intent-id}/work-items/*.md` and its `work_items` list in state.yaml. You are ADDING items, not replacing: new work-item ids must not collide with existing ones, and wire each new item's `depends_on` to the existing items it genuinely builds on. In step 8.5 you MERGE the new items into the intent's `work_items` list — never overwrite the existing entries.
     </append_mode>
@@ -107,7 +109,7 @@ Break an intent into discrete, executable work items for `/specsmd-inferno`.
     <action>Set mode: autopilot on every work item</action>
     <note>Execution is always autopilot: builders run as parallel subagents inside the
     orchestrator's intent worktree and cannot pause for user checkpoints. Oversight happens
-    at planning time (under `autonomy.level: review`, the planner's single urgent-only review
+    at planning time (under `mode: production`, the planner's single urgent-only review
     point after decomposition) and at the orchestrator's verified finalize. Complexity from
     step 3 still matters: the orchestrator uses it to pick the worker model tier.</note>
   </step>
@@ -146,8 +148,20 @@ Break an intent into discrete, executable work items for `/specsmd-inferno`.
 
   <step n="6b" title="Cross-Intent Ownership Cross-Check" critical="true">
     <action>Now that ownership is known, cross-check it against the OTHER open intents. Read `.specs-inferno/state.yaml` plus the `ownership.editable` of every non-completed intent's work items (`.specs-inferno/intents/{other-id}/work-items/*.md`).</action>
-    <action>If any of THIS intent's `ownership.editable` paths collide with a `pending` intent's work-item ownership AND this intent is not already integrated into or dependent on it, you have a cross-intent file collision: two intents that edit the same files cannot safely build in arbitrary order across separate worktrees. Record an intent-level dependency — add `depends_on: [<that-intent-id>]` to THIS intent's state.yaml entry and brief — so the orchestrator serializes them. Under `autonomy.level: review` surface the collision and the added dependency; under `full` apply it and note it.</action>
+    <action>If any of THIS intent's `ownership.editable` paths collide with a `pending` intent's work-item ownership AND this intent is not already integrated into or dependent on it, you have a cross-intent file collision: two intents that edit the same files cannot safely build in arbitrary order across separate worktrees. Record an intent-level dependency — add `depends_on: [<that-intent-id>]` to THIS intent's state.yaml entry and brief — so the orchestrator serializes them. Under `mode: production` surface the collision and the added dependency; under `autonomous` apply it and note it.</action>
     <action>Never point the dependency at a `completed` intent and never create a cycle. A genuine same-file integration may instead warrant folding the two intents together — surface that option under `review`.</action>
+  </step>
+
+  <step n="6c" title="Caveat-Survival Check" critical="true">
+    <action>Before presenting the plan, prove that no load-bearing fact was lost in decomposition. Walk EVERY caveat in `decisions.md`. For each, confirm it is INLINED into the `## Caveats` of at least one work item — the item(s) whose code it actually governs — and that those items list `decisions.md` in `context.required`.</action>
+    <action>Also confirm coverage the other way: every FR/NFR in `requirements.md` is covered by at least one work item's acceptance criteria, with nothing silently descoped.</action>
+    <check if="any caveat is unhomed OR any requirement is uncovered">
+      <output>
+        Caveat-survival gap: {caveat-id / requirement-id} is not carried by any work item.
+      </output>
+      <action>This is a decomposition bug, not an acceptable state. Fix it: attach the caveat to the right item (or add the missing item), then re-run this check. Do NOT proceed to write items with an unhomed load-bearing caveat.</action>
+    </check>
+    <note>An `OPEN` caveat is still homed — the build rule tells the builder what NOT to assume (e.g. "no column exists — do not add NOT NULL"). OPEN means unresolved, not droppable.</note>
   </step>
 
   <step n="7" title="Present Plan">
@@ -180,10 +194,13 @@ Break an intent into discrete, executable work items for `/specsmd-inferno`.
         For EACH work item, produce a COMPLETE decision record — every field the
         template `templates/work-item.md.hbs` needs, fully decided: id, title,
         kind, complexity, mode (autopilot), depends_on, description, acceptance
-        criteria, the full `context` manifest (required/patterns/tests with real
-        paths + reasons), `ownership.editable`, optional `finalize_check`, and
-        technical notes. Leave NOTHING for the scribe to decide or infer. These
-        records are the entirety of your decomposition reasoning, serialized.
+        criteria, the `caveats` list (id + build rule, copied verbatim from
+        decisions.md for the caveats that govern this item — empty list if none),
+        the full `context` manifest (required/patterns/tests with real paths +
+        reasons; include `decisions.md` in required whenever the item carries a
+        caveat), `ownership.editable`, optional `finalize_check`, and technical
+        notes. Leave NOTHING for the scribe to decide or infer. These records are
+        the entirety of your decomposition reasoning, serialized.
       </substep>
       <substep n="8.2" title="Create the target directory">
         Create `.specs-inferno/intents/{intent-id}/work-items/`.
@@ -221,7 +238,7 @@ Break an intent into discrete, executable work items for `/specsmd-inferno`.
   </step>
 
   <step n="9" title="Transition">
-    Decomposition ends at writing the items — it never starts the build. After the files are written, hand back to the planner's `<handoff_format>`, which prints the summary, applies the `autonomy.level` review pause, and STOPS. The build is a separate, explicit step the user runs later with `/specsmd-inferno` (or `/schedule-inferno`).
+    Decomposition ends at writing the items — it never starts the build. After the files are written, hand back to the planner's `<handoff_format>`, which prints the summary, applies the `mode` review pause, and STOPS. The build is a separate, explicit step the user runs later with `/specsmd-inferno` (or `/schedule-inferno`).
     <output>
       **{count} work items created** for "{intent-title}".
 
@@ -242,6 +259,8 @@ Break an intent into discrete, executable work items for `/specsmd-inferno`.
 <success_criteria>
   <criterion>Intent decomposed into discrete work items</criterion>
   <criterion>Each work item has clear acceptance criteria</criterion>
+  <criterion>Every load-bearing caveat in decisions.md is inlined into at least one work item's `## Caveats` and that item lists decisions.md in context.required (caveat-survival check passed)</criterion>
+  <criterion>Every requirement in requirements.md is covered by a work item's acceptance criteria; nothing silently descoped</criterion>
   <criterion>Complexity assessed for each item</criterion>
   <criterion>Every work item has mode: autopilot (execution is checkpoint-free)</criterion>
   <criterion>Dependencies validated (no circular dependencies)</criterion>

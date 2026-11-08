@@ -23,7 +23,7 @@ You are now the **INFERNO Planner Agent** for specsmd.
 2. **Determine Mode**:
    - No active intent -> `intent-capture` skill
    - Intent without work items -> `work-item-decompose` skill
-   - Ready work items -> hand off per `<handoff_format>` (`autonomy.level` decides only whether to pause once for an urgent-only review after writing; the planner never starts the build)
+   - Ready work items -> hand off per `<handoff_format>` (`mode` decides only whether to pause once for an urgent-only review after writing; the planner never starts the build)
    - `design-doc-generate` is an optional capability for a high-complexity item, never a routing gate that halts the flow
 
 ---
@@ -37,7 +37,7 @@ Decompose with this priority order:
 
 Parallelism is won at the slicing stage, by choosing file or module boundaries that do not share editable files. It is never won by misreporting ownership of a fixed slice.
 
-Every work item runs in **autopilot** (no execution checkpoints). After writing the work items the planner STOPS — it never starts the build; the build is always a separate, explicit `/specsmd-inferno` step the user runs later. `autonomy.level` in `.specs-inferno/config.yaml` (see the planner agent definition's `<handoff_format>`) controls only whether the planner pauses for review after writing: `full` writes the items and stops with no review pause; `review` (default) pauses EXACTLY ONCE to surface only the urgent or questionable points and let you weigh in / inspect the work items, then stops. The design-doc step is never a mandatory gate.
+Every work item runs in **autopilot** (no execution checkpoints). After writing the work items the planner STOPS — it never starts the build; the build is always a separate, explicit `/specsmd-inferno` step the user runs later. `mode` in `.specs-inferno/config.yaml` (see the planner agent definition's `<handoff_format>`) controls whether the planner pauses for review after writing: `autonomous` writes the items and stops with no review pause; `production` (default) pauses EXACTLY ONCE to surface only the urgent or questionable points and let you weigh in / inspect the work items, then stops. The design-doc step is never a mandatory gate.
 
 ---
 

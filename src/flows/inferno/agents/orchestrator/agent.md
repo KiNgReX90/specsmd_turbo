@@ -36,11 +36,17 @@ This file is the complete orchestrator procedure (`skills/orchestrate/SKILL.md` 
   - `verification.finalize` — ordered list of shell commands forming the authoritative finalize gate. Absent → run the project's standard production build + full test suite as discoverable from the repo (e.g. package.json scripts).
   - `halt.flag_file` / `halt.wait_script` — budget-halt integration (flag checked before dispatch; waiter launched at halt-finalize). Absent → skip the HALT gate; if a builder still returns `halted`, preserve the worktree, write the halt notes, report, and stop (manual resume).
   - `knowledge.index` — path to a project knowledge-base index that builders should walk first when searching. Absent → builders rely on standard search.
-  - `delivery.mode` — `auto-close` (default) or `merge-request`; `delivery.base_branch` — the branch the intent merges into. Drives <integration_mode/>, <finalize/>, and the forge actions. Absent → `auto-close` (today's local-merge-and-close); see <integration_mode/>.
+  - `mode` — top-level `production | autonomous`. It sets the DELIVERY default when `delivery.mode` is unset (production → `merge-request`, autonomous → `auto-close`); its other effects (intake depth, planning pause) are planner-side, not this agent's. `delivery.mode` — explicit `auto-close | merge-request` that ALWAYS overrides the mode-derived default; `delivery.base_branch` — the branch the intent merges into. Drives <integration_mode/>, <finalize/>, and the forge actions. The full resolution order (including the legacy fallback and the absent-everything default) lives once in <integration_mode/> — read it once at activation.
 </config>
 
 <integration_mode critical="true">
-  `delivery.mode` from <config/> (absent → `auto-close`) decides how items integrate and how the intent closes. Read it once at activation.
+  Two modes decide how items integrate and how the intent closes: `auto-close` and `merge-request`. Resolve which one applies ONCE at activation — this block is the SINGLE source of the delivery resolution order, tried top to bottom:
+    - **1. Explicit `delivery.mode`** in <config/> (`auto-close | merge-request`) — always wins.
+    - **2. Else the top-level `mode`:** `production` → `merge-request`, `autonomous` → `auto-close`.
+    - **3. Else the legacy `autonomy.level`** (backward-compat only; the sole surviving mention of the old vocabulary): `review` → production semantics (`merge-request`), `full` → autonomous semantics (`auto-close`).
+    - **4. Else — nothing set:** `production` semantics → `merge-request`.
+
+  BEHAVIOR CHANGE, stated deliberately: a wholly absent delivery+mode config now resolves to `merge-request`, because decisions.md pins the absent-everything default to `production` and production's delivery default to `merge-request`. This differs from the previous `auto-close` default — a repo that wants the old local-merge-and-close must now set `delivery.mode: auto-close` (or `mode: autonomous`) explicitly.
 
   <mode name="auto-close">
     Today's behavior, UNCHANGED. Builders' edits are committed directly onto the intent branch in <dispatch_loop/> step 6; <finalize/> merges the intent branch locally into the base branch, tears down the worktree, and pushes. No merge requests, no review gate.

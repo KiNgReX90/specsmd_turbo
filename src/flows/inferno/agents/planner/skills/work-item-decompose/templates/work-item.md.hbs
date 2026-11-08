@@ -22,6 +22,19 @@ created: {{created}}
 - [ ] {{this}}
 {{/each}}
 
+## Caveats
+
+Load-bearing facts from `decisions.md` that apply to THIS item — inlined here so the
+builder acts on them without a second hop. Each states what to do or what NOT to assume.
+
+{{#if caveats}}
+{{#each caveats}}
+- **{{this.id}}** — {{this.rule}}
+{{/each}}
+{{else}}
+(none)
+{{/if}}
+
 ## Execution Manifest
 
 context:

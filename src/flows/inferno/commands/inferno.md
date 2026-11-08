@@ -21,7 +21,7 @@ It is the complete, self-contained procedure: intent selection menu (never auto-
 
 ## Per-Project Config
 
-Optional `.specs-inferno/config.yaml` (model tiers, finalize verification commands, autonomy level). Template: `.specsmd/inferno/agents/orchestrator/config.example.yaml`. Create it interactively with `/specsmd-inferno-config`.
+Optional `.specs-inferno/config.yaml` (top-level `mode`, model tiers, finalize verification commands, `delivery.mode`). Template: `.specsmd/inferno/agents/orchestrator/config.example.yaml`. Create it interactively with `/specsmd-inferno-config`.
 
 ---
 
