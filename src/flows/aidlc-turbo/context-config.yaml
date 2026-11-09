@@ -1,0 +1,68 @@
+# Context Configuration for AI-DLC Turbo
+# What each agent loads on activation. Paths are relative to .specs-aidlc-turbo/
+# unless they start with a dot.
+
+agents:
+  construction:
+    description: "Construction reads intent-status.cjs --json only; story-start.cjs names the standards each builder gets"
+    required_context:
+      - path: repo/standards/coding-standards.md
+        purpose: "Code style and patterns, passed to every builder by story-start.cjs"
+        critical: true
+
+    optional_context:
+      - path: repo/standards/tech-stack.md
+        purpose: "Technology choices the builders must stay inside"
+
+      - path: repo/standards/data-stack.md
+        purpose: "Database rules, passed to a builder whose story touches tables"
+
+      - path: repo/standards/system-architecture.md
+        purpose: "Architectural patterns and boundaries"
+
+      - path: repo/standards/api-conventions.md
+        purpose: "API design conventions"
+
+      - path: repo/standards/ux-guide.md
+        purpose: "UI and UX patterns for frontend work"
+
+      - path: repo/tooling.yaml
+        purpose: "The code tooling the builders, reviewers and debugger work with, briefed by tooling.cjs"
+
+    on_missing_critical:
+      action: warn
+      message: |
+        Project standards not found: {missing_files}
+
+        Builders need them to write code that matches the rest of the project.
+        Run project initialization first (/specsmd-aidlc-turbo, then project-init),
+        or continue and accept that the generated code may not match the project's style.
+
+  inception:
+    description: "Inception reads the project facts so intake and planning start from what is really there"
+    required_context: []
+
+    optional_context:
+      - path: repo/repo.yaml
+        purpose: "The codebase scan (languages, stacks, test runners, commands)"
+
+      - path: project/project.yaml
+        purpose: "Project type, the Project Documentation link and the Jira board"
+
+      - path: repo/config.yaml
+        purpose: "Mode, tester and sync settings, snapshotted into the brief at approval"
+
+      - path: repo/standards/tech-stack.md
+        purpose: "Technology context, so requirements and decisions stay realistic"
+
+      - path: repo/standards/coding-standards.md
+        purpose: "The project's style, so the standards deltas only list real overrides"
+
+    on_missing_critical:
+      action: continue
+      message: |
+        Project not initialized yet.
+
+        repo.yaml and project.yaml are created during project-init. Intake can run
+        without them: it runs the codebase scan itself and asks for the build and
+        test commands.

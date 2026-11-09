@@ -1,0 +1,60 @@
+/* AI-DLC Turbo - Code Scaffold: a part's change in the code, after the build (design-diff.js), in the Review tab.
+   Read as a code review: a quiet code surface, a line that came in or went out by a light tint and a bar on
+   its left, its mark and number in the same colour; never a solid green or red slab. */
+:root {
+  --td-df-bg: #FCFCFE; --td-df-hunk: rgb(168 0 168 / .08); --td-df-hunk-ink: #8E008E;
+  --td-df-add: rgb(31 157 87 / .11); --td-df-add-bar: #1F9D57; --td-df-add-ink: #0D6B3A;
+  --td-df-del: rgb(201 42 66 / .09); --td-df-del-bar: #D23B52; --td-df-del-ink: #A3192F;
+}
+
+/* TdDiff.split: what goes with the change left, the code right, the divider between them, from a tablet up, the split
+   in --td-da and --td-db; a phone (a page under 601 wide) stacks them, without a divider */
+.td-dsplit { min-width: 0; }
+.td-dcols { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+.td-dsep { display: none; }
+@media (min-width: 601px) {
+  .td-dsplit { display: flex; }
+  .td-dcols { flex: 1 1 auto; min-width: 0; min-height: 0; gap: 0; align-items: stretch; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(220px, var(--td-da, 40fr)) 12px minmax(300px, var(--td-db, 60fr)); }
+  .td-dcols > .td-dsep { display: block; position: relative; z-index: 1; cursor: col-resize; touch-action: none; }
+  .td-dcols > .td-diff { min-height: 0; padding-left: 6px; }
+  .td-dcols .td-df-body { flex: 1 1 auto; min-height: 0; }
+}
+/* the divider: an upright hairline with a grip in its middle (two rows of dots), lit under the pointer and the focus;
+   moved by TdGrip (design-grip.js) */
+.td-dsep::before { content: ""; position: absolute; top: 0; bottom: 0; left: calc(50% - .5px); width: 1px; background: var(--td-line); transition: background-color 160ms var(--td-ease); }
+.td-dsep::after { content: ""; position: absolute; top: 50%; left: 50%; box-sizing: border-box; width: 12px; height: 41px; margin: -20.5px 0 0 -6px; padding: 12px 2px; border: 1px solid var(--td-line-strong); border-radius: 6px; background: radial-gradient(circle, var(--td-ink-3) 0 .9px, transparent 1.3px) center / 3px 5px content-box, var(--td-surface); background-clip: content-box, padding-box; transition: border-color 160ms var(--td-ease), background-color 160ms var(--td-ease); }
+.td-dsep:hover::before, .td-dsep:focus-visible::before, .td-dresizing .td-dsep::before { background: var(--td-accent); }
+.td-dsep:is(:hover, :focus-visible)::after, .td-dresizing .td-dsep::after { border-color: var(--td-accent); background-image: radial-gradient(circle, var(--td-accent) 0 .9px, transparent 1.3px); }
+.td-dsep:focus-visible { outline: 2px solid var(--td-orange); outline-offset: -2px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { .td-dsep::before, .td-dsep::after { transition: none; } }
+
+/* the column: one line with the file at the left and what came in and went out at the right (a long path wraps,
+   the count stays at the right), then the lines */
+.td-diff { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.td-df-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 14px; }
+.td-df-path { flex: 1 1 16rem; min-width: 0; font: 13px/1.45 var(--td-mono); color: var(--td-ink); overflow-wrap: anywhere; }
+.td-df-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.td-df-count { display: inline-flex; gap: 10px; font: 600 13px var(--td-mono); }
+.td-df-plus { color: var(--td-df-add-ink); }
+.td-df-min { color: var(--td-df-del-ink); }
+.td-df-new { padding: 2px 10px; border-radius: 999px; font: 700 11px var(--td-font); letter-spacing: .05em; text-transform: uppercase; background: var(--td-add-bg); color: var(--td-add-ink); box-shadow: inset 0 0 0 1.5px var(--td-add-line); }
+.td-df-new.td-df-gone { background: var(--td-gone-bg); color: var(--td-gone-ink); box-shadow: inset 0 0 0 1.5px var(--td-gone-line); }
+.td-df-note { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--td-ink-2); }
+
+.td-df-body { --td-df-w: 3ch; max-height: min(70vh, 720px); overflow: auto; overscroll-behavior: contain; touch-action: pan-x pan-y; border: 1px solid var(--td-line); border-radius: 12px; background: var(--td-df-bg); font: 12.5px/1.6 var(--td-mono); color: var(--td-ink); }
+.td-df-body:focus-visible { outline: 2px solid var(--td-orange); outline-offset: 2px; }
+/* a hunk under its range, which stays on top while its lines scroll by; hunks apart by a dashed rule, with no
+   gap, so the rule beside the numbers runs on */
+.td-df-hunk + .td-df-hunk { border-top: 1px dashed var(--td-line-strong); }
+.td-df-hh { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 5px 12px; border-bottom: 1px solid var(--td-line); background: linear-gradient(var(--td-df-hunk), var(--td-df-hunk)), var(--td-df-bg); color: var(--td-df-hunk-ink); font-size: 12px; }
+.td-df-hh .td-df-ctx { color: var(--td-ink-3); overflow-wrap: anywhere; }
+.td-df-l { display: grid; grid-template-columns: calc(var(--td-df-w) + 20px) calc(var(--td-df-w) + 20px) 20px minmax(0, 1fr); }
+.td-df-o, .td-df-n { padding: 0 8px 0 10px; text-align: right; white-space: nowrap; color: var(--td-ink-3); font-variant-numeric: tabular-nums; user-select: none; }
+.td-df-n { border-right: 1px solid var(--td-line); }
+.td-df-s { text-align: center; font-weight: 700; user-select: none; }
+.td-df-c { min-width: 0; padding-right: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.td-df-add { background: var(--td-df-add); box-shadow: inset 3px 0 0 var(--td-df-add-bar); }
+.td-df-del { background: var(--td-df-del); box-shadow: inset 3px 0 0 var(--td-df-del-bar); }
+.td-df-add :is(.td-df-s, .td-df-n) { color: var(--td-df-add-ink); }
+.td-df-del :is(.td-df-s, .td-df-o) { color: var(--td-df-del-ink); }
+.td-df-eof { padding: 1px 12px 1px calc(2 * var(--td-df-w) + 60px); font: italic 12px var(--td-font); color: var(--td-ink-3); }

@@ -35,3 +35,18 @@ SOFTWARE.
 
 MIT License, Copyright (c) 2025 specsmd. Full text retained in
 [`vs-code-extension/LICENSE`](vs-code-extension/LICENSE).
+
+## elkjs 0.9.3 — under `src/flows/aidlc-turbo/templates/overview-v5/vendor/`
+
+`elk.bundled.js` is [elkjs](https://github.com/kieler/elkjs) 0.9.3, the Eclipse
+Layout Kernel compiled to JavaScript, vendored unchanged. The AI-DLC Turbo
+overview page inlines it to lay out its C4 model drawings.
+
+Copyright (c) 2017, 2021 Kiel University and others. Licensed under the Eclipse
+Public License 2.0 (EPL-2.0). Full text retained in
+[`src/flows/aidlc-turbo/templates/overview-v5/vendor/LICENSE`](src/flows/aidlc-turbo/templates/overview-v5/vendor/LICENSE);
+the version and checksum of the file are in the
+[`README.md`](src/flows/aidlc-turbo/templates/overview-v5/vendor/README.md) beside it.
+
+The bundle also carries the small `web-worker` module (Copyright 2020 Google
+LLC, Apache License 2.0), whose license notice is kept in the file itself.

@@ -1,0 +1,207 @@
+# Decision record template
+#
+# One file per intent at .specs-aidlc-turbo/docs/{inception}/{intent}/record.yaml.
+# Inception creates it at the start of intake and updates it after every answer
+# and every decision, so nothing lives only in the chat. render-specs.cjs turns it
+# into brief.md and stories/{SSS}-{slug}.md; spec-lint.cjs checks the result.
+# Never edit the brief or a story by hand: fix the record and render again.
+#
+# The values below are a worked example. Replace every one of them. Required keys
+# are marked (required); a missing one makes render-specs.cjs refuse and name it.
+# Everything else may be left empty and renders as "None." (in the record's language).
+# Text values are markdown. Use a `|` block for more than one line.
+# Language: intent.language is the language the user speaks in the session, a
+# BCP-47 code (en, de, fr, ...). Everything a person reads (the titles, `purpose`,
+# the `plain` texts, the stories' `product:` half, `short`, the people's texts of
+# the drawing and the C4 model, `overview`, `deliberately_not`, a mismatch's
+# `what` and `chosen`) is written in it; the rest (requirements, decisions, the
+# `agent:` half) stays English. The headings and the fixed texts of the brief, the
+# stories and the pages come from the string table of that language
+# (templates/lang/{code}.json, or the project's own .specs-aidlc-turbo/repo/lang/{code}.json).
+# This example is in English.
+# `overview` and every story's `short`, `slice` and `integration` feed the
+# pictures on the overview page. Plan always writes them; a record from before
+# them still renders and lints.
+# `technical_design.c4` and the `plain` texts of the intent and every story
+# feed the overview page too. A record without them still renders and lints
+# clean; the page's report (scripts/lib/v5-missing.cjs) names what it lacks.
+
+intent:
+  slug: user-auth                   # (required) the intent folder name
+  inception: user-auth              # (required) the inception folder name; same as slug for a single-intent inception
+  title: User authentication        # (required) the title, in the record's language: brief heading and the overview page
+  language: en                      # the language of the session, BCP-47; the record is written in it. en when left out
+  created: 2026-09-29               # (required) YYYY-MM-DD, read from the machine
+  # plain: >-                       # the opening of the overview page: three to five plain sentences in the record's language, at most 700 characters, on what the intent does in the words of the people who use it. No code, file names or markdown, no em-dash
+  #   Whoever logs in with an expired password chooses a new one right away and then simply goes on working.
+  #   Today such a user gets stuck and calls the service desk to have the password renewed.
+  #   Those requests go away, because users sort it out themselves on the screen that is already there.
+
+lane: full                          # (required) full | quick. quick: at most 2 stories, none hard, no conflicting sources
+
+purpose: |                          # (required) the brief's ## Intent: what, why, for whom. In the record's language, no implementation detail
+  Users with an expired password renew it themselves when they log in, so they keep their
+  account and the service desk gets fewer reset requests.
+
+docs_input: [docs/user-auth/pages, project/pages/architecture.md]   # the folders and files intake read
+
+requirements:                       # (required, at least one) FR-n functional, NFR-n non-functional
+  - id: FR-1
+    text: A login with an expired password opens the reset screen instead of failing   # one testable sentence
+    sources: [S-001]                # register ids (S-nnn), or user, or code (path)
+  - id: NFR-1
+    text: The login response stays under 300 ms at the 95th percentile
+    sources: [S-002, user]
+
+decisions:                          # answers and design decisions, written as they come; rendered as D-n
+  - id: D-1                         # (required per item)
+    question: Where is the expiry checked?
+    answer: Expiry is checked at login   # (required per item) the decision as a sentence
+    why: No scheduler exists in this project
+    dropped: A nightly job that flags expired passwords
+    source: user                    # user, a register id, code (path:line), or assumption: the answer names or creates a code structure (a right, a menu entry, a table) that no code backs; the brief marks it and the cross-checker checks it
+    # mismatch:                     # only on the answer to a mismatch: a page, the code, a story, the brief or the user's answers did not agree, or a page was not true of the code. Never rendered; the Jira sync sends it
+    #   what: The page Log in says a password expires after 90 days, the code lets it expire after 60 days   # what did not match, one plain sentence in the record's language, both sides named
+    #   chosen: After 60 days, as the code does; the page is corrected   # the choice, plain, in the record's language
+    #   page: docs/user-auth/pages/log-in.md   # the page file relative to .specs-aidlc-turbo/, the path of its row in sync.yaml; only when a page was one side
+    #   story: "001"                # construction only: the story whose product half (## For the product team) the answer changed
+    #   page_fixes:                 # only when the choice says a page gave way: every page it corrects, each with a row in sync.yaml; listed at the approval, written by the Confluence resolve
+    #     - { page: docs/user-auth/pages/log-in.md, from: "A password expires after 90 days.", to: "A password expires after 60 days." }   # from: word for word as the page has it; to: what replaces it, in the page's language
+
+domain_model:                       # only the entities the stories touch
+  text: A user has one password with an expiry date.
+  entities:
+    - { name: User, key_fields: "id, login", invariant: A login is unique }
+
+technical_design:                   # each value a string or a list
+  modules: [auth, web]
+  apis: "POST /login returns 303 to /password/reset when the password expired"
+  data_changes: None
+  error_handling: A reset link that expired shows the login screen with a message
+  new_code: src/auth/
+  integrations: []
+  # drawing:                        # the Code Scaffold: the code the stories build, drawn before the build as its starting point; the approval corrects it, nothing updates it after. With it, every story has a drawing. Every field: scripts/lib/design-model.cjs
+  #   summary: The login code gets a check on the expiry date. The user table stays as it is.
+  #   modules:                      # a frame per module; ids unique over modules and parts, no @. status new | changed | existing; optional repo, follows, registered_in [{ file, lines }]
+  #     - { id: auth, name: auth, status: changed, what: "The login code of the application. Every attempt to log in comes in here.", path: src/auth }
+  #   parts:                        # layer screen | server | database | external; kind class, JS module, table and the rest of design-model.cjs; changed and existing need path and lines; what: two to four plain sentences on what it is and does, for every part
+  #     - { id: login, name: login.ts, module: auth, layer: server, status: changed, kind: JS module, sub: checks the expiry date, what: "The entry of the login on the server. Takes the login form and checks the password. When it expired, it sends the user to the screen to change it.", path: src/auth/login.ts, lines: 18-96 }
+  #     - { id: users, name: USERS, layer: database, status: existing, kind: table, sub: every user, what: "The table with every user of the application. Keeps, per user, the password and the date it expires.", path: db/tables/users.sql, lines: 1-30 }
+  #     # optional per part: extends, implements, repo (it lives in another application's repository), follows { file, lines, note } (the example it copies), deviates, source (a register id),
+  #     # assumption, doubt, right { short, status new | existing, what, file, lines, decision (the D-n of a new right) }, open with open_detail (a choice the approval asks)
+  #   links:                        # from and to are part ids; kind calls (default) | builds_on; label, step and code optional. Every arrow is proven in the code:
+  #                                 # a call into an existing part needs proof { file, lines, note } where it already offers what is called; into a changed part proof or
+  #                                 # adds (what the change adds for this call); into a new part, or builds_on, neither
+  #     - { from: login, to: users, label: reads the expiry date, step: At login the login route reads the date the password expires., code: findByName(name), proof: { file: db/tables/users.sql, lines: 12-14, note: the column password_expires exists already } }
+  # c4:                             # the C4 model of the overview page: who uses the application, the systems around it, its containers and the components that hold the drawing's parts. Written with the drawing; every field: scripts/lib/v5-model.cjs. spec-lint.cjs checks what it gives (lib/c4-lint.cjs); what it lacks the page reports, it never fills it in
+  #   persons:                      # who uses it, named as the business names them
+  #     - { id: p-user, name: User, desc: Logs in to the application }
+  #   systems:                      # ids unique over persons, systems, containers and components, no @. kind system (default) | db; ext: true for a system outside the application, which holds no containers
+  #     - { id: s-app, name: The application, desc: The web application the user logs in to }
+  #     - { id: s-mail, name: Mail server, ext: true, tech: SMTP, desc: Sends the mail with the reset link }
+  #   containers:                   # system: the system it belongs to; kind container (default) | db; tech and desc; zoom: the key of its component view
+  #     - { id: c-web, name: Web application, tech: TypeScript, desc: The login screen and the login route }
+  #     - { id: c-db, name: Database, kind: db, tech: PostgreSQL, desc: Keeps the users and their passwords }
+  #   components:                   # container: the container it sits in, always given; parts: the ids of the drawing's parts it holds (parts with a layer), each part in one component; tech, desc, icon optional
+  #     - { id: k-login, name: Log in, container: c-web, tech: TypeScript, desc: Checks the password and the expiry date, parts: [login] }
+  #     - { id: k-users, name: Users, container: c-db, tech: SQL, desc: The table with every user, parts: [users] }
+  #   edges:                        # from and to: any two element ids; label a few words in the record's language; tech how (HTTPS, SQL, SOAP); intent: true when the intent adds or changes it; ends: true when it stops with the intent.
+  #                                 # The drawing's links between parts of two components come along by themselves: write who uses what, and what the drawing does not show
+  #     - { from: p-user, to: c-web, label: logs in, tech: HTTPS }
+  #     - { from: s-app, to: s-mail, label: mails the reset link, tech: SMTP }
+  #   outside: {}                   # every external part of the drawing (layer external) -> the system id it stands for, as { smtp: s-mail }; this drawing has none
+  #   # Derived, so left out unless it does not follow: an element's status (new | changed | existing) follows from what it holds, all new is new, all existing is existing,
+  #   # anything else changed, and a system with ext is existing; its stories follow from the parts, a component's from its parts, a container's from its components,
+  #   # a system's from its containers. A container's system may be left out when there is one system without ext; zoom is the container's id when left out
+
+reading_list:                       # the brief's codebase reading list: line ranges, not whole files
+  - { file: src/auth/login.ts, lines: 18-96, why: The login path the new flow extends }
+
+standards_deltas: []                # rules this intent adds to or overrides in repo/standards/, each with its reason
+
+verification:                       # (required) the real shell commands, in order
+  - npm run build
+  - npm test
+
+deliberately_not:                   # register items the intent leaves out on purpose, shown on the overview page
+  - { id: S-004, short: Two-step verification, reason: Comes in an intent of its own }   # id: a register id or a short text; short: what is left out in a few words, at most 60 characters (the chip on the overview page); reason in the record's language
+
+overview:                           # the pictures on the overview page, in the record's language. Plan writes it once the stories are final; it never reaches the markdown
+  lifecycle:                        # the life of the main thing the intent builds, with the stories on its steps
+    subject: a password             # the page reads "The life of {subject}"
+    lanes:                          # top to bottom: who or what does a step
+      - { id: user, label: User }
+      - { id: app, label: Application, tone: strong }   # tone, optional: strong (the system) | alert (checks, warnings)
+    states:                         # optional: the status the subject has along the steps, a band on top
+      - { label: Expired, from: 0, to: 2, tip: The expiry date has passed }   # from, to: step columns, fractions allowed; tip optional
+      - { label: Renewed, from: 2, to: 3, end: valid }   # end, optional: a label after the arrow tip
+    steps:                          # id unique; lane a lane id; col the column, 0 first; stories: the stories that build the step
+      - { id: login, lane: user, col: 0, label: Log in, sub: with the old password, stories: ["001"] }
+      - { id: check, lane: app, col: 1, label: Check the expiry date, sub: before the session starts, stories: ["001"] }
+      - { id: reset, lane: user, col: 2, label: Choose a new password, sub: on the existing reset screen, stories: [] }   # []: no story builds it, it is there already
+      # optional per step: row, 0-based, for more than one step in a column of one lane; shape: process (default) | state | alert
+    arrows:                         # from and to are step ids
+      - { from: login, to: check }
+      - { from: check, to: reset, label: expired }
+      # optional: kind main (default) | write | reject | loop | crash; label; from_side, to_side top | bottom | left | right; route h | v; from_offset, to_offset in px
+    # under_all: { story: "001", label: User table, tip: Every step reads the table users }   # optional: a story every step stands on, a bar under all steps
+  layers:                           # the parts of the system the stories cut through, bottom to top: the tables, the code by module or feature, the screens
+    - { id: t-users, group: Tables, label: Users, tip: Table users }   # id unique; label in words a product person knows; tip the technical name
+    - { id: login, group: Code, label: Log in, tip: src/auth/login.ts }
+    - { id: expiry-check, group: Code, label: Expiry check, tip: isExpired in src/auth/login.ts }
+    - { id: reset-screen, group: Screens, label: Reset screen, tip: /password/reset }
+
+stories:                            # (required, at least one) vertical slices, in dependency order
+  - id: "001"                       # (required) 3 digits, quoted
+    slug: login-expired-password    # (required) file name part: 001-login-expired-password.md
+    title: Login with expired password   # (required) in the record's language: the story heading and the overview page
+    short: Expired password         # a short name for the pictures, at most 24 characters; title when left out
+    # plain: Logging in notices an expired password and takes the user to the screen to choose a new one. So users go on by themselves, without the service desk.   # at most 450 characters, in the record's language: what the story builds and how it serves the intent; the rules of intent.plain
+    complexity: medium              # (required) low | medium | hard; picks the builder
+    depends_on: []                  # story ids that must be done first; acyclic
+    touches: [src/auth/login.ts, src/auth/login.test.ts]   # repo-relative files it changes or creates; spec-lint needs it
+    sources: [S-001]                # register ids this story delivers
+    requirements: [FR-1, NFR-1]     # brief requirement ids, at least one
+    # No tester_verifiable: render-specs.cjs derives it, true when a criterion is observed via anything but none
+    break_test: true                # finish lets the breaker attack it, in both modes: a user puts in or changes something; needs a criterion observed via ui or api; false when left out
+    surface: ui                     # (required) where the change lives in the code: ui | api | job | data | none
+    db_tables: [users]              # tables the behaviour writes
+    test_data: "users: login s001-*"   # records the tests create or change, with the key that keeps them this story's own
+    slice: { t-users: used, login: used, expiry-check: new, reset-screen: used }   # every layer the story cuts through: new where it creates that part, used where it uses or changes it
+    integration: []                 # one test per earlier story this one overlaps (a shared table, class or rule), run against that story's real code. The first story has none; a later one writes:
+    #   - with: "001"               # an earlier story of this intent that this one reaches through depends_on, so it lands first
+    #     test: A password reset through the link clears the expiry the login check reads   # one line in the record's language: the test plan and the overview page
+    # drawing:                      # this story's part of the Code Scaffold, when technical_design has a drawing
+    #   summary: The check on the expiry date at login.
+    #   builds: { auth: adds the check, login: adds the check on the expiry date }   # part or module id -> what this story builds there: every new or changed one, never an existing one; its path sits in touches
+    #   uses: [users]               # the part or module ids it only uses
+    product:                        # the product-team half, in the record's language
+      as_a: user with an expired password   # (required)
+      i_want: to choose a new password right when I log in   # (required)
+      so_that: I can go on working without the service desk   # (required)
+      why: The service desk gets requests every week to renew an expired password; they go away when users can do it themselves.   # optional: why this story exists, one or two sentences for a reader who missed the conversation
+      criteria:                     # (required, at least one) not numbered
+        - given: an account with an expired password
+          when: I log in with that password
+          then: I see the screen to choose a new password
+          observed_via: ui          # where a tester checks it: ui | api | db | log | none. spec-lint wants it on every criterion
+        - given: the old check `checkPasswordAge` in the login code
+          when: the story is built
+          then: no code calls that check any more
+          observed_via: none        # none needs exactly one of why_none or covered_by
+          why_none: code level, a tester sees no difference here   # a sentence: why a tester cannot check it. Or instead covered_by: "005", another story of this intent whose test case covers it
+      out_of_scope: [Two-step verification]
+    agent:                          # the agent half, English
+      context:                      # Context to read: File | Lines | Why
+        - { file: src/auth/login.ts, lines: 18-96, why: The path this story changes }
+      design: Honour D-1. The check lives in the login service, before the session is created.
+      implementation_notes: |
+        - Add `isExpired(user)` to `src/auth/login.ts`.
+        - Replace the old `checkPasswordAge` call with it.
+        - Redirect with 303 to `/password/reset`.
+      edge_cases:                   # a list of { case, expected }, or plain text
+        - { case: Password expires during the session, expected: The session stays valid until logout }
+      test_plan:
+        - "Unit: isExpired on the boundary date"
+        - "Integration: POST /login with an expired user returns 303"
+        - "Verification command: npm test"
