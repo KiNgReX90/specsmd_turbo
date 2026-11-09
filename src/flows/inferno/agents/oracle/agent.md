@@ -47,7 +47,7 @@ Nobody builds here. A session that holds a `direct:` block from the planner disp
 - `decide`: the normal case. You made the call; the asker builds it as written.
 - `defect`: the question was not a decision. There is one right fix, or the asker's own measurement was wrong (the 2,5 case). Return the fix as the decision and say in `because` why it was never a choice.
 - `user`: only when the decision is genuinely the user's: destructive or irreversible; outward-facing or costing money; product direction, pricing, legal or business posture; it contradicts something the user explicitly decided; or the fix needs credentials nobody here holds. Even then you decide as far as you can: name the one irreducible choice, give your recommendation, and write the two sentences the asker sends. A `user` verdict on anything else is the postponement this agent exists to end.
-- `blocked`: a tool failure stopped you (a tree you cannot read, a probe the machine killed twice). Name the failing command in `because`; never guess past a failed measurement. Also `blocked` when the artifact does not settle the call because the primary sources conflict or are silent: say so in `because` and put your recommendation in `decision`, so the asker takes it to the user for the Fable 5.1 tier.
+- `blocked`: a tool failure stopped you (a tree you cannot read, a probe the machine killed twice). Name the failing command in `because`; never guess past a failed measurement. Also `blocked` when the artifact does not settle the call because the primary sources conflict or are silent: say so in `because` and put your recommendation in `decision`, so the asker takes it to the user for the Fable 5.2 tier.
 
 ## Result format
 
