@@ -10,7 +10,9 @@ workspace:
 intents:
   - id: integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblings-verify-item-waits-only-on-overlap-and-a-run-branch-keeps-its-config
     title: "Integrate checks what a base commit changed and lands beside busy siblings, verify-item waits only on overlap, and a run branch keeps its config"
-    status: pending
+    status: in_progress
+    claimed_at: 2026-11-09T19:45:52Z
+    claimed_by: inferno-intent/integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblings-verify-item-waits-only-on-overlap-and-a-run-branch-keeps-its-config-20261109T194552Z
     created: 2026-11-09
     base_branch: main
     depends_on_intents: []
