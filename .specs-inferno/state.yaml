@@ -8,6 +8,56 @@ workspace:
   structure: monolith
   autonomy_bias: review
 intents:
+  - id: integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblings-verify-item-waits-only-on-overlap-and-a-run-branch-keeps-its-config
+    title: "Integrate checks what a base commit changed and lands beside busy siblings, verify-item waits only on overlap, and a run branch keeps its config"
+    status: pending
+    created: 2026-11-09
+    base_branch: main
+    depends_on_intents: []
+    tester_cases: []
+    comment: |
+      SOURCE. Items 7 to 11 of Skoft_CRA docs/clean-code/tooling.md (lines 16-21), decided by the clean-code lead on 2026-11-09 as one flow intent, reinstalled later on the lead's go.
+      INTENT. (a) five runner defects across integrate's diff anchor, its dirty refusal and its ledger commit, verify-item's attribution and the run config record; (d) the attribution and the config record own disjoint files and build beside the integrate chain.
+      MEASURED at 2205834 by evidence/runner-defects.sh. A commit on main prints SKIP for its scoped check and exits 0, and with doubles exits 2 BAD_CONFIG; a pending review file outside every scope exits 2 DIRTY; ownedBy of a collapsed untracked dir is false; a bare integrate after a --config one runs the repo config. Three attribution cases assert the wait on a disjoint dispatch. completeItem also rewrites the work-item file, so the ledger commit stages it beside state.yaml.
+      DECISIONS. Integrate inherits the lanes-only since rule of 97e34e7 and runs every scoped check when nothing gives a diff; it refuses only dirt inside the scopes of the checks it runs, the items' own files and the ledger files; the gate keeps its whole-tree refusal; an unexplained change beside a disjoint open dispatch waits for it; the run config lives in cacheDir/<branch>/run-config.json for intent run branches only, read by worktree, integrate, gate, green, ship and the lane accepts; no flow-side reservation refusal.
+      CHAIN. The dirt item follows the anchor item and the ledger item; attribution and the config record start at once; run-integrate.cjs and run.cjs overlaps serialize in the orchestrator. Every edit sits in the orchestrate scripts dir, no agent or skill text.
+      INSTALLED COPY. None in this repo; the drift test installs into a sandbox. TESTER. None. LOOK. None.
+    work_items:
+      - id: ri-integrate-on-the-base-diffs-from-since-or-origin
+        title: "Integrate on the base branch diffs from --since or origin, so a commit there selects its scoped checks"
+        kind: behavior
+        complexity: medium
+        mode: autopilot
+        status: pending
+        depends_on: []
+      - id: ri-the-ledger-commit-stages-only-what-completion-wrote
+        title: "The ledger commit stages only the files the completion wrote, so a review file written beside an integrate stays its reviewer's"
+        kind: behavior
+        complexity: low
+        mode: autopilot
+        status: pending
+        depends_on: []
+      - id: ri-integrate-refuses-only-the-dirt-it-reads-or-commits
+        title: "Integrate refuses only the uncommitted files it would read or commit, so a reviewed item lands beside a busy sibling"
+        kind: behavior
+        complexity: high
+        mode: autopilot
+        status: pending
+        depends_on: [ri-integrate-on-the-base-diffs-from-since-or-origin, ri-the-ledger-commit-stages-only-what-completion-wrote]
+      - id: ri-verify-item-waits-only-on-an-overlapping-open-dispatch
+        title: "Verify-item waits only on an open dispatch whose frozen ownership overlaps the item's"
+        kind: behavior
+        complexity: high
+        mode: autopilot
+        status: pending
+        depends_on: []
+      - id: ri-a-run-branch-keeps-the-config-it-was-given
+        title: "A run branch keeps the config it was given, and its later integrate and gate read it from there"
+        kind: behavior
+        complexity: high
+        mode: autopilot
+        status: pending
+        depends_on: []
 runs:
   active: []
   completed:
