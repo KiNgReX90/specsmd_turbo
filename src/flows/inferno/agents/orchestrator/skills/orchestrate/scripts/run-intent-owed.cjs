@@ -23,6 +23,7 @@ const { itemProofs } = require('./run-mutant-coverage.cjs');
 const { intentReviewCall, scanCall } = require('./run-call.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { reviewOutside } = require('./run-config-gates.cjs');
+const { deferredItems } = require('./state-defer.cjs');
 
 const { RunError } = lib;
 
@@ -51,7 +52,10 @@ function intentFor(tree, options = {}) {
   );
 }
 
-/** The work items of the intent, from its spec files, live or archived. */
+/**
+ * The work items of the intent, from its spec files, live or archived. A deferred item is left
+ * out: it owes no review, no proof and no mutant, so neither the review nor the gate waits on it.
+ */
 function intentItems(tree, intentId) {
   const ids = new Set();
   for (const base of [['intents'], ['archive', 'intents']]) {
@@ -59,7 +63,8 @@ function intentItems(tree, intentId) {
     if (!fs.existsSync(dir)) continue;
     for (const file of fs.readdirSync(dir)) if (file.endsWith('.md')) ids.add(file.slice(0, -3));
   }
-  return [...ids].sort();
+  const deferred = deferredItems(lib.statePath(tree), intentId);
+  return [...ids].filter((id) => !deferred.has(id)).sort();
 }
 
 /** The ids of the collected scan's lines, or null when no scan was collected. */
