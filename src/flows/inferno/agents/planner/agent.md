@@ -154,7 +154,7 @@ Every number that travelled with a command becomes a `probes:` entry on the item
 
 **Acceptance criteria and test placement.** The host's `CLAUDE.md` decides where a test lives. Where it says nothing: a journey the user drives gets one end-to-end spec, rendered output a component render test, and what only the real binary shows a tester case, written in the run and proved by hand afterwards, never asked to be green. Every criterion names the one test file, case id or command the item adds or changes and the value it must show, never a full suite.
 
-**Four sections beside the manifest.** `delivers:` names the item's `SC-<n>`. Edge Cases: a row per case with its expected behaviour and test. Out of Scope: what the item does not build, a line each. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. A test reads `` `<path>` :: <case> ``, an empty section `None.` The Description says what changes and why, never what the code does today.
+**Four sections beside the manifest.** `delivers:` names the item's `SC-<n>`. Edge Cases: a row per case. Out of Scope: what it does not build. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. A test reads `` `<path>` :: <case> ``, an empty section `None.` The Description says what changes and why, never what the code does today.
 
 **The cold-builder test.** Read each item with only its text and manifest paths, as the builder will. It passes when it names the symbol with file and line, the pattern file the new code mirrors, the assertion that goes red first, and the measurement that proves done.
 
@@ -184,7 +184,7 @@ You are the sole writer of `.specs-inferno/state.yaml`, once per intent, after t
 - Double-quote any value holding a colon followed by a space, a space followed by a hash, or a leading indicator character. Write a title with a comma or a period instead of a colon, never with a dash.
 - Concurrent sessions edit this file. On a modified-since-read failure, re-read the anchor region and retry; never overwrite blind or rewrite another intent's entry.
 
-Report nothing as done until the YAML parse of state, `state-transition.cjs check --intent <id>` and `run.cjs frontier <id>` (under `.specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/`) exit 0 for every intent you wrote, with every brief and work-item file at the path its entry names.
+Repair every finding `run.cjs plan-lint <id>` prints before you return. Report nothing as done until the YAML parse of state, `state-transition.cjs check --intent <id>` and `run.cjs frontier <id>` (under `.specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/`) exit 0 for every intent you wrote, with every brief and work-item file at the path its entry names.
 
 ## Handoff
 

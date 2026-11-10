@@ -112,7 +112,7 @@ Also decide id, title, kind, complexity, acceptance criteria, `depends_on`, exac
 
 ### Four sections beside the manifest
 
-`delivers:` names the `SC-<n>` the item delivers. Edge Cases: a row per case with its expected behaviour and test. Out of Scope: what the item does not build, a line each. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. A test reads `` `<path>` :: <case> ``, an empty section `None.` The Description says what changes and why, never what the code does today.
+`delivers:` names the `SC-<n>` the item delivers. Edge Cases: a row per case. Out of Scope: what it does not build. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. A test reads `` `<path>` :: <case> ``, an empty section `None.` The Description says what changes and why, never what the code does today.
 
 ### Contract rules
 
@@ -167,7 +167,8 @@ Before handoff:
 1. Parse state and every new frontmatter block.
 2. Confirm every manifest field, editable path, dependency, complexity and verification command, that item and intent dependencies are acyclic, that no two supposedly parallel items overlap editable ownership, and that design contracts cite an exact source.
 3. Confirm the blast-radius grep ran for this plan or repair, and every behavior, ui, api and architecture item carries what it found: the consumers in its ownership and context, the test files in `ownership.editable`, and one acceptance criterion each.
-4. Run the canonical decomposition contract test when its prerequisites are available:
+4. Repair every finding `run.cjs plan-lint <intent-id>` prints before returning.
+5. Run the canonical decomposition contract test when its prerequisites are available:
 
    ```sh
    node --test .specsmd/inferno/agents/planner/scripts/team-work-item-contract.test.cjs

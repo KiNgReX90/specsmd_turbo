@@ -27,6 +27,7 @@ const { integrateCall, itemReviewCall } = require('./run-call.cjs');
 const { waitFloorRefusal } = require('./run-codex-wait.cjs');
 const { RunError } = require('./run-error.cjs');
 const { reviewPath } = require('./run-review-file.cjs');
+const { frontierFindings } = require('./run-plan-lint.cjs');
 
 /**
  * The hour the proof rule landed. Every ledger written before it carries completed items and
@@ -173,6 +174,10 @@ function frontier(intentId, options) {
   if (refusal) throw new RunError(refusal, 'NO_WAIT_FLOOR');
   const since = reviewRuleSince(tree);
   const integrated = (item) => itemIntegrated(item, since);
+
+  // The plan's form comes first: a finding goes back to the planner before anything is ready.
+  const planFindings = frontierFindings(tree, intent);
+  if (planFindings.length > 0) return { exit: 2, payload: { ok: false, errors: planFindings }, out: planFindings };
 
   const errors = contractErrors(tree, items);
   if (errors.length === 0) errors.push(...wiringErrors(tree, intent.id, items, [...items, ...completedManifests(tree, intent)], config));
