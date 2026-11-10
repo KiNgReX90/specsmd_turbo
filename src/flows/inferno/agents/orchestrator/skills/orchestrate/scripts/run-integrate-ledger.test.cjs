@@ -4,6 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { CONFIG, STATE, git, repo, reviewed, run, write } = require("./review-fixture.cjs");
+const { writeFile } = require("./test-write.cjs");
+
+// The command beside integrate is another process: it loads the same helper by its path.
+const HELPER = JSON.stringify(path.join(__dirname, "test-write.cjs"));
 
 // The ledger commit takes the files the completion wrote and nothing beside them: a review
 // another reviewer writes while integrate runs stays that reviewer's to record.
@@ -17,7 +21,7 @@ function landing(body) {
   const fixture = repo({ state: SIBLINGS });
   const script = path.join(fixture.cache, "beside.cjs");
   fs.mkdirSync(fixture.cache, { recursive: true });
-  fs.writeFileSync(script, `const fs = require("fs"), cp = require("child_process");\n${body}\n`);
+  writeFile(script, `const fs = require("fs"), cp = require("child_process"), { writeFile } = require(${HELPER});\n${body}\n`);
   fixture.config = CONFIG.replace("echo integrate ran", `node ${script}`);
   write(fixture.root, ".specs-inferno/config.yaml", fixture.config);
   git(fixture.root, ["commit", "-qam", "the config runs a command beside integrate"]);
@@ -28,9 +32,9 @@ function landing(body) {
 }
 
 const WRITES_REVIEW = `fs.mkdirSync(${JSON.stringify(path.dirname(REVIEW))}, { recursive: true });
-fs.writeFileSync(${JSON.stringify(REVIEW)}, "item: a-two\\nverdict: clean\\nfiles: [src/b.ts]\\n");`;
+writeFile(${JSON.stringify(REVIEW)}, "item: a-two\\nverdict: clean\\nfiles: [src/b.ts]\\n");`;
 const STAGES_NOTE = `fs.mkdirSync(${JSON.stringify(path.dirname(HALT))}, { recursive: true });
-fs.writeFileSync(${JSON.stringify(HALT)}, "halted\\n");
+writeFile(${JSON.stringify(HALT)}, "halted\\n");
 cp.execFileSync("git", ["add", ${JSON.stringify(HALT)}]);`;
 
 // Staged only when the command is run as `beside.cjs again`: a command's green proof is keyed on its string, so the second run needs another string to run it at all.
