@@ -14,7 +14,9 @@
  * since a leftover never clears by waiting. Both shapes may carry the paths a reseal changed
  * (run-mutate-seal.cjs), which recovery puts back by the same rule. A reseal may rewrite a mutated
  * file itself, so the mutant's hash is the one the reseal left, and when putting the original
- * lines back does not give the original's hash, HEAD's copy is written only if it does.
+ * lines back does not give the original's hash, HEAD's copy is written only if it does. A batch's
+ * journal also holds the host session it has open (run-mutate-session.cjs), which recovery
+ * closes first.
  */
 
 const crypto = require('crypto');
@@ -23,6 +25,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { committed, putBackSeal, sealPaths, unseal } = require('./run-mutate-seal.cjs');
+const { closeLeft } = require('./run-mutate-session.cjs');
 
 const { RunError } = lib;
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
@@ -139,9 +142,8 @@ function describe(record, why) {
   return `an interrupted batch mutate rewrote${which} ${record && record.file}${was ? ` (${was})` : ''}, and ${why}`;
 }
 
-/** Put back every file a dead batch wrote. The files it cannot put back stay in the journal and are refused. */
-function putBackFiles(tree, entry, journal) {
-  const done = [];
+/** Put back every file a dead batch wrote, after the lines in `done`. The files it cannot put back stay in the journal and are refused. */
+function putBackFiles(tree, entry, journal, done = []) {
   const refused = [];
   for (const record of entry.files) {
     const result = putBackFile(tree, record);
@@ -186,9 +188,11 @@ function recoverInterrupted(tree, options = {}) {
       'MUTATE_RUNNING'
     );
   }
-  // The seal goes first, so a refused file leaves no reseal behind; a record that holds its original again is skipped.
+  // The session closes first, so a refused file keeps no host slot taken.
+  const closed = closeLeft(tree, entry, journal);
+  // The seal goes next, so a refused file leaves no reseal behind; a record that holds its original again is skipped.
   const seal = putBackSeal(tree, entry.seal);
-  const lines = [...(batch ? putBackFiles(tree, entry, journal) : [putBack(tree, entry, journal)]), ...seal.done];
+  const lines = [...(batch ? putBackFiles(tree, entry, journal, [...closed]) : [putBack(tree, entry, journal)]), ...seal.done];
   if (seal.refused.length > 0 || seal.running) {
     const left = { running: seal.running, paths: seal.refused.map((item) => item.record) };
     fs.writeFileSync(journal, `${JSON.stringify({ pid: entry.pid, start: entry.start, files: [], seal: left })}\n`);
@@ -250,7 +254,7 @@ function holdSignals() {
  * file's new lines in the journal before it writes them; `putBack` writes the original back;
  * `received` names a signal held since the start; `close` restores every file it touched, drops
  * the journal when all are whole, and releases the signals. `seal`, `save` and `rehash` let the
- * reseal record what it changed (run-mutate-seal.cjs).
+ * reseal record what it changed (run-mutate-seal.cjs), and `hold` records the host session open now.
  */
 function openSession(tree) {
   const journal = journalPath(tree);
@@ -259,9 +263,10 @@ function openSession(tree) {
   const who = owner();
   const files = new Map();
   const seal = { running: null, paths: [] };
+  let held = null;
   const save = () => {
     const records = [...files.values()].filter((file) => file.record).map((file) => file.record);
-    fs.writeFileSync(journal, `${JSON.stringify({ ...who, files: records, seal })}\n`);
+    fs.writeFileSync(journal, `${JSON.stringify({ ...who, files: records, seal, ...(held ? { session: held } : {}) })}\n`);
   };
   const touch = (rel) => {
     if (!files.has(rel)) files.set(rel, { abs: path.join(tree, rel), original: fs.readFileSync(path.join(tree, rel)), record: null });
@@ -293,6 +298,11 @@ function openSession(tree) {
       file.record = { ...record, mutant: sha(mutant) };
       save();
       fs.writeFileSync(file.abs, mutant);
+    },
+    /** Record `record` ({close, dir}) as the host session open now, or none with null. */
+    hold(record) {
+      held = record;
+      save();
     },
     /** Record `hash`, what a reseal left in the mutated file `rel`, as its mutant. */
     rehash(rel, hash) {
