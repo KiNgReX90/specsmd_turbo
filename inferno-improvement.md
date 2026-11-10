@@ -77,7 +77,7 @@ A session that meets a defect in the new flow works around it and adds one hando
 
 - 2026-11-10, `inferno-0.1.82-host-install-handoff.md`. Found before the install, by a compatibility run. The flow's text is over the host's word ceiling in five roles, which blocks the install. Seven host tests that pin the flow go red, three of them on rules the host asked the flow to carry. The flow's YAML reader turns a list item with a trailing comment into a map. The install eval installs the ideation flow. Two flow test files read files that only the source repository holds, so they fail in every host.
 
-- 2026-11-10, `inferno-0.1.82-run-defects-handoff.md`. From real work, in the first hour on the new flow. An item that owns a file under `.specs-inferno/` can never be reviewed, because the proof leaves those paths out and the check that reads it counts them. Output over 64 KiB is cut when `run.cjs` writes to a pipe, which loses the line that names the next step. Later defects are added to that file.
+- 2026-11-10, `inferno-0.1.82-run-defects-handoff.md`. From real work, in the first hour on the new flow. An item that owns a file under `.specs-inferno/` can never be reviewed, because the proof leaves those paths out and the check that reads it counts them. Output over 64 KiB is cut when `run.cjs` writes to a pipe, which loses the line that names the next step. No mutant runs at an item that has a quality review, because the mutant step allows one uncommitted review file and such an item has two, so every proposal waits for the intent review. Later defects are added to that file.
 
 ## 5. Not built, and why
 
