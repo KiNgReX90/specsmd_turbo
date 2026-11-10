@@ -86,6 +86,13 @@ intents:
         complexity: high
         mode: autopilot
         status: pending
+        review: fix
+        review_hash: 31f5a224333a75276031abab75970af64c1f87cebe5c8c2ea9b880f0628caab0
+        review_commit: ecd756ffe6001de3b1cf6c9028342cf913962211
+        review_tier: strong
+        review_rejections: 1
+        review_weight: serious
+        reviewed_at: 2026-11-10T06:11:19Z
         depends_on: []
 runs:
   active: []
