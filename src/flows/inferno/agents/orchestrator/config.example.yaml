@@ -95,9 +95,10 @@ wiring:                           # optional: per kind (command, table or event)
 #   sources: ["src/**", "src-tauri/src/**"]   # product source; the tests and case files are never source
 #   expectations: ["e2e/**", "src/**/*.test.ts"]   # tests whose changed lines a case may describe
 
-# mutate:                         # optional: files the host seals with a manifest of their digests; run.cjs mutate runs the reseal after a mutant lands in one, so the test sees a valid seal; every other path the reseal changed gets its committed bytes back after the revert; a reseal that exits non-zero reads no verdict; a --config file inherits it
+# mutate:                         # optional: files the host seals with a manifest of their digests; run.cjs mutate runs the reseal after a mutant lands in one, so the test sees a valid seal; every other path the reseal changed gets its bytes from before back after the revert, on every exit; a reseal that exits non-zero reads no verdict, and one that a signal ended or that ran past reseal_seconds reads no verdict and stops the run; a --config file inherits it
+#   reseal_seconds: 300           # optional: the most seconds one reseal may run; past it, mutate ends the reseal and every process it started (default 300)
 #   sealed:
-#     - paths: ["definitions/**"]                          # globs of the sealed files
+#     - paths: ["definitions/**"]                          # globs of the sealed files and of the seal; a seal git ignores goes back only when these globs cover it
 #       reseal: "node scripts/lib/definitions/pack.mjs --write"   # the command that rewrites the seal, run in the tree
 
 worktree:
