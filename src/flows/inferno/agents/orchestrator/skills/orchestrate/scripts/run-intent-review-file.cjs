@@ -13,6 +13,7 @@ const {
   FINDING_KEYS, RECORDED_KEYS, bad, entries, isMap, readDoc, recordedReviewer, relativePath, verdictParts,
 } = require('./run-review-file.cjs');
 const { gapRefusal, mutantGaps } = require('./run-mutant-coverage.cjs');
+const { SAME_INTENT, deltaProblem } = require('./run-review-delta.cjs');
 
 const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants'];
 /** An intent review also records the hash that leaves out the kb the base synced (review.outside). */
@@ -75,6 +76,9 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
       throw bad(rel, `finding at ${finding.file}:${finding.line} names owner ${finding.owner}, which is no work item of this intent`);
     }
   }
+  // A delta review being recorded reads the fix and nothing else (run-review-delta.cjs).
+  const delta = recorded ? null : deltaProblem(tree, rel, findings, SAME_INTENT);
+  if (delta) throw bad(rel, delta);
   const scanner = scannerOf(rel, doc, scanIds);
   const gaps = doc.verdict === 'clean' ? mutantGaps(proofs, mutants) : [];
   if (gaps.length > 0) throw bad(rel, gapRefusal(gaps));

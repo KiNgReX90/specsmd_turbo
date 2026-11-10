@@ -29,7 +29,7 @@ Every finding carries a `severity`. `blocker`: the change breaks a criterion or 
 
 ## Delta review
 
-With an earlier review, the range starts at the commit it recorded. Read only that range, re-check every earlier finding, and apply the six checks to whatever the fix touched. A finding of a kind an earlier round of this item already reported carries `repeat: true`. In item mode propose no mutant and leave `mutants` out: the runner carries the last review's over and reruns its survivors, and a finding that carries `mutant` is the runner's, written again while that mutant survives. Write the whole file again; `run.cjs` replaces the old one.
+With an earlier review, the dispatch names it under `previous`, the file at `write` holds it, and the range starts at the commit it recorded, which is the fix. Read only that range. Each earlier finding is resolved, and leaves the file, or still open, and stays as it was written: the same criterion, file, evidence and fix, with `line` moved where the fix moved it. A new finding exists only on a line the range changed and only as a `blocker` or a `major`: never a new `minor`, and never a second look at the rest of the change. A fix that changes a test's assertion where no finding said the test was wrong is `major`; a fix that switches a test off is a `blocker`. A finding of a kind an earlier round of this item already reported carries `repeat: true`. In item mode propose no mutant and leave `mutants` out: the runner carries the last review's over and reruns its survivors, and a finding that carries `mutant` is the runner's, written again while that mutant survives, so it is neither repeated nor new. Write the whole file again; `run.cjs` replaces the old one.
 
 ## Intent mode
 
