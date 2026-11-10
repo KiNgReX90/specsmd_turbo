@@ -196,6 +196,23 @@ test("on a tree a sibling dirtied, the review is recorded without verdicts and i
   assert.deepEqual(recorded.mutants.map((m) => [m.criterion, m.line, m.caught]), [["1", "1", undefined], ["2", "2", undefined]]);
 });
 
+test("a batch that could not put every file back stops the record, and nothing is recorded", () => {
+  const fixture = mutantRepo();
+  const before = ledger(fixture);
+  const head = git(fixture.root, ["rev-parse", "HEAD"]);
+  // A test that stages the file it reads: the restore then checks the mutant out of the index again.
+  const body = withMutants(CAUGHT_ONE.replace("test: node", "test: git add src/a.ts && node"));
+  write(fixture.root, REVIEW, body);
+
+  const result = record(fixture);
+
+  assert.equal(result.code, 2, shown(result));
+  assert.match(result.err, /ERROR \[MUTATE_RESTORE\] the runner's mutants could not put every file back: .*src\/a\.ts.*Nothing is recorded/);
+  assert.equal(ledger(fixture), before, "the ledger holds no review");
+  assert.equal(git(fixture.root, ["rev-parse", "HEAD"]), head, "nothing is committed");
+  assert.equal(read(fixture.root, REVIEW), body, "the reviewer's file is as it wrote it");
+});
+
 test("a record the runner already wrote once is recorded again from its proposals", () => {
   const fixture = mutantRepo();
   write(fixture.root, REVIEW, withMutants(CAUGHT_ONE, SURVIVES_TWO));
