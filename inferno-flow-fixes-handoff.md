@@ -8,12 +8,11 @@ Written 2026-11-10. The work below was running in this repo and was stopped on t
 
 | Branch on `origin` | Head | What it holds |
 | --- | --- | --- |
-| `inferno-improvement` | this branch | This handoff and the improvement plan, as pull request 5 |
+| `inferno-improvement` | this branch | Pull request 5, the one place for every handoff: this file, the improvement plan `inferno-improvement.md` and the run defects `inferno-run-defects-2026-11-10-handoff.md` |
 | `inferno-intent/integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblings-verify-item-waits-only-on-overlap-and-a-run-branch-keeps-its-config-20261109T194552Z` | `4446e8b2` | The intent: two items integrated, two built and in a fix review, one not built |
 | `handoff/base-item-correction-wip` | `d135d299` | One commit on top of the intent head: the half-done, unverified correction of the base item |
 | `handoff/flow-fixes-main` | `a1b2c08d` | Three finished commits on top of `main` that were never pushed to `main`, because their test run did not finish |
 | `handoff/mutate-seal-wip` | `b2dec453` | One commit on top of `handoff/flow-fixes-main`: the mutate seal, written and never tested |
-| `handoff/inferno-run-defects-20261110` | `7f5a022e` | A second handoff, by another session: three run defects it met and worked around. See section 6 |
 
 `main` on `origin` is `49260ca4` and holds none of this work.
 
@@ -72,9 +71,9 @@ For steps 3 to 5, hold each re-review to the delta rule of package P2 by hand, i
 
 If the base item needs more than one further round, split the intent the way the app repo has done by hand: ship the three integrated items, and move the base item and the fifth item to a successor intent. The ledger fix then reaches a host without waiting for them.
 
-## 6. The second handoff on this remote
+## 6. The run defects handoff
 
-`handoff/inferno-run-defects-20261110` holds `inferno-run-defects-2026-11-10-handoff.md`: three defects another session met while it ran an intent, each with its evidence and a way to fix it.
+`inferno-run-defects-2026-11-10-handoff.md`, beside this file, holds three defects another session met while it ran an intent, each with its evidence and a way to fix it.
 
 | Defect | State |
 | --- | --- |
