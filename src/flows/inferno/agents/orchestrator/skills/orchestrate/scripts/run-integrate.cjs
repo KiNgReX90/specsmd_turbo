@@ -27,8 +27,9 @@ const { resolveBase } = require('./run-intents.cjs');
 const { checkDoubles } = require('./check-doubles.cjs');
 const cases = require('./run-cases.cjs');
 const { owedReviews } = require('./run-review.cjs');
-const { afterRecovery } = require('./run-mutate.cjs');
+const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { landingSince, sinceCommit } = require('./run-since.cjs');
+const dirt = require('./run-dirt.cjs');
 
 const { RunError } = lib;
 
@@ -120,14 +121,58 @@ function e2eSelection(tree, config, ids, options, anchor) {
 }
 
 /**
+ * What a landing owns or commits: every file of its items' `ownership.editable`, and, when it
+ * lands an item, the ledger and each item's work-item file, which the completion rewrites and
+ * the ledger commit stages. An id the live ledger lacks owns nothing here; integrate refuses it
+ * once a dead mutant is back.
+ */
+function landingFiles(tree, ids, options) {
+  if (ids.length === 0) return () => false;
+  const ledger = ledgerOf(tree);
+  const written = new Set([path.posix.join(lib.SPECS_DIR, 'state.yaml')]);
+  const editable = [];
+  for (const id of ids) {
+    const intent = ledger.intents.find((entry) =>
+      (!options.intent || entry.id === options.intent) && entry.items.some((item) => item.id === id));
+    if (!intent) continue;
+    written.add(path.posix.join(lib.SPECS_DIR, 'intents', intent.id, 'work-items', `${id}.md`));
+    const manifest = lib.readItemSpec(tree, intent.id, id).manifest || {};
+    editable.push(...((manifest.ownership && manifest.ownership.editable) || []));
+  }
+  return (file) => written.has(file) || lib.ownedBy(file, editable, tree);
+}
+
+/**
+ * What the integrate checks of `config` read: those `runs` keeps, the browser step whole when it
+ * runs. Before the fold nothing says which run, so every configured one counts.
+ */
+function checksRead(config, runs = () => true, e2e = Boolean(impact.section(config))) {
+  const verification = config.verification || {};
+  const scopes = verification.finalize_scopes || {};
+  const commands = (verification.integrate || []).filter(runs);
+  return dirt.scopeOf([...commands.map((command) => scopes[command] || null), ...(e2e ? [null] : [])]);
+}
+
+/**
  * Integrate runs the selected checks and retains each successful command's proof. A leftover
  * of a killed mutate is put back first, and every way out says so, a refusal included.
+ *
+ * Sibling builders and reviewers work in the same tree, so integrate refuses only the
+ * uncommitted files it would read or commit: here what the landing owns or commits, after the
+ * fold what a check it runs reads. One sibling file anywhere used to hold every landing
+ * (2026-11-09). A live mutant holds it only in such a file, or inside any configured check's
+ * scope, since the running set is known only after the fold.
  */
 function integrate(options) {
   const tree = gate.treeOf(options);
-  const restored = gate.refuseDirty(tree);
+  const initial = lib.readConfig(tree, options.config);
+  const landing = landingFiles(tree, itemIds(options), options);
+  const configured = checksRead(initial);
+  const restored = recoverInterrupted(tree, { keepLive: (file) => !landing(file) && !dirt.reads(configured, file) });
   try {
-    const result = checkAndLand(tree, options);
+    dirt.refuseDirt(dirt.dirtyFiles(tree).filter(landing), 'refusing to integrate over uncommitted files this landing owns or commits',
+      'Commit or discard them, then run integrate again.');
+    const result = checkAndLand(tree, options, initial);
     return { ...result, out: [...restored, ...result.out] };
   } catch (error) {
     if (error instanceof RunError) error.message = afterRecovery(restored, error.message);
@@ -135,8 +180,7 @@ function integrate(options) {
   }
 }
 
-function checkAndLand(tree, options) {
-  const initial = lib.readConfig(tree, options.config);
+function checkAndLand(tree, options, initial) {
   const base = options.base || resolveBase(initial, null, tree);
   const ids = itemIds(options);
   // Every id first, before the fold and before any write: an item lands only over a clean
@@ -159,7 +203,6 @@ function checkAndLand(tree, options) {
   const lead = [...folded, ...(landing ? landing.out : [])];
   const config = lib.readConfig(tree, options.config);
   const commands = (config.verification && config.verification.integrate) || [];
-  const started = proofs.scopeHash(tree);
   const definition = JSON.stringify(config.verification);
   const branch = lib.currentBranch(tree);
   const dir = path.join(lib.cacheDir(tree), branch, `integrate-${lib.stamp()}`);
@@ -169,9 +212,20 @@ function checkAndLand(tree, options) {
   // for cost, and an item merged eight broken Rust cases through a green integrate that the
   // next builder found (2026-09-10). On the base branch the merge base is HEAD, so a direct
   // build skipped every scoped check after a commit inside its scope (2026-11-09); with no diff
-  // to read there, `changed` is null and every scoped command runs.
+  // to read there, `changed` is null and every scoped command runs. Only committed paths count,
+  // so a sibling's uncommitted file never selects a check.
   const scopes = (config.verification && config.verification.finalize_scopes) || {};
-  const changed = landing && landing.all ? null : gate.changedPaths(tree, since);
+  const changed = landing && landing.all ? null : lib.gitLines(tree, ['diff', '--name-only', '--no-renames', since, 'HEAD'], { tolerate: true });
+  const runs = (command) => !scopes[command] || !changed || changed.some((file) => lib.matchesAny(file, scopes[command]));
+  const selection = e2eSelection(tree, config, ids, options, anchor);
+  // A check reads the tree it runs in, a sibling's uncommitted bytes included, and a remote run
+  // mirrors them, so such a file is refused before any check runs. The same scopes are what the
+  // landing must not move under: a sibling writing outside them leaves the landing standing.
+  const read = checksRead(config, runs, Boolean(selection && selection.command));
+  dirt.refuseDirt(dirt.dirtyFiles(tree).filter((file) => dirt.reads(read, file)),
+    'refusing to integrate over uncommitted files a check this landing runs reads',
+    'Commit or discard them, or wait until the work that writes them is committed, then run integrate again.');
+  const started = proofs.scopeHash(tree, read);
 
   const red = (out) => ({ exit: 2, payload: { ok: false, tree, branch, items: ids, folded: folded.length > 0, results }, out });
 
@@ -188,8 +242,7 @@ function checkAndLand(tree, options) {
   // command: an item that broke check, definitions and cargo paid three integrate runs and
   // three followups to learn what one run could have said.
   for (const [index, command] of commands.entries()) {
-    const scope = scopes[command];
-    if (scope && changed && !changed.some((file) => lib.matchesAny(file, scope))) {
+    if (!runs(command)) {
       results.push({ command, result: 'skip' });
       continue;
     }
@@ -211,7 +264,6 @@ function checkAndLand(tree, options) {
     out.push(...gate.describe(results));
   }
 
-  const selection = e2eSelection(tree, config, ids, options, anchor);
   if (selection && selection.command) {
     const result = proofs.runCommand(tree, config, options.config, selection.command, path.join(dir, 'e2e.log'));
     results.push(result);
@@ -221,7 +273,7 @@ function checkAndLand(tree, options) {
     out.push(`SKIP e2e (${selection.reason})`);
   }
 
-  if (proofs.scopeHash(tree) !== started ||
+  if (proofs.scopeHash(tree, read) !== started ||
       JSON.stringify(lib.readConfig(tree, options.config).verification) !== definition) {
     return red([...out, 'the code changed while integrate ran. Re-run integrate.']);
   }

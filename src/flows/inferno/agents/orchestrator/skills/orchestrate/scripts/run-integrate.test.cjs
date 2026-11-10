@@ -57,11 +57,20 @@ test("integrate stops at the first failing command and points at its log", () =>
   assert.match(log, /integrate-/);
 });
 
-test("integrate refuses a dirty tree and folds only when the config lists nothing", () => {
+// An unscoped check reads every path outside .specs-inferno/, so a dirty path anywhere there is
+// refused. Integrate refuses only what it reads or commits: siblings work beside a landing.
+test("integrate refuses a dirty path an unscoped check reads, and folds only when the config lists nothing", () => {
+  const checked = repo({ config: INTEGRATE });
+  const opening = opened(checked);
+  write(opening.tree, "src/a.ts", "export const a = 5;\n");
+  const refused = run(checked, ["integrate", "--tree", opening.tree]);
+  assert.equal(refused.code, 2, refused.out + refused.err);
+  assert.match(refused.err, /ERROR \[DIRTY\] .*a check this landing runs reads: src\/a\.ts\./);
+  assert.doesNotMatch(refused.out, /PASS/);
+
   const fixture = repo();
   const { tree } = opened(fixture);
   write(tree, "src/a.ts", "export const a = 5;\n");
-  assert.equal(run(fixture, ["integrate", "--tree", tree]).code, 2);
   git(tree, ["commit", "-qam", "landed"]);
   const result = run(fixture, ["integrate", "--tree", tree]);
   assert.equal(result.code, 0, result.out + result.err);
