@@ -31,15 +31,19 @@ Each line names where the gap shows. `S/` is `src/flows/inferno/agents/orchestra
 - A host whose tests run on another machine through a wrapper names that wrapper under `mutate.session`, so a batch of mutants shares one sync and one slot.
 - A host that seals definition files names them and their reseal command under `mutate.sealed`.
 
-The app repo on 2026-11-10: 0.1.81 is installed and five intents are running on it. A compatibility run against its live ledgers and configs read them all, and found the state changes additive. The install itself is refused: the flow's text is over the host's word ceiling in five roles, and seven host tests that pin the flow go red (`inferno-0.1.82-host-install-handoff.md`, sections 1 and 2). The host works around it by raising its ceilings to the measured sizes until the flow's text is trimmed, and by moving its own pins in the install commit. The reinstall lands at the first moment no final gate is walking.
+The app repo on 2026-11-10: 0.1.81 is installed and five intents are running on it. A compatibility run against its live ledgers and configs read them all, and found the state changes additive. The install itself is refused: the flow's text is over the host's word ceiling in five roles, and seven host tests that pin the flow go red (`inferno-0.1.82-host-install-handoff.md`, sections 1 and 2). The host works around it by raising its ceilings to the measured sizes until the flow's text is trimmed, and by moving its own pins in the install commit. The reinstall landed on 2026-11-10 as one commit, and the flow took over for every session at once when the primary checkout was moved forward to it, because every orchestrator runs the scripts from there. A session that started before it re-reads its definition at its next item boundary.
 
 ## 3. How we know it worked
 
 Run the readout on the first host intent of ten or more items built after the reinstall:
 
 ```bash
-node evals/review-loop/stats.cjs --tree <intent worktree> --base <ref> [--head <ref>]
+node evals/review-loop/stats.cjs --tree <intent worktree> --base <ref> --intent <id> [--head <ref>]
 ```
+
+Pass `--intent`. A branch that folded the base carries the review files of every intent that shipped meanwhile, and without the flag their items count in the totals.
+
+The readout was rehearsed on the app repo on 2026-11-10, on the old flow, and it reads host data as it stands. Two more old numbers came out of it. The intent of the first table, still running, stood at 4.2 rounds per item over 26 items, 12.2 mutants per acceptance criterion and 59 ownership grants. A second intent of 4 items, built the same day on the old flow by an orchestrator that told its reviewers to confirm a verbatim pin by reading it and to cap their mutants, stood at 2.3 rounds per item, 5.7 mutants per criterion and 4 grants. That second intent is the plan's review chain done by hand, so it is the nearest thing to a forecast.
 
 The old numbers come from one intent of 28 items on the app repo, built by 0.1.81. 18 of its items had a recorded review. They were read from the history of that intent's review files between base `2181a171c` and branch commit `a9af3d0ca`.
 
