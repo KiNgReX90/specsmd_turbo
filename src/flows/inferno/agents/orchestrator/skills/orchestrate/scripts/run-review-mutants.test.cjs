@@ -131,7 +131,7 @@ test("a recorded 0.1.81 review still parses, and its caught mutants still count"
   assert.match(current.out, /review a-one clean for the current files/);
   const recorded = parseItemReview(fixture.root, REVIEW, "a-one", { recorded: true });
   assert.deepEqual(recorded.mutants, [{ criterion: "AC1 a reads one", test: "node checks/has.cjs checks/one.expect", caught: "yes" }]);
-  assert.deepEqual(mutantGaps(itemProofs(fixture.root, "alpha", ["a-one"]), []), ['a-one owes a caught mutant for criteria 2 "a2 reads two"']);
+  assert.deepEqual(mutantGaps(itemProofs(fixture.root, "alpha", ["a-one"]), []), ['a-one owes a caught mutant or a checked pin for criteria 2 "a2 reads two"']);
 });
 
 test("a delta after a released-flow review keeps its caught mutants and leaves a survivor it cannot rerun to the intent review", () => {
@@ -146,7 +146,7 @@ test("a delta after a released-flow review keeps its caught mutants and leaves a
   const result = record(fixture);
 
   assert.equal(result.code, 0, shown(result));
-  assert.match(result.out, /MUTANT AC2 a2 reads two names no line to break, so the intent review owes its criterion a caught mutant/);
+  assert.match(result.out, /MUTANT AC2 a2 reads two names no line to break, so the intent review owes its criterion a caught mutant or a checked pin/);
   assert.deepEqual(runs(fixture), []);
   const recorded = parseItemReview(fixture.root, REVIEW, "a-one", { recorded: true });
   assert.deepEqual(recorded.mutants.map((m) => [m.criterion, m.caught]), [["AC1 a reads one", "yes"]]);
