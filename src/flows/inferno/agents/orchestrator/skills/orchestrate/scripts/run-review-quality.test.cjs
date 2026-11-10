@@ -3,9 +3,8 @@ const test = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { CONFIG, INTENT_TREE, STATE, git, repo, run, worktree, write } = require("./review-fixture.cjs");
+const { CONFIG, STATE, git, write } = require("./review-fixture.cjs");
 const quality = require("./run-review-quality.cjs");
-const { weightOf } = require("./run-review-file.cjs");
 
 // The quality lens beside the contract review (P6 of the improvement plan). A first review of an
 // item with production code prints both dispatches, to go out in one message; each lens writes its
@@ -14,89 +13,11 @@ const { weightOf } = require("./run-review-file.cjs");
 // at the higher severity, a serious quality finding a miss, and a minor-only pair settles. In a
 // delta each lens re-reads its own findings from its own previous file. An item of kind test, or
 // whose change is docs or config only, gets no quality lens, and a review recorded before the
-// lens existed reads and counts as before.
+// lens existed reads and counts as before. How the two files make one reading: run-review-quality-merge.test.cjs.
 
-const REVIEW = ".specs-inferno/intents/alpha/reviews/a-one.yaml";
-const QUALITY = ".specs-inferno/intents/alpha/reviews/quality/a-one.yaml";
-const CODEX = ".specs-inferno/config.codex.yaml";
-const ledger = (tree) => fs.readFileSync(path.join(tree, ".specs-inferno/state.yaml"), "utf8");
-const shown = (result) => result.out + result.err;
-
-const CLEAN = "item: a-one\nverdict: clean\nfiles: [src/a.ts]\n";
-const contractFix = (severity = "major", file = "src/a.ts", line = 1) => `item: a-one
-verdict: fix
-files: [src/a.ts]
-findings:
-  - criterion: AC1 the value reads two
-    file: ${file}
-    line: ${line}
-    evidence: read ${file}, it exports the unchecked value
-    fix: export the checked value
-    severity: ${severity}
-`;
-const QCLEAN = "item: a-one\nverdict: clean\nfiles: [src/a.ts]\n";
-const qualityFix = (severity = "major", { line = 1, files = "src/a.ts", extra = "" } = {}) => `item: a-one
-verdict: fix
-files: [${files}]
-findings:
-  - id: Q1
-    check: security
-    file: src/a.ts
-    line: ${line}
-    evidence: read src/a.ts, the gift card amount is never checked
-    fix: check the amount before it is used
-    severity: ${severity}
-${extra}`;
-
-const LINTED = CONFIG.replace("verification:\n", "verification:\n  lint:\n    - npm run lint\n    - cargo clippy\n");
-const QUALITY_CONFIG = `${LINTED}roles:
-  reviewer-quality:
-    model: model-quality
-standards:
-  - file: code.md
-    paths: ["src/**"]
-  - file: docs.md
-    paths: ["docs/**"]
-real_app:
-  paths: ["e2e/**"]
-`;
-const STANDARDS = {
-  ".specs-inferno/standards/code.md": "# Code\n\n## Names\n\nA name says what it holds.\n",
-  ".specs-inferno/standards/docs.md": "# Docs\n\n## Tone\n\nPlain words.\n",
-};
-
-/**
- * An intent worktree in which a-one's work is committed: by default one production line, else the
- * files `change` names. `review` runs the item review in it, both reviewers named.
- */
-function host(options = {}) {
-  const fixture = repo({ ...options, files: { ...STANDARDS, ...(options.files || {}) } });
-  const tree = worktree(fixture, INTENT_TREE);
-  const flags = options.args || [];
-  const at = (args) => run(fixture, [...args, "--tree", tree, ...flags]);
-  for (const [rel, body] of Object.entries(options.change || { "src/a.ts": "export const a = 2;\n" })) write(tree, rel, body);
-  git(tree, ["add", "-A"]);
-  git(tree, ["commit", "-qm", "a-one built"]);
-  const review = (extra = []) => at(["review", "--item", "a-one", "--reviewer", "rev-1", "--quality-reviewer", "rev-q", ...extra]);
-  return { fixture, tree, at, review };
-}
-
-/** The lines of one dispatch block: its dispatch line and the indented lines under it. */
-function block(out, agent) {
-  const lines = out.split("\n");
-  const start = lines.findIndex((line) => new RegExp(`^dispatch ${agent}\\b`).test(line));
-  assert.ok(start >= 0, `no dispatch of ${agent} in: ${out}`);
-  const end = lines.findIndex((line, index) => index > start && !line.startsWith("  "));
-  return lines.slice(start, end === -1 ? undefined : end);
-}
-
-/** The first round of a-one recorded with both lenses: the dispatch printed, both files written, the record run. */
-function firstRound(h, contract, qualityBody) {
-  assert.equal(h.review().code, 3);
-  write(h.tree, REVIEW, contract);
-  write(h.tree, QUALITY, qualityBody);
-  return h.review();
-}
+const {
+  CLEAN, CODEX, QCLEAN, QUALITY, QUALITY_CONFIG, REVIEW, block, contractFix, firstRound, host, ledger, qualityFix, shown,
+} = require("./run-review-quality-fixture.cjs");
 
 // --- which items get the lens ----------------------------------------------------------
 
@@ -329,39 +250,6 @@ test("a contract fix beside a clean quality review is a fix too", () => {
   assert.match(ledger(h.tree), /review: fix/);
 });
 
-test("the same file and line from both lenses goes to the builder once, at the higher severity", () => {
-  const h = host();
-  const result = firstRound(h, contractFix("minor"), qualityFix("blocker"));
-
-  assert.equal(result.code, 2, shown(result));
-  assert.equal(result.out.match(/^FINDING /gm).length, 1, result.out);
-  const payload = JSON.parse(h.review(["--json"]).out);
-  assert.equal(payload.findings.length, 1);
-  assert.equal(payload.findings[0].severity, "blocker");
-  assert.match(ledger(h.tree), /review_weight: serious/);
-
-  const apart = host();
-  const two = firstRound(apart, contractFix("minor"), qualityFix("minor", { line: 2 }));
-  assert.equal(two.out.match(/^FINDING /gm).length, 2, "another line is another fault");
-});
-
-test("the one reading weighs both lenses: a serious finding of either is serious, minors of both are minor", () => {
-  const contract = { verdict: "fix", files: ["src/a.ts"], findings: [{ criterion: "AC1", file: "src/a.ts", line: "1", severity: "minor" }], mutants: [], survivors: [], pins: [] };
-  const lens = (severity, extra = {}) => ({ verdict: "fix", files: ["src/b.ts"], findings: [{ id: "Q1", check: "fit", file: "src/a.ts", line: "4", severity, ...extra }], lint: [] });
-  assert.equal(weightOf(quality.mergeReviews(contract, lens("minor"))).weight, "minor");
-  assert.equal(weightOf(quality.mergeReviews(contract, lens("major"))).weight, "serious");
-  assert.equal(weightOf(quality.mergeReviews(contract, lens("minor", { repeat: "true" }))).weight, "repeat");
-  const same = (extra) => ({ ...lens("major", extra), findings: [{ ...lens("major", extra).findings[0], line: "1" }] });
-  assert.equal(weightOf(quality.mergeReviews({ ...contract, findings: [{ ...contract.findings[0], repeat: "true" }] }, same())).weight, "repeat",
-    "the one finding kept repeats when the dropped one did");
-  assert.equal(weightOf(quality.mergeReviews(contract, same({ repeat: "true" }))).weight, "repeat");
-  assert.deepEqual(quality.mergeReviews(contract, lens("minor")).files, ["src/a.ts", "src/b.ts"]);
-  assert.equal(quality.mergeReviews(contract, null), contract, "no quality file reads as the contract review alone");
-  const clean = { ...contract, verdict: "clean", findings: [] };
-  assert.equal(quality.mergeReviews(clean, { ...lens("minor"), verdict: "clean", findings: [] }).verdict, "clean");
-  assert.equal(quality.mergeReviews(clean, lens("minor")).verdict, "fix");
-});
-
 test("a minor-only pair settles once the correction stays inside the files either lens lists", () => {
   const h = host();
   dispatchedVerified(h, { "src/a.ts": "export const a = 2; // built\n", "src/a2.test.ts": "// the amount\n" });
@@ -419,6 +307,21 @@ test("in a delta each lens re-reads from its own previous file, a lens clean las
     assert.deepEqual(block(waiting.out, "specsmd-inferno-reviewer-quality"), second);
     assert.match(ledger(h.tree), /review: fix/);
   }
+});
+
+test("a lens that read the item once reads it again when its change no longer holds production code", () => {
+  const h = host({ change: { "src/a.ts": "export const a = 2;\n", "docs/a.md": "how a reads\n" }, editable: ["src/a.ts", "docs/a.md"] });
+  assert.equal(firstRound(h, contractFix("major"), qualityFix("major")).code, 2);
+  // The fix takes the production change back: what the item changed since its fork is one document.
+  write(h.tree, "src/a.ts", "export const a = 1;\n");
+  git(h.tree, ["commit", "-qam", "the fix"]);
+  assert.equal(quality.qualityLens("behavior", ["docs/a.md"]), false);
+
+  const result = h.review();
+
+  assert.equal(result.code, 3, shown(result));
+  assert.equal(block(result.out, "specsmd-inferno-reviewer-quality")[1], `  previous ${QUALITY}`);
+  assert.match(result.out, /^send both dispatches in one message/m);
 });
 
 test("a delta quality file that adds a new minor is refused under the delta rule", () => {
