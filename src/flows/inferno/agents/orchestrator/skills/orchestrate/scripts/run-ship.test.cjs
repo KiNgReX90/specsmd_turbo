@@ -137,7 +137,7 @@ test("ship checks the proofs from its selected host config", () => {
   git(tree, ["commit", "-qm", "Codex gate configuration"]);
   const gated = run(fixture, ["gate", "--tree", tree, "--config", config]);
   assert.equal(gated.code, 0, gated.out + gated.err);
-  assert.equal(run(fixture, ["green", "--tree", tree]).code, 3);
+  assert.equal(run(fixture, ["green", "--tree", tree, "--config", ".specs-inferno/config.yaml"]).code, 3);
   const shipped = run(fixture, ["ship", "alpha", "--tree", tree, "--config", config]);
   assert.equal(shipped.code, 0, shipped.out + shipped.err);
   assert.match(shipped.out, /shipped/);

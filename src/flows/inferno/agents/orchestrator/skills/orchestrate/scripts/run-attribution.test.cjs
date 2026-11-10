@@ -98,16 +98,16 @@ test('accept-dispatch for an unknown id names the tree it looked in', (t) => {
   assert.match(result.out, /no dispatch no-such-dispatch recorded for .*--tree/);
 });
 
-test('verify-item waits for every open dispatch of the round to be accepted', (t) => {
+test('verify-item verifies an item beside a disjoint open dispatch, and waits on nothing once it is accepted', (t) => {
   const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs'] });
   const one = f.start('--item', 'a');
   const two = f.start('--item', 'b');
   f.write('a.cjs', 'module.exports = 2;\n');
   f.write('b.cjs', 'module.exports = 2;\n');
   f.accepted(one, ['a.cjs']);
-  const waiting = f.verify('a');
-  assert.equal(waiting.code, 2, waiting.out);
-  assert.match(waiting.out, new RegExp(`dispatch ${two} for b is still open[\\s\\S]*accept-dispatch`));
+  const beside = f.verify('a');
+  assert.equal(beside.code, 0, beside.out);
+  assert.deepEqual(beside.data.outside, []);
   f.accepted(two, ['b.cjs']);
   assert.equal(f.verify('a').code, 0);
 });

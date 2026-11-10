@@ -1,0 +1,89 @@
+item: ri-a-run-branch-keeps-the-config-it-was-given
+verdict: fix
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-ship.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs
+findings:
+  - criterion: "description step 2: ship and the lane accepts read the record, and worktree --config writes it"
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.cjs
+    line: 35
+    evidence: |
+      Description step 2 makes ship and each lane accept a reader and worktree a writer, and no test proves any of the three. Mutants in a clean scratch worktree at c0e6c7d0 (now b407578e, the same content), each run on Delta against the nine files the third criterion names (`node --test run-config-record.test.cjs run-gate.test.cjs run-gate-cli.test.cjs run-ship.test.cjs run-proofs.test.cjs run.test.cjs run-printed-calls.test.cjs run-lanes.test.cjs run-codex-wait.test.cjs`):
+      - :35 READERS without 'ship': pass 152, fail 0.
+      - :35 READERS without `...LANES`: pass 152, fail 0.
+      - :32 WRITERS without 'worktree': pass 152, fail 0.
+      Every case in run-config-record.test.cjs records through claim, integrate or gate and reads through worktree, integrate, gate or green. run-ship.test.cjs and run-lanes.test.cjs pass --config on every ship and accept. The worktree writer is the path where an orchestrator names --config at `worktree` and not at `claim`. Without it a later bare integrate falls back to the repo config, the defect this item closes.
+    fix: |
+      Add three cases to run-config-record.test.cjs. Each must fail under the matching mutant above.
+      (1) "a bare ship checks the proofs of the recorded config": take claimed(t), run `worktree alpha --json`, then `gate --tree <wt> --config RUN_CONFIG`, then `ship alpha --tree <wt>` with no --config. Assert exit 0 and /shipped/, as run-ship.test.cjs:131-145 does with the flag.
+      (2) "a bare lane accept reads the recorded config": use the run-lanes fixture, with a run config holding a smoke lane that goes instrument red and a repo config whose smoke lane differs or is missing. Run `gate --detach --config <R>` and `gate --wait --config <R>`, commit a harness fix on main, then run `smoke --accept --harness-fix <sha>` with no --config. Assert exit 0 and that the accepted record carries R's lane proof.
+      (3) "a worktree's --config reaches the integrate in it": like claimed(t), but run `claim alpha` with no --config. Then run `worktree alpha --config RUN_CONFIG --json` and `integrate --tree <wt>` with no --config. Assert /echo run integrate/.
+    severity: minor
+mutants:
+  - criterion: "integrate without --config runs the config a gate recorded on the run branch"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "integrate without --config runs the config a gate recorded on the run branch"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "gate without --config runs the config an integrate recorded"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a claim's --config reaches the worktree bootstrap and the integrate in it"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a claim's --config reaches the worktree bootstrap and the integrate in it"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a new --config replaces the record"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a recorded config that is gone is refused, never replaced by the repo config"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a recorded config that is gone is refused, never replaced by the repo config"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "the base branch records nothing"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a bare gate --wait waits on the gate the recorded config started"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "green without --config checks the proofs of the recorded config"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a call that names the recorded config prints its calls with it"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "the mixed-config cases name --config, their expectations unchanged"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs"
+    caught: yes
+  - criterion: "the mixed-config cases name --config, their expectations unchanged"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs"
+    caught: yes
+  - criterion: "the mixed-config cases name --config, their expectations unchanged"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-ship.test.cjs"
+    caught: yes
+  - criterion: "a record of another version is no record (Technical Notes)"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "a call that throws records nothing (Description 2)"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs"
+    caught: yes
+  - criterion: "Description 2: a bare ship reads the recorded config"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr9.sh /home/ruben/dev/specsmd_new-scratch-config-review"
+    caught: no
+  - criterion: "Description 2: a bare lane accept reads the recorded config"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr9.sh /home/ruben/dev/specsmd_new-scratch-config-review"
+    caught: no
+  - criterion: "Description 2: a worktree call with --config records it"
+    test: "bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr9.sh /home/ruben/dev/specsmd_new-scratch-config-review"
+    caught: no
+tree: 31f5a224333a75276031abab75970af64c1f87cebe5c8c2ea9b880f0628caab0
+commit: ecd756ffe6001de3b1cf6c9028342cf913962211
+reviewer: a9cf6f62bd21161f3

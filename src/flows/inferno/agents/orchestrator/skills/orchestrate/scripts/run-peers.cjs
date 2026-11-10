@@ -23,13 +23,21 @@ function seqOf(snapshot) {
   return snapshot.seq;
 }
 
+/** Whether any entry of one frozen ownership list can name a file an entry of the other names. */
+function ownershipOverlaps(left, right, tree) {
+  return (left || []).some((entry) => (right || []).some((other) => lib.overlaps(entry, other, tree)));
+}
+
 /**
  * The windows the attempts of a peer lineage ran in. An accepted attempt runs from its baseline
  * to its acceptance and claims what it changed. An attempt nobody accepted runs until the next
  * attempt started, and claims what the attempts after it claim, back to the nearest accepted
- * one. A path an attempt carried is claimed by every attempt before it in the lineage.
+ * one. A path an attempt carried is claimed by every attempt before it in the lineage. The tail
+ * of an `open` lineage, still running, runs to the end of the timeline, and it and every attempt
+ * nobody accepted before it, back to the nearest accepted one, claim every path the tail's frozen
+ * ownership covers. Such a claim is `frozen`: it yields to a path the reviewed item claims.
  */
-function windows(tree, peer) {
+function windows(tree, peer, open = false) {
   const members = dispatch.lineage(tree, peer);
   const byId = new Map(members.map((member) => [member.dispatchId, member]));
   const next = new Map();
@@ -56,6 +64,14 @@ function windows(tree, peer) {
       queue.push(...(prior.previous || []));
     }
   }
+  const frozen = { frozen: true, has: (file) => lib.ownedBy(file, peer.assignment.ownership.editable, tree) };
+  const unaccepted = open ? [members[0]] : [];
+  while (unaccepted.length > 0) {
+    const member = unaccepted.shift();
+    if (!member || member.phase === 'accepted' || claims.get(member) === frozen) continue;
+    claims.set(member, frozen);
+    unaccepted.push(...(member.previous || []).map((id) => byId.get(id)));
+  }
   return members.map((member) => {
     const end = member.phase === 'accepted' ? member.acceptedSnapshot : (next.get(member.dispatchId) || {}).beforeSnapshot;
     return { peer, member, start: seqOf(member.beforeSnapshot), end: end ? seqOf(end) : Infinity, claims: claims.get(member) };
@@ -78,13 +94,16 @@ function checkPeerChange(tree, run, file, own, editable) {
 /**
  * The paths that nobody's changes since the item's first baseline leave on other bytes. `now`
  * is the tree as verify-item reads it, and `folded` the paths the fold of the base brought in.
+ * `peers` are accepted records, `open` the records still running beside the item.
  */
-function unexplainedChanges(tree, own, editable, peers, now, folded) {
+function unexplainedChanges(tree, own, editable, peers, now, folded, open = []) {
   const root = seqOf(dispatch.checkSnapshot(own.before));
   const runs = [];
-  for (const peer of peers) {
-    dispatch.validateDispatch(tree, peer);
-    if (!own.ids.has(peer.dispatchId)) runs.push(...windows(tree, peer).filter((run) => run.end > root));
+  for (const [records, accepted] of [[peers, true], [open, false]]) {
+    for (const peer of records) {
+      dispatch.validateDispatch(tree, peer, {}, accepted);
+      if (!own.ids.has(peer.dispatchId)) runs.push(...windows(tree, peer, !accepted).filter((run) => run.end > root));
+    }
   }
   const snapshots = new Map([[root, own.before]]);
   for (const member of [...own.members, ...runs.map((run) => run.member)]) {
@@ -105,7 +124,8 @@ function unexplainedChanges(tree, own, editable, peers, now, folded) {
     for (const file of dispatch.snapshotDelta(before, after, true)) {
       const claimed = own.claimed.includes(file);
       if (folded.has(file) && !claimed) continue;
-      const run = runs.find((entry) => entry.start <= before.seq && after.seq <= entry.end && entry.claims.has(file));
+      const run = runs.find((entry) => entry.start <= before.seq && after.seq <= entry.end && entry.claims.has(file) &&
+        !(claimed && entry.claims.frozen));
       if (run) checkPeerChange(tree, run, file, own, editable);
       if (run || claimed) {
         close(file);
@@ -120,4 +140,4 @@ function unexplainedChanges(tree, own, editable, peers, now, folded) {
   return flagged;
 }
 
-module.exports = { unexplainedChanges };
+module.exports = { ownershipOverlaps, unexplainedChanges };

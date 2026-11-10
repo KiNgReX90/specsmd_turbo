@@ -40,6 +40,7 @@ const { TransitionError } = require('./state-transition.cjs');
 const processes = require('./run-processes.cjs');
 const { caller } = require('./run-call.cjs');
 const { slotCommand } = require('./run-slot.cjs');
+const runConfig = require('./run-config-record.cjs');
 
 const { RunError } = lib;
 
@@ -60,10 +61,10 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
   node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] break one line, run the test, restore: caught yes|no
   node run.cjs mutate --batch <file> [--tree <dir>]      every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
-  node run.cjs integrate --item <id> [--tree <dir>]      fold the base in, run the checks, complete the item
-  node run.cjs integrate --items <a,b> [--tree <dir>]    the same for an explicitly batched chain
-  node run.cjs integrate [--tree <dir>] [--config <file>] fold and check without completing anything
-  node run.cjs doubles [--tree <dir>] [--config <file>] count the test doubles against the merge base: 0 held, 2 rose
+  node run.cjs integrate --item <id> [--since <ref>] [--tree <dir>] fold the base in, run the checks, complete the item
+  node run.cjs integrate --items <a,b> [--since <ref>] [--tree <dir>] the same for an explicitly batched chain
+  node run.cjs integrate [--since <ref>] [--tree <dir>] [--config <file>] fold and check without completing anything
+  node run.cjs doubles [--since <ref>] [--tree <dir>] [--config <file>] count the test doubles against the merge base: 0 held, 2 rose
   node run.cjs real-app --range <from>..<to> [--item <id>] [--tree <dir>] real_app.paths lines naming what the range removed, and files driving what it changed: 0 none stale, 2 stale
   node run.cjs cases --range <from>..<to> [--tree <dir>] [--config <file>] cases the range made stale or reached unanswered, and changed tests no case answers: 0 none, 2 refused
   node run.cjs gate [--tree <dir>] [--config <file>] [--force] run the finalize commands without matching proofs
@@ -86,11 +87,15 @@ const USAGE = `INFERNO orchestrator runner
 Options
   --json            machine-readable output
   --tree <dir>      the worktree to operate in (default: the repository of the cwd)
-  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml)
+  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml);
+                    on an intent run branch, worktree, integrate, gate, green, ship and the lane accepts default to the config
+                    claim, worktree, integrate or gate last recorded for that branch
   --base <branch>   integrate, doubles, gate, ship and teardown: the base branch to fold in (default: the config's base)
   --since <ref>     verify-item: compare against this ref instead of the item's accepted dispatch;
                     gate --detach --lanes-only: pick the lanes from the diff since this ref (default the merge base,
-                    or origin/<base> on the base branch)
+                    or origin/<base> on the base branch);
+                    integrate: diff the landing from this ref (on the base branch the default is origin/<base>; with neither, every scoped check runs);
+                    doubles: on the base branch, count against this ref
   --lanes-only      gate --detach: start only the lanes, for a driver that holds its own slot ticket
   --supersede       gate --detach: stop the running lanes the fix touched first, proven by each lane's stop command
   --holder <name>   slot: the holder whose ticket is taken, renewed or released;
@@ -195,6 +200,9 @@ function parseArgs(argv) {
 
 function main(argv) {
   const { command, args, options } = parseArgs(argv);
+  // The --config this call names becomes its run branch's record; a call naming none reads it.
+  const named = options.config;
+  runConfig.recallInto(command, args, options);
   caller(options);
 
   if (!command || ['--help', '-h', 'help'].includes(command)) {
@@ -215,8 +223,12 @@ function main(argv) {
   if (OWNING.has(command) && options.tree && !options.plan) recordOwner(options.tree, command);
   const result = handler(args, options);
   // A batch mutate yields to the event loop between its runs, so its result is a promise.
-  if (result && typeof result.then === 'function') return result.then((done) => finish(command, options, done));
-  return finish(command, options, result);
+  const done = (returned) => {
+    runConfig.rememberFrom(command, options, named, returned);
+    return finish(command, options, returned);
+  };
+  if (result && typeof result.then === 'function') return result.then(done);
+  return done(result);
 }
 
 function finish(command, options, result) {

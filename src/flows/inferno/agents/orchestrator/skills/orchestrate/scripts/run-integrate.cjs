@@ -28,6 +28,7 @@ const { checkDoubles } = require('./check-doubles.cjs');
 const cases = require('./run-cases.cjs');
 const { owedReviews } = require('./run-review.cjs');
 const { afterRecovery } = require('./run-mutate.cjs');
+const { landingSince, sinceCommit } = require('./run-since.cjs');
 
 const { RunError } = lib;
 
@@ -48,16 +49,18 @@ function intentOf(ledger, itemId, options) {
   return intent;
 }
 
-/** Commit the ledger the completion just wrote, so the next step meets a clean tree. */
-function commitLedger(tree, intentIds, message) {
-  const paths = [
-    path.join(lib.SPECS_DIR, 'state.yaml'),
-    ...intentIds.map((id) => path.join(lib.SPECS_DIR, 'intents', id)),
-  ].filter((rel) => fs.existsSync(path.join(tree, rel)));
+/**
+ * Commit the files the completion wrote: the ledger and each work-item file it rewrote. The
+ * list is exact and goes through a pathspec, so a review another reviewer writes while
+ * integrate runs, or a file staged beside it, stays out of the commit.
+ */
+function commitLedger(tree, written, message) {
+  const paths = [path.join(lib.SPECS_DIR, 'state.yaml'), ...written]
+    .filter((rel) => fs.existsSync(path.join(tree, rel)));
   if (paths.length === 0) return [];
   lib.git(tree, ['add', '--', ...paths]);
-  if (lib.gitLines(tree, ['diff', '--cached', '--name-only'], { tolerate: true }).length === 0) return [];
-  lib.git(tree, ['commit', '-q', '-m', message]);
+  if (lib.gitLines(tree, ['diff', '--cached', '--name-only', '--', ...paths], { tolerate: true }).length === 0) return [];
+  lib.git(tree, ['commit', '-q', '-m', message, '--', ...paths]);
   return [`ledger commit ${lib.git(tree, ['rev-parse', '--short', 'HEAD'])}`];
 }
 
@@ -71,15 +74,17 @@ function completeItems(tree, ids, options) {
   const ledger = lib.readLedger(tree);
   const proof = lib.git(tree, ['rev-parse', '--short', 'HEAD']);
   const intentIds = new Set();
+  const written = [];
   const out = [];
   for (const id of ids) {
     const intent = intentOf(ledger, id, options);
     intentIds.add(intent.id);
     const result = writer.completeItem({ file: ledger.file, intent: intent.id, item: id, proof, tree });
+    if (result.markdown) written.push(result.markdown);
     out.push(result.changed ? `completed ${id} at ${proof}` : `${id} ${result.note}`);
   }
   const label = ids.length === 1 ? ids[0] : ids.join(', ');
-  out.push(...commitLedger(tree, [...intentIds], `specsmd(${[...intentIds].join(', ')}): complete ${label} integrated at ${proof}`));
+  out.push(...commitLedger(tree, written, `specsmd(${[...intentIds].join(', ')}): complete ${label} integrated at ${proof}`));
   return { proof, out };
 }
 
@@ -140,10 +145,18 @@ function checkAndLand(tree, options) {
   if (owed.length > 0) {
     throw new RunError(`item review owed, nothing integrated: ${owed.join('; ')}`, 'ITEM_REVIEW_OWED', 3);
   }
+  // A --since is read before the fold moves HEAD, so `HEAD~1` names the commit before the edit
+  // and a typo is refused before anything merges.
+  const named = options.since ? sinceCommit(tree, options.since) : null;
   // Preserve the branch position before folding the base. Only the browser selection reads it,
   // so a project that configures none reads no git history for it.
   const anchor = impact.section(initial) ? impact.anchorFor(tree, base) : null;
   const folded = gate.foldBase(tree, base);
+  // origin/<base> is read after the fold, which merged it: on the base branch the diff from it
+  // is then exactly the unpushed commits. Off the base the merge base stays the anchor.
+  const landing = landingSince(tree, base, named);
+  const since = landing ? landing.ref : gate.mergeBase(tree, base);
+  const lead = [...folded, ...(landing ? landing.out : [])];
   const config = lib.readConfig(tree, options.config);
   const commands = (config.verification && config.verification.integrate) || [];
   const started = proofs.scopeHash(tree);
@@ -154,19 +167,21 @@ function checkAndLand(tree, options) {
   // A command with a `finalize_scopes` entry runs here only when the branch touched one of its
   // globs. Without it the cargo tree was left out of this list
   // for cost, and an item merged eight broken Rust cases through a green integrate that the
-  // next builder found (2026-09-10).
+  // next builder found (2026-09-10). On the base branch the merge base is HEAD, so a direct
+  // build skipped every scoped check after a commit inside its scope (2026-11-09); with no diff
+  // to read there, `changed` is null and every scoped command runs.
   const scopes = (config.verification && config.verification.finalize_scopes) || {};
-  const changed = gate.changedPaths(tree, gate.mergeBase(tree, base));
+  const changed = landing && landing.all ? null : gate.changedPaths(tree, since);
 
   const red = (out) => ({ exit: 2, payload: { ok: false, tree, branch, items: ids, folded: folded.length > 0, results }, out });
 
   // The double ratchet runs first: a branch that fakes more of the app is refused before any
   // command spends time proving it.
-  const doubles = config.doubles === undefined ? null : checkDoubles({ ...options, tree, base }, config);
-  if (doubles && doubles.exit !== 0) return red([...folded, ...doubles.out]);
+  const doubles = config.doubles === undefined ? null : checkDoubles({ ...options, tree, base, since: landing ? landing.ref : undefined }, config);
+  if (doubles && doubles.exit !== 0) return red([...lead, ...doubles.out]);
   // The tester cases the branch changes the truth of are edited or answered before any command runs.
-  const stale = cases.refusal(tree, config, `${gate.mergeBase(tree, base)}..HEAD`);
-  if (stale) return red([...folded, ...stale.out]);
+  const stale = cases.refusal(tree, config, `${since || gate.mergeBase(tree, base)}..HEAD`);
+  if (stale) return red([...lead, ...stale.out]);
 
   // Every command runs, red or not, and one red result names every failure. Stopping at the
   // first failure cost one orchestrator round trip and one builder correction per failing
@@ -174,7 +189,7 @@ function checkAndLand(tree, options) {
   // three followups to learn what one run could have said.
   for (const [index, command] of commands.entries()) {
     const scope = scopes[command];
-    if (scope && !changed.some((file) => lib.matchesAny(file, scope))) {
+    if (scope && changed && !changed.some((file) => lib.matchesAny(file, scope))) {
       results.push({ command, result: 'skip' });
       continue;
     }
@@ -183,13 +198,13 @@ function checkAndLand(tree, options) {
   const failures = results.filter((entry) => entry.result === 'fail');
   if (failures.length > 0) {
     return red([
-      ...folded,
+      ...lead,
       ...gate.describe(results),
       `${failures.length} of ${commands.length} integrate command(s) failed; send every failure above to the builder in one correction.`,
     ]);
   }
 
-  const out = [...folded, ...(doubles ? doubles.out : [])];
+  const out = [...lead, ...(doubles ? doubles.out : [])];
   if (commands.length === 0) {
     out.push(`no verification.integrate list in ${lib.SPECS_DIR}/config.yaml: folded ${base} only`);
   } else {
