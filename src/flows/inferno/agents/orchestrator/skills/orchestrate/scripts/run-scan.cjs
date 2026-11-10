@@ -13,6 +13,9 @@
  * built (run-scan-plan.cjs): a pass over the whole plan, then at most two fix rounds, and its
  * collect hands every finding back to the planner instead of recording. A plan that builds on
  * an unmerged intent waits for that merge, so it is checked against the real tree.
+ *
+ * Just before an item's dispatch, `--item <id>` is its slice check (run-scan-item.cjs): one
+ * cross-checker over that item against the tree its predecessors left, once.
  */
 
 const fs = require('fs');
@@ -24,10 +27,11 @@ const gate = require('./run-gate.cjs');
 const { resolveBase, unmetPrerequisites } = require('./run-intents.cjs');
 const { hostActor } = require('./run-review.cjs');
 const owed = require('./run-intent-owed.cjs');
-const { intentReviewCall, scanCall } = require('./run-call.cjs');
-const { IDS, PLAN_ID, QUESTIONS, readResult, renderScan } = require('./run-scan-file.cjs');
+const { intentReviewCall, itemScanCall, scanCall } = require('./run-call.cjs');
+const { IDS, PLAN_ID, QUESTIONS, SLICE_ID, SLICE_KINDS, readResult, renderScan } = require('./run-scan-file.cjs');
 const { planItems } = require('./run-scan-slices.cjs');
 const { planCollect, planDispatch } = require('./run-scan-plan.cjs');
+const { itemCollect, itemDispatch } = require('./run-scan-item.cjs');
 
 const { RunError } = lib;
 
@@ -38,6 +42,10 @@ const MAX_LINES = 30;
 const GROUP = { claude: Infinity, codex: 3 };
 
 const short = (tree, ref) => lib.git(tree, ['rev-parse', '--short', ref]);
+
+/** This call again, or its collect: the slice check of an item, the plan's cross-check, or the scan. */
+const callFor = (tree, options, collect = false) =>
+  (options.item ? itemScanCall(tree, options.item, collect) : scanCall(tree, options.plan, collect));
 
 /**
  * The questions this call asks, and so the ones its collect reads: all four before the
@@ -50,6 +58,7 @@ function questions(tree, options) {
     const call = options.plan ? scanCall(tree, options.plan, Boolean(options.collect)) : scanCall(tree, null, Boolean(options.collect));
     throw new RunError(`usage: the scan takes no --only: the scan before the review asks all four questions, and the plan-time cross-check is one call: run ${call}`, 'BAD_ARGS', 1);
   }
+  if (options.item) return [SLICE_ID];
   return options.plan ? [PLAN_ID] : IDS;
 }
 
@@ -99,7 +108,12 @@ function dispatch(tree, context) {
   let entries;
   let lead;
   let round = null;
-  if (options.plan) {
+  if (options.item) {
+    const checked = itemDispatch(tree, context);
+    if (checked.done) return checked.done;
+    ({ entries, lead } = checked);
+    fs.rmSync(dir, { recursive: true, force: true });
+  } else if (options.plan) {
     const planned = planDispatch(tree, context);
     if (planned.spent) return planned.spent;
     ({ entries, lead, round } = planned);
@@ -130,7 +144,7 @@ function dispatch(tree, context) {
     out.push(groupLine(index, group.length));
     for (const entry of group) out.push(`dispatch ${agent}${model ? ` model ${model}` : ''} scan ${entry.question} brief ${entry.brief}`);
   });
-  out.push(`then ${scanCall(tree, options.plan, true)} collects them`);
+  out.push(`then ${callFor(tree, options, true)} collects ${options.item ? 'it' : 'them'}`);
   return { exit: 3, payload: { ok: false, intent, owed: 'scan', agent, model, range, round, groups }, out };
 }
 
@@ -175,12 +189,13 @@ function record(tree, context, sent, results) {
 
 function collect(tree, context) {
   const { intent, options, ids, dir } = context;
-  const again = scanCall(tree, options.plan);
-  const fix = scanCall(tree, options.plan, true);
+  const again = callFor(tree, options);
+  const fix = callFor(tree, options, true);
   const sent = readDispatch(dir, intent, Boolean(options.plan));
   const owing = (out) => ({ exit: 3, payload: { ok: false, intent, owed: 'scan' }, out });
   if (!sent) return owing([`no scan of ${intent} is on record: run ${again}, spawn the dispatch lines it prints, then collect`]);
-  if (!options.plan && sent.hash !== proofs.scopeHash(tree)) {
+  // A slice check reads one item's claims, so a sibling landing meanwhile does not void it.
+  if (!options.plan && !options.item && sent.hash !== proofs.scopeHash(tree)) {
     return owing([
       `the code moved since the scan dispatch at ${sent.head.slice(0, 7)}, so the results read another tree; nothing recorded`,
       `run ${again} for a fresh dispatch, spawn the lines it prints, then collect`,
@@ -210,7 +225,9 @@ function collect(tree, context) {
       `spawn the dispatch lines ${again} printed for ${missing.length === 1 ? 'it' : 'them'}, then run ${fix} again`,
     ]);
   }
-  const results = entries.map((entry) => ({ question: entry.question, lines: readResult(resultOf(entry), entry.question, fix, entry.id, Boolean(options.plan)) }));
+  const kinds = options.item ? SLICE_KINDS : Boolean(options.plan);
+  const results = entries.map((entry) => ({ question: entry.question, lines: readResult(resultOf(entry), entry.question, fix, entry.id, kinds) }));
+  if (options.item) return itemCollect(tree, context, results);
   return options.plan ? planCollect(tree, context, sent, results) : record(tree, context, sent, results);
 }
 
@@ -245,10 +262,10 @@ function scan(options) {
     };
   }
   const root = path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'scan');
-  const dir = options.plan ? path.join(root, `plan-${intent}`) : root;
+  const dir = options.item ? path.join(root, `item-${options.item}`) : options.plan ? path.join(root, `plan-${intent}`) : root;
   const { agent, model } = hostActor('scanner', config);
   const context = { intent, config, options, ids, dir, agent, model, maxLines: MAX_LINES };
-  if (!options.plan && !owed.scanOwed(tree, intent)) {
+  if (!options.plan && !options.item && !owed.scanOwed(tree, intent)) {
     const rel = owed.scanPath(tree, intent);
     return { exit: 0, payload: { ok: true, intent, scan: rel }, out: [`the scan of ${intent} is collected in ${rel}`, `then ${intentReviewCall(tree)}`] };
   }

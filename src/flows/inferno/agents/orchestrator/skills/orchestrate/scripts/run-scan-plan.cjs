@@ -146,7 +146,11 @@ function planDispatch(tree, context) {
       spent: {
         exit: 3,
         payload: { ok: false, intent, owed: 'oracle', gapsFile: gapsFileOf(dir) },
-        out: [`the cross-check of ${intent} has had its pass and both fix rounds, so it never checks this plan again`, ...oracleSteps(tree, context)],
+        out: [
+          `the cross-check of ${intent} has had its pass and both fix rounds, so it never checks this plan again`,
+          ...oracleSteps(tree, context),
+          `only an owner who captured this plan anew removes ${rounds.recordFile(dir)} to start over; a repair never does`,
+        ],
       },
     };
   }

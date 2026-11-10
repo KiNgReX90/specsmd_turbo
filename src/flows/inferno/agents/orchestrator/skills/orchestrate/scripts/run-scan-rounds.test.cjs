@@ -86,6 +86,10 @@ test("the plan is read whole once, each fix round is one reader over the earlier
   assert.equal(dispatchLines(spent.out).length, 0, spent.out);
   assert.match(spent.out, /pass and both fix rounds/);
   assert.match(spent.out, /--tier oracle/);
+  const record = /^only an owner who captured this plan anew removes (\S+) to start over; a repair never does$/m.exec(spent.out);
+  assert.ok(record && fs.existsSync(record[1]), spent.out);
+  fs.rmSync(record[1]);
+  assert.equal(dispatchLines(scan(fixture).out).length, 2, "with the record gone the next call is a pass");
 });
 
 test("a fix round reads the repair as a diff of each changed file against the text the earlier round read, and the added and dropped items", () => {
@@ -133,7 +137,18 @@ test("a round counts once: a second dispatch or a second collect of the same rou
   assert.equal(again.collect.code, 2, again.collect.out + again.collect.err);
   assert.equal(scan(fixture, ["--collect"]).code, 2);
   const next = fs.readFileSync(dispatchLines(scan(fixture).out)[0][3], "utf8");
-  assert.match(next, /fix round 1 of 2/);
+  assert.match(next, /^# INFERNO cross-check: fix round 1 of 2$/m);
+});
+
+test("a record another intent left is not this intent's rounds", () => {
+  const fixture = twoCuts();
+  const sent = JSON.parse(scan(fixture, ["--json"]).out);
+  const dir = path.dirname(sent.groups[0][0].brief);
+  const spent = [1, 2, 3].map((n) => ({ round: n, findings: [] }));
+  write(path.dirname(dir), `${path.basename(dir)}-rounds.json`, `${JSON.stringify({ intent: "gamma", rounds: spent })}\n`);
+  const fresh = scan(fixture);
+  assert.equal(dispatchLines(fresh.out).length, 2, fresh.out);
+  assert.match(fs.readFileSync(dispatchLines(fresh.out)[0][3], "utf8"), /^# INFERNO cross-check: the pass, cut 1 of 2$/m);
 });
 
 const gapsFileOf = (out) => /^resume the planner with every GAP line in (\S+) as one message, then run .*scan --plan beta .*again$/m.exec(out);

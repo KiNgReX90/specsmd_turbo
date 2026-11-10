@@ -96,6 +96,11 @@ function scanCall(tree, plan = null, collect = false) {
   return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), ...(plan ? ['--plan', plan] : [])]);
 }
 
+/** The slice check of one item just before its dispatch, or its collect. */
+function itemScanCall(tree, id, collect = false) {
+  return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), '--item', id]);
+}
+
 /**
  * The oracle ask of a cross-check finding still open after both fix rounds: complexity high
  * earlier by the rubric, the impact the asker grades. The plan's intent is the positional one,
@@ -133,5 +138,5 @@ const unclaimIntentCall = (intent) => writerCall('unclaim-intent', intent);
 
 module.exports = {
   RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
-  intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
+  intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
 };

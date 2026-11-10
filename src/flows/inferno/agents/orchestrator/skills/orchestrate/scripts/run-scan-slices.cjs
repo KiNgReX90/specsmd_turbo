@@ -102,15 +102,14 @@ function cutChain(chain, room) {
 }
 
 /**
- * The plan's cuts, each `{ items, words }`: one with every item when the brief and the items fit
- * `budget` words, else one per chain, small chains packed together first fit. Every item lands
- * in exactly one cut.
+ * The plan's cuts, each `{ items, words }`: the chains packed first fit into cuts of at most
+ * `budget` words with the brief, so a plan that fits one reader is one cut with each chain read
+ * in a row. Every item lands in exactly one cut, and a plan with no item has no cut.
  */
 function planCuts(tree, intent, budget = READER_WORDS) {
   const items = planItems(tree, intent);
   const room = Math.max(budget - briefWords(tree, intent), 1);
   const shape = (cut) => ({ items: cut.map((item) => item.id), words: total(cut) });
-  if (total(items) <= room) return [shape(chainOrder(items))];
   const cuts = [];
   for (const chain of chains(items)) {
     if (total(chain) > room) {

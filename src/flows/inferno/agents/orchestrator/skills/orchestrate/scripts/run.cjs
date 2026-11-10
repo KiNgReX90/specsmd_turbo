@@ -58,6 +58,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] the item's cold review: 3 dispatch the reviewer, 0 clean, 2 fix
   node run.cjs scan [--tree <dir>] [--intent <id>]      the four scanner briefs before the intent review: 3 spawn the printed lines
   node run.cjs scan --collect [--tree <dir>]            record and commit scan.yaml: 0 recorded, 3 a result missing, 2 a line without its proof
+  node run.cjs scan [--collect] --item <id> [--tree <dir>] the slice check of one item before its dispatch, once and only after a predecessor: 3 spawn, then 0 the lines for the dispatch, 2 a conflict for the planner
   node run.cjs scan [--collect] --plan <intent-id>       the plan-time cross-check, a pass and at most two fix rounds: 3 spawn, wait on an unmerged intent or ask the oracle, then 0 no finding, 2 every finding for the planner or the oracle
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
   node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] [--config <file>] break one line, run the test, restore: caught yes|no
@@ -106,7 +107,7 @@ Options
   --dispatch-id <id> verify-item: the accepted dispatch to check (default the item's latest)
   --peers <json>    verify-item: the dispatch ids that may explain a sibling's change (default every accepted one)
   --item <id>       integrate: the item this landing completes once the checks are green; review: the item reviewed;
-                    real-app: the item whose own paths the removals are read from
+                    real-app: the item whose own paths the removals are read from; scan: the item its slice check reads
   --range <a..b>    real-app: the diff whose removed test ids, labels and routes it looks for; cases: the landing it checks
   --items <a,b>     integrate, verify-item and dispatch-log: the batched chain, treated as one unit
   --impact <grade>  dispatch-log --tier oracle: "high <clause>: <rubric line>" or "low: <rubric line>", as is --complexity

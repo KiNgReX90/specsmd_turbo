@@ -100,4 +100,4 @@ function repairChanges(tree, intent, dir, round) {
   };
 }
 
-module.exports = { FIX_ROUNDS, MAX_ROUNDS, clearRounds, nextRound, readRounds, recordRound, repairChanges, roundName, snapshot };
+module.exports = { FIX_ROUNDS, MAX_ROUNDS, clearRounds, recordFile, nextRound, readRounds, recordRound, repairChanges, roundName, snapshot };

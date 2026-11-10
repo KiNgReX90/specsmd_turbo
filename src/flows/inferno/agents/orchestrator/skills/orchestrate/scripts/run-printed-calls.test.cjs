@@ -218,6 +218,10 @@ test("each call builder prints its exact line from its own flags, the site's dec
       [["/w", "plan-x"], `run.cjs scan --plan plan-x --tree /w${tail}`],
       [["/w", "plan-x", true], `run.cjs scan --collect --plan plan-x --tree /w${tail}`],
     ],
+    itemScanCall: [
+      [["/w", "a-one"], `run.cjs scan --item a-one --tree /w${tail}`],
+      [["/w", "a-one", true], `run.cjs scan --collect --item a-one --tree /w${tail}`],
+    ],
     planOracleCall: [
       [["/w", "plan-x"], 'run.cjs dispatch-log plan-x --tier oracle --impact "<grade>: <line>" --complexity ' +
         `"high earlier: <GAP id> stayed open through both fix rounds of the cross-check" --tree /w --config ${CODEX}`],

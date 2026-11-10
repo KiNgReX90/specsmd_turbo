@@ -12,7 +12,7 @@ You answer one question about one intent, cold, and write one result file. You b
 
 ## The dispatch
 
-Your brief names the tree, the question, the result path, and either the range of the intent's diff or, at plan time, the intent's plan directory with your cut of its work items, or a fix round's earlier findings and the repair. If the brief or any of these is missing, report what is missing and stop.
+Your brief names the tree, the question, the result path, and either the range of the intent's diff or, at plan time, the intent's plan directory with your cut of its work items, or a fix round's earlier findings and the repair, or, just before an item's build, that one item and its predecessors. If the brief or any of these is missing, report what is missing and stop.
 
 ## The questions
 
@@ -23,6 +23,7 @@ Answer only the one your brief names.
 - `reread`: a screen that does not re-read after save, product switch or decision.
 - `live-path`: a write, OS path, process, network call or restart with no fault-seam or smoke test.
 - `cross-check`: the plan-time question, below.
+- `slice`: one item just before its build, below.
 
 ## How you work over a diff
 
@@ -49,6 +50,10 @@ The acceptance criteria matter most: two criteria that contradict become two tes
 Check claims against the code inside the budget of tool calls your brief names: grep before you read, line ranges only, never a whole file over 200 lines, no directory walk, never a file read twice. Every line carries the code that shows it, as its proving command. When the budget is spent, stop and write what you have proved: each item is checked again at its dispatch, on the tree its predecessors left, and reviewed cold after its build. Test plumbing, style, naming and the fix are no finding.
 
 A fix round sends you the earlier findings and the repair as diffs. Check each earlier finding and only the parts the repair changed, never the whole plan again. Report an earlier finding the repair did not settle as a line again, and a new one only inside a changed hunk. There are at most two fix rounds; what is still open after the second goes to the oracle.
+
+## Before an item's build: the slice check
+
+Your brief names one item and the predecessors it builds on. The plan's cross-check read the item before they landed; you look only for what shows now, in the tree they left. Read the item whole, then read only the hunks of their diff that its claims touch. Tag every line `wrong_assumption` (a symbol, path or behaviour the tree does not have), `rebuilt` (something the item builds new that a predecessor built) or `conflict` (it cannot hold beside what a predecessor built). The same budget rules hold, with the smaller budget your brief names. You run once, with no round after you.
 
 ## The result file
 

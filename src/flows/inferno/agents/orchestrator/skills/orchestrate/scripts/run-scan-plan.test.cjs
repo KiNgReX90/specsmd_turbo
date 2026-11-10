@@ -45,6 +45,20 @@ test("a plan within one reader's budget, brief included, is one cut in dependenc
   assert.equal(cuts(plan(items, 30), 80).length, 2, "the brief counts against every reader's budget");
 });
 
+test("a plan within one reader's budget keeps each chain together, whatever the order of its files", () => {
+  const items = [["x-1", 20], ["x-2", 20], ["x-3", 20, ["x-1"]], ["x-4", 20, ["x-2"]]];
+  assert.deepEqual(cuts(plan(items, 3), 1000), [["x-1", "x-3", "x-2", "x-4"]]);
+});
+
+test("a plan with no work item yet gets one cross-checker for its brief", () => {
+  const fixture = plan([]);
+  const result = scan(fixture, ["--plan", "beta"]);
+  assert.equal(result.code, 3, result.out + result.err);
+  const lines = dispatchLines(result.out);
+  assert.equal(lines.length, 1, result.out);
+  assert.match(fs.readFileSync(lines[0][3], "utf8"), /^- cut: none: the plan has no work item yet, so check its brief\.md$/m);
+});
+
 test("a plan past the budget is cut along its dependency chains: a chain that fits stays whole, and small chains share a cut", () => {
   const fixture = plan([
     ["a-one", 32], ["a-two", 32, ["a-one"]],

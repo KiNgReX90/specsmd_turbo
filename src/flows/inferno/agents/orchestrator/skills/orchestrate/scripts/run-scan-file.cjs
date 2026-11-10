@@ -46,7 +46,23 @@ const PLAN_KINDS = {
   wrong_assumption: 'an item relies on a symbol, path, column, route or behaviour the code does not have, or has otherwise; ' +
     'or it builds new what already exists and fits, which its Reuse table should have named.',
 };
-const KIND_LIST = `${Object.keys(PLAN_KINDS).slice(0, -1).join(', ')} or ${Object.keys(PLAN_KINDS).slice(-1)[0]}`;
+/** The kinds of a table as a refusal names them: `a, b or c`. */
+const kindList = (kinds) => `${Object.keys(kinds).slice(0, -1).join(', ')} or ${Object.keys(kinds).slice(-1)[0]}`;
+const KIND_LIST = kindList(PLAN_KINDS);
+
+/** The slice check's question: one item against the tree its predecessors left, just before its build. */
+const SLICE_ID = 'slice';
+
+/**
+ * What a slice line can be: only what shows once the predecessors landed. A wrong assumption or
+ * a rebuilt part goes into the dispatch as a measured fact; a conflict goes to the planner once.
+ */
+const SLICE_KINDS = {
+  wrong_assumption: 'the item relies on a symbol, path or behaviour the tree its predecessors left does not have, or has otherwise.',
+  rebuilt: 'the item builds new what a predecessor already built and fits.',
+  conflict: 'the item requires what cannot hold beside what a predecessor built: a value, a contract or a file both shape differently, ' +
+    'so its spec has to change before it is built.',
+};
 
 /** What the cross-check leaves out, because the builder's red-first test and the gate catch it in minutes. */
 const NOT_A_FINDING = 'Test plumbing is no finding: a fixture detail, a selector, a line number or a count inside a test. ' +
@@ -65,8 +81,11 @@ function bad(file, id, problem, fix, scanner = id) {
 /**
  * The lines of one scanner's result file, each with the command that proves it. `fix` is the
  * collect command the refusal prints, `scanner` the cut a refusal names when it is not `id`.
+ * `kinds` is the table every line's `kind` comes from, `true` for the cross-check's, or none.
  */
-function readResult(file, id, fix, scanner = id, plan = false) {
+function readResult(file, id, fix, scanner = id, kinds = null) {
+  const table = kinds === true ? PLAN_KINDS : kinds;
+  const plan = Boolean(table);
   const refuse = (problem) => bad(file, id, problem, fix, scanner);
   let doc;
   try {
@@ -89,8 +108,8 @@ function readResult(file, id, fix, scanner = id, plan = false) {
     for (const key of Object.keys(line)) {
       if (!keys.includes(key)) throw refuse(`unknown key ${key} in ${at}: it holds ${keys.join(', ')} only`);
     }
-    if (plan && !Object.prototype.hasOwnProperty.call(PLAN_KINDS, line.kind)) {
-      throw refuse(`${at} has kind ${line.kind === undefined ? 'none' : line.kind}: a cross-check line is ${KIND_LIST}`);
+    if (plan && !Object.prototype.hasOwnProperty.call(table, line.kind)) {
+      throw refuse(`${at} has kind ${line.kind === undefined ? 'none' : line.kind}: a ${id} line is ${kindList(table)}`);
     }
     for (const key of LINE_KEYS) {
       if (typeof line[key] !== 'string' || line[key].trim() === '') {
@@ -145,5 +164,6 @@ function renderScan({ intent, range, results, tree, commit }) {
 }
 
 module.exports = {
-  IDS, KIND_LIST, LINE_KEYS, NOT_A_FINDING, PLAN_ID, PLAN_KINDS, QUESTIONS, RESULT_KEYS, SCAN_LINE_KEYS, numbered, readResult, renderScan,
+  IDS, KIND_LIST, LINE_KEYS, NOT_A_FINDING, PLAN_ID, PLAN_KINDS, QUESTIONS, RESULT_KEYS, SCAN_LINE_KEYS, SLICE_ID, SLICE_KINDS, numbered, readResult,
+  renderScan,
 };
