@@ -53,7 +53,7 @@ verification:
     - npm run test:e2e
   # merge_slot: true              # optional: gate --detach folds and starts only when its ticket heads one queue shared by every worktree of the repository; without it every gate folds and starts at once
   # ship_cleanup: "node scripts/ship-cleanup.mjs"   # optional: the host command ship and teardown run from the primary checkout once the worktree and branch are gone, with INFERNO_BRANCH and INFERNO_TREE set; a failure prints its line and never undoes the ship; without it ship ends at the teardown
-  # lint:                         # optional: lint and analysis commands the quality reviewer runs once per item review, in the worktree; it takes over only what they report on lines the item added
+  # lint:                         # optional: lint and analysis commands the quality reviewer runs once per item review, in the worktree; its dispatch carries one lint line per command, and it takes over only what they report on lines the item added
   #   - npm run lint
   integrate:                      # optional: the cheap checks, run by `run.cjs integrate` after every item lands, on the committed tree with the base folded in; a red goes back to the warm builder instead of waiting for the gate
     - npm run check

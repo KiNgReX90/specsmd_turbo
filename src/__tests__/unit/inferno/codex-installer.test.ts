@@ -229,7 +229,7 @@ describe('the run scripts and the Codex bundle', { timeout: 30_000 }, () => {
 
   it('falls back to the agents the Codex agent files define', () => {
     const { hostActor } = require(path.join(SCRIPTS, 'run-review.cjs'));
-    for (const actor of ['cheap', 'strong', 'escalate', 'oracle', 'reviewer', 'scanner']) {
+    for (const actor of ['cheap', 'strong', 'escalate', 'oracle', 'reviewer', 'scanner', 'quality']) {
       const { agent } = hostActor(actor, { host: 'codex' });
       const toml = readFileSync(path.join(INFERNO, 'codex/agents', `${agent}.toml`), 'utf8');
       expect(tomlStrings(toml).name).toBe(agent);

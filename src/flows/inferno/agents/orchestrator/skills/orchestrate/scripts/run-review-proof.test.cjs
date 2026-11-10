@@ -195,8 +195,10 @@ test('a delta review keeps the range from the commit the last review read and it
   assert.equal(review(f).code, 3);
   f.write(ITEM_REVIEW('a'), 'item: a\nverdict: fix\nfiles: [a.cjs]\nfindings:\n  - criterion: AC1 it reads three\n    file: a.cjs\n' +
     '    line: 1\n    evidence: read a.cjs, it exports 2\n    fix: export 3\n    severity: major\n');
+  // a.cjs is production code, so the quality lens was dispatched beside the contract lens and wrote its file too.
+  f.write('.specs-inferno/intents/alpha/reviews/quality/a.yaml', 'item: a\nverdict: clean\nfiles: [a.cjs]\n');
   const read = f.git('rev-parse', 'HEAD');
-  const recorded = f.human('review', '--item', 'a', '--tree', f.root, '--reviewer', 'rev-1');
+  const recorded = f.human('review', '--item', 'a', '--tree', f.root, '--reviewer', 'rev-1', '--quality-reviewer', 'rev-q');
   assert.equal(recorded.code, 2, recorded.out);
 
   build(f, ['--item', 'a'], { 'a.cjs': 'module.exports = 3;\n' }, { verify: false });

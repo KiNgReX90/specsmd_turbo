@@ -55,7 +55,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs probes <item-id> [--tree <dir>] [--intent <id>] rerun the item's measurements: 0 they hold, 2 drift
   node run.cjs verify-item <item-id> [--tree <dir>]      the item's own check plus its ownership
   node run.cjs verify-item --items <a,b> [--tree <dir>]  the same for a batch, each item against its dispatch
-  node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] the item's cold review: 3 dispatch the reviewer, 0 clean, 2 fix
+  node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] [--quality-reviewer <agent-id>] the item's cold review: 3 dispatch its lenses, 0 clean, 2 fix
   node run.cjs scan [--tree <dir>] [--intent <id>]      the four scanner briefs before the intent review: 3 spawn the printed lines
   node run.cjs scan --collect [--tree <dir>]            record and commit scan.yaml: 0 recorded, 3 a result missing, 2 a line without its proof
   node run.cjs scan [--collect] --item <id> [--tree <dir>] the slice check of one item before its dispatch, once and only after a predecessor: 3 spawn, then 0 the lines for the dispatch, 2 a conflict for the planner

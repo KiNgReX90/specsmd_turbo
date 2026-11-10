@@ -5,8 +5,10 @@
  * that says who builds the item next.
  *
  * The order per item: the builder returns, the orchestrator commits the item, this step
- * prints the reviewer dispatch line, the reviewer writes its file, and the same step
- * validates it, runs its mutants (run-review-mutants.cjs), records and commits that file. A clean review lets `integrate --item` land the
+ * prints the reviewer dispatch lines, one per lens (the contract lens, and the quality lens of
+ * run-review-quality.cjs for an item with production code), each reviewer writes its file, and
+ * the same step validates them, runs the contract lens's mutants (run-review-mutants.cjs), and
+ * records and commits both as one review. A clean review lets `integrate --item` land the
  * item. A fix review goes back to the builder the ladder names (run-review-ladder.cjs), and the
  * next review reads only what changed since. A fix review whose findings are all minor gets no
  * second review: once the warm builder's correction stays inside the files it lists and
@@ -31,6 +33,7 @@ const { itemMutants } = require('./run-review-mutants.cjs');
 const { dirtyFiles } = require('./run-dirt.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
 const ladder = require('./run-review-ladder.cjs');
+const lens = require('./run-review-quality.cjs');
 
 const { builtBy, hostActor, nextActor, nextLine } = ladder;
 
@@ -41,10 +44,10 @@ const { RunError } = lib;
  * Every review is a fresh dispatch: a resumed reviewer carries the context of every round before
  * into the next, and a delta review reads the fix and nothing else. `previous` is the review file
  * a delta review answers, the one at `write`, named so the reviewer reads its findings first; a
- * first review has none.
+ * first review has none. `actor` is `quality` for the quality lens.
  */
-function reviewerLines(config, subject, previous, body) {
-  const { agent, model } = hostActor('reviewer', config);
+function reviewerLines(config, subject, previous, body, actor = 'reviewer') {
+  const { agent, model } = hostActor(actor, config);
   return [`dispatch ${agent}${model ? ` model ${model}` : ''} ${subject}`, ...(previous ? [`  previous ${previous}`] : []), ...body];
 }
 
@@ -84,13 +87,13 @@ function realAppLine(tree, config, range, id = null) {
  * own diff. A proof of an older state is never named: the review waits on the verify-item call
  * that writes a current one. With no proof, as on a tree the released flow verified, the
  * dispatch goes out without the line and its reviewer runs the item's tests itself.
+ *
+ * An item with production code gets the quality lens's dispatch beside the contract lens's,
+ * both to go out in one message, and the lenses printed are noted so the record waits for each.
  */
 function owed(tree, context, reason, from, paths) {
-  const { intent, item, config, rel } = context;
-  const { agent, model } = hostActor('reviewer', config);
-  // Required here, not at the top: run-item-proof loads run-intents, which loads this file.
-  const { proofAtHead } = require('./run-item-proof.cjs');
-  const proof = proofAtHead(tree, intent.id, item.id);
+  const { intent, item } = context;
+  const proof = itemProof(tree, context);
   const verify = verifyItemCall(tree, proof.items);
   if (proof.state === 'stale') {
     return {
@@ -103,30 +106,65 @@ function owed(tree, context, reason, from, paths) {
       ],
     };
   }
+  const lenses = ['contract', ...(lens.qualityOwed(tree, context, forkPoint(tree, context.config, intent)) ? ['quality'] : [])];
+  const [contract, quality] = lenses.map((one) => lensDispatch(tree, context, one, { from, paths }, proof));
+  lens.noteDispatched(tree, intent.id, item.id, lenses);
+  const named = contract.payload.proof;
+  return {
+    exit: 3,
+    payload: { ok: false, item: item.id, owed: reason, ...contract.payload, quality: quality ? quality.payload : null },
+    out: [
+      `review owed for ${item.id}: ${reason}`,
+      ...contract.lines,
+      ...(quality ? [...quality.lines, lens.ONE_MESSAGE] : []),
+      `then ${itemRecordCall(tree, item.id, null, Boolean(quality))} records ${quality ? 'both files' : 'it'}; ` +
+        'it runs the review\'s mutants first, so give it the time those tests take',
+      ...(named ? [] : [`no proof for ${item.id}, so its reviewer runs the item's tests itself: ${verify} writes one, and review again names it`]),
+    ],
+  };
+}
+
+function itemProof(tree, context) {
+  // Required here, not at the top: run-item-proof loads run-intents, which loads this file.
+  const { proofAtHead } = require('./run-item-proof.cjs');
+  return proofAtHead(tree, context.intent.id, context.item.id);
+}
+
+/**
+ * The dispatch of one lens and its payload. A lens with a file on record reads `span`, the fix,
+ * and names that file as its previous one. A first review reads the proof's own diff when one is
+ * current, else `span`; the quality lens reading an item for the first time beside a contract
+ * delta, as after a review the released flow recorded, reads the whole item from its fork point.
+ */
+function lensDispatch(tree, context, which, span, proof) {
+  const { intent, item, config } = context;
+  const quality = which === 'quality';
+  const rel = quality ? context.qualityRel : context.rel;
+  const { agent, model } = hostActor(quality ? 'quality' : 'reviewer', config);
   const named = proof.state === 'current' ? proof.file : null;
   const previous = item.review && fs.existsSync(path.join(tree, rel)) ? rel : null;
   const own = named && !previous && proof.paths.length > 0;
-  const start = own ? proof.from : from;
-  const read = own ? proof.paths : paths;
+  const whole = quality && !previous && Boolean(item.review);
+  const start = own ? proof.from : whole ? forkPoint(tree, config, intent) : span.from;
+  const read = own ? proof.paths : whole ? context.editable : span.paths;
   const range = `${short(tree, start)}..${short(tree, 'HEAD')}`;
   const spec = path.relative(tree, lib.readItemSpec(tree, intent.id, item.id).file);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
+  const payload = { agent, model, range, previous, paths: read, spec, brief, write: rel };
+  if (quality) {
+    const body = lens.qualityBody(tree, context, { range, read, spec, brief });
+    return { payload: { ...payload, standards: body.standards, lint: body.lint }, lines: reviewerLines(config, `item ${item.id}`, previous, body.lines, 'quality') };
+  }
   return {
-    exit: 3,
-    payload: { ok: false, item: item.id, owed: reason, agent, model, range, previous, paths: read, proof: named, spec, brief, write: rel },
-    out: [
-      `review owed for ${item.id}: ${reason}`,
-      ...reviewerLines(config, `item ${item.id}`, previous, [
-        `  range ${range} paths ${read.join(' ') || '(the whole range)'}`,
-        ...(named ? [`  proof ${named}`] : []),
-        ...realAppLine(tree, config, range, item.id),
-        `  spec ${spec}`,
-        `  brief ${brief}`,
-        `  write ${rel}`,
-      ]),
-      `then ${itemRecordCall(tree, item.id)} records it; it runs the review's mutants first, so give it the time those tests take`,
-      ...(named ? [] : [`no proof for ${item.id}, so its reviewer runs the item's tests itself: ${verify} writes one, and review again names it`]),
-    ],
+    payload: { ...payload, proof: named },
+    lines: reviewerLines(config, `item ${item.id}`, previous, [
+      `  range ${range} paths ${read.join(' ') || '(the whole range)'}`,
+      ...(named ? [`  proof ${named}`] : []),
+      ...realAppLine(tree, config, range, item.id),
+      `  spec ${spec}`,
+      `  brief ${brief}`,
+      `  write ${rel}`,
+    ]),
   };
 }
 
@@ -138,7 +176,10 @@ function verdictResult(tree, context, review, head) {
     return { exit: 0, payload: { ok: true, item: item.id, verdict: 'clean' }, out };
   }
   for (const finding of review.findings) {
-    out.push(`FINDING ${finding.criterion} ${finding.file}:${finding.line}: ${finding.evidence}. fix: ${finding.fix}`);
+    out.push(`FINDING ${lens.findingLabel(finding)} ${finding.file}:${finding.line}: ${finding.evidence}. fix: ${finding.fix}`);
+    if (finding.oracle === 'true') {
+      out.push(`ORACLE ${finding.id}: the item's own criterion asks to break ${finding.rule}, so the oracle decides it before the builder takes it`);
+    }
   }
   // A survivor the runner ran is told once, as its finding; a released flow's survivor has none.
   const told = (mutant) => review.findings.some((finding) => finding.mutant === mutant.criterion);
@@ -152,26 +193,47 @@ function verdictResult(tree, context, review, head) {
   };
 }
 
+/**
+ * Record the review the lenses wrote, once every lens the dispatch printed has written its file:
+ * the contract file under `--reviewer`, the quality file under `--quality-reviewer`. Both are
+ * validated before the contract lens's mutants run, and the ledger records their one reading.
+ */
 async function record(tree, context, ledger) {
-  const { intent, item, rel } = context;
-  const reviewer = reviewerId(context.reviewer, itemRecordCall(tree, item.id));
+  const { intent, item, rel, qualityRel } = context;
+  const lenses = context.dispatched;
+  const waiting = lens.lensesWaiting(tree, context, {
+    fork: () => forkPoint(tree, context.config, intent),
+    dispatch: (which, span) => lensDispatch(tree, context, which, span, itemProof(tree, context)).lines,
+  });
+  if (waiting) return waiting;
+  const both = lenses.includes('quality');
+  const call = itemRecordCall(tree, item.id, null, both);
+  const reviewer = reviewerId(context.reviewer, call);
+  const qualityReviewer = both ? lens.qualityReviewerId(context.qualityReviewer, call) : null;
   const written = parseItemReview(tree, rel, item.id, { recorded: false });
-  if (!item.review && written.findings.some((finding) => finding.repeat === 'true')) {
-    throw bad(rel, 'repeat: true marks a kind an earlier round of this item reported, and this is its first review, so drop repeat: true');
+  const quality = both ? lens.parseQualityReview(tree, qualityRel, item.id, { recorded: false }) : null;
+  for (const [file, read] of [[rel, written], [qualityRel, quality]]) {
+    if (!item.review && read && read.findings.some((finding) => finding.repeat === 'true')) {
+      throw bad(file, 'repeat: true marks a kind an earlier round of this item reported, and this is its first review, so drop repeat: true');
+    }
   }
   // The runner runs the review's mutants and writes what they said into the file (run-review-mutants.cjs).
   const ran = await itemMutants(tree, context);
-  const review = parseItemReview(tree, rel, item.id, { recorded: false });
+  const review = lens.mergeReviews(parseItemReview(tree, rel, item.id, { recorded: false }),
+    quality || lens.readQuality(tree, qualityRel, item.id, { recorded: true }));
   const commit = lib.git(tree, ['rev-parse', 'HEAD']);
   const hash = filesHash(tree, review.files);
   const result = writer.reviewItem({
     file: ledger.file, intent: intent.id, item: item.id, verdict: review.verdict,
     files_hash: hash, tier: builtBy(item), commit,
   });
-  const abs = path.join(tree, rel);
-  const text = fs.readFileSync(abs, 'utf8');
-  fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${hash}\ncommit: ${commit}\nreviewer: ${reviewer}\n`);
-  const paths = [path.join(lib.SPECS_DIR, 'state.yaml'), rel];
+  const signed = [[rel, reviewer], ...(both ? [[qualityRel, qualityReviewer]] : [])];
+  for (const [file, id] of signed) {
+    const abs = path.join(tree, file);
+    const text = fs.readFileSync(abs, 'utf8');
+    fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${hash}\ncommit: ${commit}\nreviewer: ${id}\n`);
+  }
+  const paths = [path.join(lib.SPECS_DIR, 'state.yaml'), ...signed.map(([file]) => file)];
   lib.git(tree, ['add', '--', ...paths]);
   lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent.id}): review ${item.id} ${review.verdict}`, '--', ...paths]);
   const updated = itemOf(lib.readLedger(tree), item.id, { intent: intent.id }).item;
@@ -181,38 +243,54 @@ async function record(tree, context, ledger) {
   return { ...verdict, out: [...ran, ...verdict.out] };
 }
 
-/** The files a pending review lists. A review that does not parse lists none here; its record reports why. */
-function pendingFiles(tree, rel, id) {
-  try {
-    return parseItemReview(tree, rel, id, { recorded: false }).files;
-  } catch (error) {
-    if (error instanceof RunError) return [];
-    throw error;
-  }
+/**
+ * The files the pending lens files list. A file that does not parse lists none here; its record
+ * reports why.
+ */
+function pendingFiles(tree, context) {
+  const reads = [[context.rel, parseItemReview], [context.qualityRel, lens.parseQualityReview]];
+  return [...new Set(reads.filter(([rel]) => context.isPending(rel)).flatMap(([rel, parse]) => {
+    try {
+      return parse(tree, rel, context.item.id, { recorded: false }).files;
+    } catch (error) {
+      if (error instanceof RunError) return [];
+      throw error;
+    }
+  }))];
 }
 
 /** The step itself. Every call first puts back a killed mutate's leftover and refuses this item's uncommitted work. */
 function review(options) {
   if (!options.item) {
-    throw new RunError('usage: node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>]', 'BAD_ARGS', 1);
+    throw new RunError('usage: node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] ' +
+      '[--quality-reviewer <agent-id>]', 'BAD_ARGS', 1);
   }
   const tree = options.tree || lib.repoRoot(options.cwd);
   const ledger = lib.readLedger(tree);
   const { intent, item } = itemOf(ledger, options.item, options);
   const rel = reviewPath(intent.id, item.id);
+  const qualityRel = lens.qualityPath(intent.id, item.id);
   const config = lib.readConfig(tree, options.config);
-  const context = { intent, item, config, rel, reviewer: options.reviewer, configFile: options.config };
   const manifest = lib.readItemSpec(tree, intent.id, item.id).manifest || {};
   const editable = (manifest.ownership && manifest.ownership.editable) || [];
+  // A lens file is pending once its reviewer wrote it and before the record commits it.
+  const isPending = (file) => fs.existsSync(path.join(tree, file)) && lib.gitLines(tree, ['status', '--porcelain', '--', file]).length > 0;
+  // The lenses this round waits for: those the dispatch printed, and a quality file written all the same.
+  const dispatched = lens.dispatchedLenses(tree, intent.id, item.id);
+  if (isPending(qualityRel) && !dispatched.includes('quality')) dispatched.push('quality');
+  const context = {
+    intent, item, config, rel, qualityRel, editable, isPending, dispatched,
+    reviewer: options.reviewer, qualityReviewer: options.quality_reviewer, configFile: options.config,
+  };
 
-  const exists = fs.existsSync(path.join(tree, rel));
-  const pending = exists && lib.gitLines(tree, ['status', '--porcelain', '--', rel]).length > 0;
-  const current = exists && !pending ? parseItemReview(tree, rel, item.id, { recorded: true }) : null;
+  const exists = fs.existsSync(path.join(tree, rel)) || isPending(qualityRel);
+  const pending = isPending(rel) || isPending(qualityRel);
+  const current = exists && !pending ? lens.readItemReview(tree, intent.id, item.id, { recorded: true }) : null;
 
   // Only this item's work has to be committed: another builder may be editing beside it, and
   // another item's reviewer may be running a mutant beside it. A dead run's mutant goes back
   // first, so it never reads as this item's work. A pending review binds every file it lists.
-  const listed = pending ? pendingFiles(tree, rel, item.id) : current ? current.files : [];
+  const listed = pending ? pendingFiles(tree, context) : current ? current.files : [];
   const mine = (file) => lib.ownedBy(file, editable) || listed.includes(file);
   const restored = recoverInterrupted(tree, { keepLive: (file) => !mine(file) });
   const dirty = dirtyFiles(tree).filter(mine);
@@ -334,7 +412,7 @@ function owedReviews(tree, ledger, ids, options) {
     }
     let reviewed;
     try {
-      reviewed = parseItemReview(tree, reviewPath(intent.id, id), id, { recorded: true });
+      reviewed = lens.readItemReview(tree, intent.id, id, { recorded: true });
     } catch (error) {
       lines.push(`${id} has no readable review file, run ${command}`);
       continue;

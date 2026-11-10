@@ -172,18 +172,19 @@ function refuseUnsettled(file, options, field) {
 
 /**
  * The weight of a fix verdict, or of the fix review a settle lands on, read from the item's
- * review file beside the ledger: whether it counts, and whether it weighs minor, serious or
- * repeat. Required here, not at the top: run-review-file loads run-lib, which loads the writer
- * that loads this file.
+ * review beside the ledger, the one reading of its contract file and its quality file: whether
+ * it counts, and whether it weighs minor, serious or repeat. Required here, not at the top:
+ * run-review-file loads run-lib, which loads the writer that loads this file.
  */
 function fixWeight(file, options) {
-  const { parseItemReview, reviewPath, weightOf } = require('./run-review-file.cjs');
+  const { reviewPath, weightOf } = require('./run-review-file.cjs');
+  const { readItemReview } = require('./run-review-quality.cjs');
   const root = path.dirname(path.dirname(path.resolve(file)));
   const rel = reviewPath(options.intent, options.item);
   const fix = `Record the review through ${itemRecordCall(root, options.item, options.intent)}, which validates the file first.`;
   let review;
   try {
-    review = parseItemReview(root, rel, options.item, { recorded: true });
+    review = readItemReview(root, options.intent, options.item, { recorded: true });
   } catch (error) {
     if (error.code !== 'BAD_REVIEW' && error.code !== 'ENOENT') throw error;
     throw new TransitionError(`refusing review-item: a fix verdict is weighed by the findings in ${rel}, which cannot be read. ${fix}`,

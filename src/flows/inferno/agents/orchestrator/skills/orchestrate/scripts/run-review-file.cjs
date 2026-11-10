@@ -177,9 +177,10 @@ function parseItemReview(tree, rel, itemId, { recorded }) {
 }
 
 /**
- * What a fix review weighs on the ladder. It counts when a finding is blocker or major, or a
- * mutant survived; minor findings alone do not. A finding that repeats an earlier round
- * sends the review to the oracle, whatever it counts.
+ * What a fix review weighs on the ladder, read from the one reading of both lenses
+ * (readItemReview in run-review-quality.cjs). It counts when a finding of either lens is blocker
+ * or major, or a mutant survived; minor findings alone do not. A finding that repeats an earlier
+ * round sends the review to the oracle, whatever it counts.
  */
 function weightOf(review) {
   const serious = review.survivors.length > 0 || review.findings.some((finding) => finding.severity !== 'minor');
@@ -309,6 +310,6 @@ function verdictParts(rel, doc, findingKeys, optional = []) {
 }
 
 module.exports = {
-  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, entries, isMap, itemCriterion, mutantsOf, parseItemReview,
+  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, entries, isMap, itemCriterion, mutantsOf, parseItemReview,
   pinsOf, proposalsOf, readDoc, recordedReviewer, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, samePin, verdictParts, weightOf,
 };

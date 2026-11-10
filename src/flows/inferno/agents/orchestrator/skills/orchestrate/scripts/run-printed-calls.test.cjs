@@ -209,6 +209,7 @@ test("each call builder prints its exact line from its own flags, the site's dec
     itemRecordCall: [
       [["/w", "a-one"], `run.cjs review --item a-one --reviewer <agent-id> --tree /w${tail}`],
       [["/w", "a-one", "beta"], `run.cjs review --item a-one --reviewer <agent-id> --tree /w --intent beta --config ${CODEX}`],
+      [["/w", "a-one", null, true], `run.cjs review --item a-one --reviewer <agent-id> --quality-reviewer <quality-agent-id> --tree /w${tail}`],
     ],
     verifyItemCall: [
       [["/w", ["a-one"]], `run.cjs verify-item a-one --tree /w${tail}`],
