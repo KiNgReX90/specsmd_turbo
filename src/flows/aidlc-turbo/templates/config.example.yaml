@@ -1,0 +1,112 @@
+# AI-DLC Turbo project config. Edit by hand or run /specsmd-aidlc-turbo-config.
+#
+# Lives at .specs-aidlc-turbo/repo/config.yaml. The installer writes it once;
+# it is never overwritten afterwards. Every key is optional - a missing key, or a
+# missing file, behaves exactly like the defaults below.
+
+# Both modes use git: an intent branch per intent, every story built in its
+# own worktree, the same reviews, mutants, live test and break test.
+# production = the work is pushed and the flow shows the merge-request or
+#              pull-request link the push prints. It never merges.
+# sandbox    = production without story branches: every story is one commit
+#              on the intent branch. At the end the intent goes straight onto
+#              the base branch, or into one merge request, as sandbox_finish
+#              says.
+mode: production
+
+# project_key and base_branch are used in both modes, story_branches only in
+# production and sandbox_finish only in sandbox.
+branching:
+  # Short lowercase prefix for the branch name, for example "shop" gives
+  # shop/intent-user-auth/intent. Leave empty for no prefix.
+  project_key: ""
+  # The branch every intent starts from and goes back into.
+  base_branch: main
+  # true  = every story gets its own branch, pushed at the end once the
+  #         user approves. A story without dependencies starts from the intent branch
+  #         and its merge request goes there. A story that depends on another
+  #         one starts from that story's branch and its merge request goes
+  #         there, like the stacked branches of the classic flow.
+  # false = for small pieces of work: every story is committed on the intent
+  #         branch, and the intent branch is pushed once at the end.
+  # Sandbox never has story branches, whatever this says.
+  story_branches: true
+  # What sandbox does at the end of an intent.
+  # push          = when the intent is finished, it goes straight onto the base
+  #                 branch and is pushed. No merge request. Without a remote it
+  #                 stays on the local base branch.
+  # merge_request = the intent branch is pushed with one merge request into the
+  #                 base branch, like production without story branches.
+  sandbox_finish: push
+
+# Sandbox only: the parts a sandbox intent makes. Both are on when the
+# block or a key is missing. Production always makes both and ignores this
+# block. A part that is off is not drawn, rendered, saved or published, and
+# nothing reports it as missing.
+sandbox:
+  # The Code Scaffold: the drawing of the code the stories build, made in the
+  # inception, checked at the approval and saved as code-scaffold.html. Off:
+  # no drawing, no Code Scaffold questions at the approval, and the builders
+  # follow the stories alone.
+  code_scaffold: true
+  # The Code Scaffold updated as built at the end of the intent, saved as
+  # code-scaffold-built.html next to code-scaffold.html. Needs code_scaffold.
+  scaffold_after_build: true
+
+# A human tester who receives test cases for the stories that a person can
+# verify. When enabled, construction writes one test case per tester-verifiable
+# story.
+# The test cases live with their intent, in
+# .specs-aidlc-turbo/docs/{inception}/{intent}/tests/, so they are committed
+# with the rest of the specs. There is no folder setting.
+# Test cases are written in the record's language. With enabled false nothing is
+# generated and no test folder is created anywhere.
+tester:
+  enabled: false
+
+# The live test always runs, in both modes: at the end of every intent the
+# agent starts the application and tries every observable acceptance
+# criterion out, like a user would, then a breaker attacks the stories marked
+# break_test. There is no setting for it, and how the application starts is
+# worked out by the agent every time. An old live_test block is ignored.
+
+construction:
+  # The most lines a script breaks per story, to prove its tests can fail; 0 turns it off.
+  mutants: 3
+
+# Where the flow syncs with, optional and off by default. Confluence and Jira
+# are the tools supported today. Any other value behaves like none: the flow
+# says that the tool is not supported yet. The setup offers them in production
+# mode only; in sandbox mode both stay none.
+sync:
+  # confluence = the inception asks for the intent's documentation page,
+  #              pulls it into .specs-aidlc-turbo/docs/{inception}/pages/
+  #              and the shared project page into
+  #              .specs-aidlc-turbo/project/pages/, resolves every open
+  #              question in them with you, and pushes the changed pages
+  #              back at the approval. Every intent gets its own page: with
+  #              several intents in one inception, each gets its own page
+  #              under it, after one question.
+  # none       = no documentation sync. Intake reads local files only.
+  docs: none
+  # jira = after the approval the flow creates the epic and one issue per
+  #        story; once the whole intent is built it closes the story issues
+  #        and adds the test cases.
+  # none = no issue sync.
+  issues: none
+  # The link to the Jira project board, for example
+  # "https://example.atlassian.net/jira/software/projects/SHOP/boards/1". The
+  # agent reads the site and the project key from it; there is no default
+  # site. The installer default: once the project has its own link in
+  # .specs-aidlc-turbo/project/project.yaml, that one wins. Empty in both:
+  # asked at the first sync and written into project.yaml. Only written when
+  # issues is jira.
+  # jira_project_url: ""
+  # Confluence only: the names the sync looks for and gives. {name} is the
+  # inception's or the intent's name, {slug} the intent's folder name.
+  # page_names:
+  #   intent: "{name} - Documentation"        # an inception's or an intent's page
+  #   stories: "{name} - Stories"             # the page the story pages hang under
+  #   project: "Project Documentation"        # the shared project page
+  #   overview_section: "Interactive overview"  # the section on the intent page that links the overview files
+  #   overview_file: "overview-{slug}.html"   # the intent's overview page as attached

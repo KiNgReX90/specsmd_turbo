@@ -1,0 +1,17 @@
+/* AI-DLC Turbo - Code Scaffold, the switch "Only new and changed" (design-filter.js): a pill beside
+   the walk over the drawing (and after the build beside the way to full screen), as high as they are; its
+   knob to the right while it is on. Where the row has no room it goes on a row of its own under the walk;
+   what sits under the walk keeps clear of it, and the card takes the room the row leaves (design-steps.css). */
+.td-only { gap: 8px; min-height: 40px; padding: 0 14px 0 10px; border-color: var(--td-line-strong); border-radius: 999px; background: var(--td-frame-solid); box-shadow: 0 8px 22px -8px var(--td-shadow); pointer-events: auto; }
+.td-root.td-touch .td-only { min-height: 56px; }
+/* its short word ("Changes") only where the row over the drawing is tight (design-steps.css) */
+.td-only-s { display: none; }
+.td-only:focus-visible { outline: 2px solid var(--td-orange); outline-offset: 2px; }
+.td-only-k { position: relative; flex: none; box-sizing: border-box; width: 36px; height: 22px; border: 1px solid var(--td-line-strong); border-radius: 999px; background: var(--td-tint-2); }
+.td-only-k::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--td-ink-3); }
+.td-only[aria-checked="true"] .td-only-k { border-color: var(--td-violet); background: var(--td-violet); }
+.td-only[aria-checked="true"] .td-only-k::after { background: var(--td-surface); transform: translateX(14px); }
+@media (prefers-reduced-motion: no-preference) {
+  .td-only-k, .td-only-k::after { transition: transform 160ms var(--td-ease), background-color 160ms var(--td-ease), border-color 160ms var(--td-ease); }
+}
+.mq .td-ctl-l .td-only { background: var(--mq-ctl); }

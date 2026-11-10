@@ -1,0 +1,87 @@
+/* AI-DLC Turbo - Code Scaffold: the details in a panel of their own right of the drawing (design-pane.js), the mirror
+   of the legend left of it, always there on a desktop page: a head with the way to fold it and its name, a calm word
+   only where nothing can be chosen, the details of one element (design-show.js), text only, in a column as wide as
+   text reads well, a slim rail when folded, a handle with a grip on its left edge to make it wider or narrower. The
+   details scroll in their column with the walk under them. The drawing shrinks to make room. A desktop window too
+   narrow keeps the panel as its rail, opening over the drawing; a phone and the preview keep the details under the
+   drawing. On a desktop the legend, the drawing and the panel take the height the window has left (td-one,
+   design-room.js). After the style of the details it sets apart, before the Maquette look. */
+
+/* under the drawing (a phone, the preview): no panel, the details a block after the legend, as before */
+.td-dpane { display: contents; }
+.td-dpane > :not(.td-detail) { display: none; }
+.td-stage > .td-dpane > .td-detail { order: 3; }
+
+/* beside it: legend, drawing, details in one row; without the legend beside the drawing, the legend goes under both */
+.td-dbeside .td-stage { flex-direction: row; align-items: flex-start; gap: 16px; }
+.td-dbeside:not(.td-side) .td-stage { flex-wrap: wrap; }
+.td-dbeside .td-stage > .td-dzw { flex: 1 1 0; min-width: 0; }
+.td-dbeside:not(.td-side) .td-stage > .td-steps { flex: 0 0 100%; margin-top: 2px; }
+/* one height with the legend, in view while the drawing scrolls by; the details scroll inside it */
+.td-dbeside .td-stage > .td-dpane { order: 1; position: sticky; top: 12px; box-sizing: border-box; display: flex; flex-direction: column; flex: 0 1 auto; width: var(--td-dpane-w, 400px); min-width: 320px; height: min(calc(100vh - 24px), var(--td-steps-h, 100vh)); }
+/* a card as the legend is (the Maquette gives both its edge) */
+.td-dbeside .td-dpane { border: 1px solid var(--td-line); border-radius: 14px; background: var(--td-surface); }
+
+/* the head, as the legend's: the way to fold it towards the drawing, its name */
+.td-dbeside .td-dpane > .td-dpane-top { display: flex; flex: none; align-items: center; gap: 10px; min-height: 48px; padding: 11px 14px 12px; border-bottom: 1px solid var(--td-line); border-radius: 13px 13px 0 0; background: var(--td-tint-2); }
+.td-dpane-t { margin: 0; font: 600 16px var(--td-font); color: var(--td-heading); }
+.td-dbeside .td-dpane .td-dfold { display: inline-flex; justify-content: center; width: 36px; height: 36px; min-height: 36px; padding: 0; }
+.td-root.td-touch.td-dbeside .td-dpane > .td-dpane-top { min-height: 56px; }
+.td-root.td-touch.td-dbeside .td-dpane .td-dfold { width: 44px; height: 44px; min-height: 44px; }
+
+/* no close button: something is always chosen (design-chosen.js), the details stay until another element is */
+
+/* nothing to choose (a story without steps in Flow): a calm word that says so, where the details come */
+.td-dpane-empty { display: none; flex: 1 1 auto; flex-direction: column; align-items: center; justify-content: center; gap: 14px; min-height: 0; padding: 32px 36px 48px; text-align: center; color: var(--td-ink-3); }
+.td-dbeside .td-dpane.td-dpane-none:not(.td-dfolded) > .td-dpane-empty { display: flex; }
+.td-dpane-empty > .td-i { box-sizing: content-box; width: 22px; height: 22px; padding: 13px; border: 1px dashed var(--td-line-strong); border-radius: 50%; background: var(--td-tint-2); color: var(--td-ink-2); }
+.td-dpane-empty-t { max-width: 17rem; margin: 0; font-size: 14.5px; line-height: 1.5; text-wrap: pretty; }
+
+/* the details under the head, no card of their own: one column, the body scrolls in it and the walk stays under it
+   (design-about.css) */
+.td-dbeside .td-dpane > .td-detail:not([hidden]) { position: static; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 0 0 13px 13px; background: none; box-shadow: none; overflow: hidden; }
+.td-dbeside .td-dpane > .td-detail .td-dl > dd:first-of-type { padding-right: 0; }
+.td-dbeside .td-dpane > .td-detail > .td-dcol { flex: 1 1 auto; min-height: 0; }
+/* the body: the step, the head, the rows, the stories under each other, whatever the width */
+.td-dbeside .td-dpane > .td-detail .td-dcol > .td-dgrid { display: flex; flex-direction: column; gap: 12px; max-width: none; padding: 16px 20px 16px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--td-line-strong) transparent; }
+.td-dbeside .td-dpane > .td-detail > .td-dcol > .td-walk.td-browse { margin: 0; padding: 8px 20px 10px; border-radius: 0 0 13px 13px; }
+
+/* folded: a slim rail as tall as the drawing with the way back and "Details"; a dot when something is shown;
+   the details out of sight, still there for the arrows that walk the parts */
+.td-dbeside .td-stage > .td-dpane.td-dfolded { width: 52px; min-width: 0; align-self: stretch; position: relative; top: 0; height: auto; border-color: var(--td-line-strong); background: var(--td-tint-2); }
+.td-dbeside .td-dpane.td-dfolded > :is(.td-dpane-top, .td-dgrip) { display: none; }
+.td-dbeside .td-dpane.td-dfolded > .td-detail { position: absolute; top: 0; left: 0; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); visibility: hidden; }
+.td-dbeside .td-dpane.td-dfolded > .td-dpane-rail { position: sticky; top: 12px; display: flex; flex-direction: column; justify-content: flex-start; gap: 10px; width: 100%; min-height: 0; padding: 14px 0 16px; border: 0; border-radius: 14px; background: none; color: var(--td-heading); }
+.td-dbeside .td-dpane.td-dfolded > .td-dpane-rail:hover { border: 0; background: var(--td-tint-2); }
+.td-dbeside .td-dpane.td-dfolded:not(.td-dpane-none) > .td-dpane-rail::after { content: ""; position: absolute; top: 10px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--td-accent); box-shadow: 0 0 0 2px var(--td-tint-2); }
+.td-dpane-name { writing-mode: vertical-rl; max-height: calc(100vh - 120px); overflow: hidden; text-overflow: ellipsis; font-size: 14px; letter-spacing: .02em; }
+
+/* a desktop window too narrow for the open panel beside the drawing: the stage keeps the rail's room, the panel
+   opens over the drawing's right side and folds back to the rail; no handle on its edge there */
+.td-dbeside.td-dtight .td-stage { position: relative; padding-right: 68px; }
+.td-root.td-dbeside.td-dtight .td-stage > .td-dpane { position: absolute; top: 0; right: 0; z-index: 20; width: min(var(--td-dpane-w, 400px), calc(100% - 24px)); min-width: 0; box-shadow: 0 18px 44px -18px var(--td-shadow); }
+.td-root.td-dbeside.td-dtight .td-stage > .td-dpane.td-dfolded { width: 52px; height: var(--td-steps-h, 480px); box-shadow: none; }
+.td-dbeside.td-dtight .td-dpane > .td-dgrip { display: none; }
+
+/* the handle: the whole left edge, in the gap beside the drawing; a grip in its middle that shows at rest, the edge
+   lit under the pointer and the focus */
+.td-dbeside .td-dpane > .td-dgrip { display: block; position: absolute; top: 0; bottom: 0; left: -17px; z-index: 2; width: 16px; border-radius: 8px; cursor: col-resize; touch-action: none; }
+.td-root.td-touch.td-dbeside .td-dpane > .td-dgrip { left: -21px; width: 24px; }
+.td-dgrip::before { content: ""; position: absolute; top: 14px; bottom: 14px; left: calc(50% - 1px); width: 2px; border-radius: 1px; background: transparent; transition: background-color 160ms var(--td-ease); }
+/* the grip: a small tab with two rows of dots along the way it moves, never a bar that reads as a scrollbar */
+.td-dgrip::after { content: ""; position: absolute; top: 50%; left: 50%; box-sizing: border-box; width: 12px; height: 41px; margin: -20.5px 0 0 -6px; padding: 12px 2px; border: 1px solid var(--td-line-strong); border-radius: 6px; background: radial-gradient(circle, var(--td-ink-3) 0 .9px, transparent 1.3px) center / 3px 5px content-box, var(--td-surface); background-clip: content-box, padding-box; transition: border-color 160ms var(--td-ease), background-color 160ms var(--td-ease); }
+.td-dgrip:hover::before, .td-dgrip:focus-visible::before, .td-dresizing .td-dgrip::before { background: var(--td-accent); }
+.td-dgrip:is(:hover, :focus-visible)::after, .td-dresizing .td-dgrip::after { border-color: var(--td-accent); background-image: radial-gradient(circle, var(--td-accent) 0 .9px, transparent 1.3px); }
+.td-dgrip:focus-visible { outline: 2px solid var(--td-orange); outline-offset: -2px; }
+/* while one is dragged: the resize cursor everywhere, no text selected, nothing gliding */
+.td-dresizing, .td-dresizing * { cursor: col-resize !important; user-select: none !important; -webkit-user-select: none !important; }
+.td-dresizing.td-dresizing-y, .td-dresizing.td-dresizing-y * { cursor: row-resize !important; }
+.td-dresizing .td-root, .td-dresizing .td-root * { transition: none !important; }
+@media (prefers-reduced-motion: reduce) { .td-dgrip::before, .td-dgrip::after { transition: none; } }
+
+/* one look on a desktop (design-room.js): the legend, the drawing's frame and the panel each as high as the window
+   has left under the masthead and over the footer line; what is longer scrolls inside them, the drawing fits */
+.td-one .td-stage > .td-dzw { height: var(--td-one-h); }
+.td-one .td-stage > .td-dzw > .td-dz { box-sizing: border-box; min-height: 100%; }
+.td-one.td-side .td-stage > .td-steps:not(.td-folded), .td-one.td-dbeside .td-stage > .td-dpane:not(.td-dfolded) { position: relative; top: 0; height: var(--td-one-h); max-height: var(--td-one-h); }
+.td-one.td-dbeside.td-dtight .td-stage > .td-dpane:not(.td-dfolded) { position: absolute; }

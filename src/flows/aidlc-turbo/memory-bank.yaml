@@ -1,0 +1,196 @@
+# Artifact Configuration for AI-DLC Turbo
+# The schema, naming and status machines of the slim AI-DLC flow.
+# The scripts resolve every path through scripts/lib/paths.cjs; this file is
+# the same layout in words, for the agents.
+
+version: "3.0"
+description: "AI-DLC Turbo - a record, one brief plus stories per intent, rendered by script. No units, no bolts, no ledgers, no logs."
+
+# Where the installed flow resources live
+resource_root: ".specsmd/aidlc-turbo/"
+
+# Where the project's artifacts live
+artifact_root: ".specs-aidlc-turbo/"
+
+# Structure. The installer creates the three folders; project-init fills repo/ and project/.
+structure:
+  - path: repo/
+    description: "The whole repo, stays across intents: config.yaml, repo.yaml, tooling.yaml, standards/"
+  - path: project/
+    description: "A series of intents: project.yaml, pages/ (Project Documentation), digests/"
+  - path: docs/
+    description: "One folder per inception, holding its pages, register, sync state and its intents"
+
+# Project facts: what the repo is built with, and what the project around it is
+repo_facts:
+  path: ".specs-aidlc-turbo/repo/repo.yaml"
+  fields:
+    - codebase: "Written by scripts/codebase-scan.cjs --write (languages, stacks, test runners, commands)"
+    - live_test: "start_command and url the last live test really used, written by finish; only a first try for the next live test"
+repo_tooling:
+  path: ".specs-aidlc-turbo/repo/tooling.yaml"
+  description: "The code tooling chosen for this repo (language servers, analysis tools, linters), or none. Written by scripts/tooling.cjs only, committed with the repo, checked at every start"
+project_facts:
+  path: ".specs-aidlc-turbo/project/project.yaml"
+  fields:
+    - project_type: "full-stack-web | backend-api | frontend-app | cli-tool | library | other"
+    - initialized_at: "ISO 8601 timestamp"
+    - project_docs_url: "Link to the Project Documentation page on Confluence, written by the first pull"
+    - jira_project_url: "Link to the Jira project board. Wins over sync.jira_project_url in the config"
+
+# Flow settings, written by the installer questionnaire
+flow_config:
+  path: ".specs-aidlc-turbo/repo/config.yaml"
+  description: "Questionnaire output, edited with /specsmd-aidlc-turbo-config"
+  fields:
+    - mode: "production | sandbox. Both use git; sandbox is production without story branches"
+    - branching: "project_key and base_branch (both modes), story_branches (production only), sandbox_finish (sandbox only: push puts the finished intent straight onto the base branch, merge_request pushes the intent branch with one merge request; default push)"
+    - tester: "enabled only: test cases are written in the record's language"
+    - construction: "mutants (default 3): the most lines a script breaks per story to prove its tests can fail; 0 turns it off"
+    - sandbox: "sandbox only: code_scaffold (the Code Scaffold, saved as code-scaffold.html) and scaffold_after_build (its update after the build, saved as code-scaffold-built.html), both true by default. Production always makes both and ignores the block. A part that is off is not drawn, rendered, saved or published, and nothing reports it as missing"
+    - sync: "docs (confluence | none), issues (jira | none), both optional and none by default, jira_project_url (the installer default of the Jira board link, only written when issues is jira). Any other tool is not supported yet: the flow says so and treats it as none"
+
+# Data conventions (agents MUST follow these)
+conventions:
+  dates:
+    format: "ISO 8601 date, no time"
+    pattern: "YYYY-MM-DD"
+    example: "2026-09-22"
+    applies_to:
+      - "created, approved, completed in brief frontmatter"
+      - "created, completed in story frontmatter"
+  timestamps:
+    format: "ISO 8601 with time and timezone"
+    pattern: "YYYY-MM-DDTHH:MM:SSZ"
+    example: "2026-09-22T10:00:00Z"
+    applies_to:
+      - "initialized_at in project.yaml, codebase.scanned_at in repo.yaml"
+      - "generated in test-case frontmatter"
+
+# Naming conventions. All names come from folder and file names.
+naming:
+  inceptions:
+    format: "{inception-slug}"
+    example: "user-auth"
+    note: "Same rules as an intent slug. An inception with one intent uses the intent's slug. Never pages, digests, standards, tests, proof, stories or register-candidates."
+  intents:
+    format: "{intent-slug}"
+    example: "user-auth"
+    note: "No number, ever. Slug lowercase and hyphenated, at most 5 words, unique across all inceptions, never one of the layout folder names. When the slug is already taken, append -2, -3 and so on."
+  stories:
+    format: "{SSS}-{story-slug}.md"
+    example: "003-login-expired-password.md"
+    note: "3-digit sequence within the intent, slug lowercase and hyphenated, at most 5 words"
+    full_path_example: ".specs-aidlc-turbo/docs/user-auth/user-auth/stories/003-login-expired-password.md"
+  branches:
+    format: "{project_key}/intent-{intent-slug}/intent"
+    example: "shop/intent-user-auth/intent"
+    note: "Both modes, created at the approval. The slug is the same one as the intent folder, so no number appears anywhere. The {project_key}/ part is dropped when the key is empty. When a branch with that name already exists, append -2, -3 and so on to the slug part, and the brief records the branch actually used."
+  story_branches:
+    format: "{project_key}/intent-{intent-slug}/story-{SSS}-{story-slug}"
+    example: "shop/intent-user-auth/story-003-login-expired-password"
+    note: "Only in production mode with branching.story_branches true. Take the intent branch from the brief and swap its last part, intent, for story-{SSS}-{story-slug}, so a -2 on the intent carries over. The story file records its branch in the branch field. The local-only integration branch at finish swaps it for verify and is never pushed."
+  commits:
+    inception: "docs({intent-slug}): inception brief and stories"
+    story: "feat({intent-slug}): {story title} (S{SSS})"
+    story_fix: "fix({intent-slug}): {story title} (S{SSS}), when story-land.cjs gets --fix"
+    story_done: "docs({intent-slug}): S{SSS} done, the story file on the intent branch, by story-land.cjs after every story"
+    build: "build S{SSS}, the commit on the local build branch in the worktree (story branches off); a story branch gets the story message"
+    finish: "docs({intent-slug}): close the intent"
+  worktrees:
+    format: "{project root}/../{project folder}-turbo/{intent-slug}/story-{SSS}"
+    note: "Created by story-start.cjs, removed by story-land.cjs once the story landed. The build branch swaps the intent branch's last part for build-{SSS} and is deleted with it; a story branch is kept."
+
+# Schema definition (source of truth for agents)
+schema:
+  config: ".specs-aidlc-turbo/repo/config.yaml"
+  repo: ".specs-aidlc-turbo/repo/repo.yaml"
+  standards: ".specs-aidlc-turbo/repo/standards/"
+  project: ".specs-aidlc-turbo/project/project.yaml"
+  # Project Documentation pulled from Confluence, and the digests the docs
+  # reader writes of it, reused by every later inception.
+  project-pages: ".specs-aidlc-turbo/project/pages/"
+  digests: ".specs-aidlc-turbo/project/digests/"
+  inception: ".specs-aidlc-turbo/docs/{inception}/"
+  # The inception's original pages. Only intake, the docs reader and the docs
+  # verifier read them; builders and reviewers never do. With several intents
+  # each intent's own page and its stories go under pages/{intent-slug}/, the
+  # page itself as that folder's index.md (scripts/intent-pages.cjs checks it).
+  pages: ".specs-aidlc-turbo/docs/{inception}/pages/"
+  register: ".specs-aidlc-turbo/docs/{inception}/register.yaml"
+  # What is linked to Confluence pages and Jira issues. Committed with the specs.
+  sync: ".specs-aidlc-turbo/docs/{inception}/sync.yaml"
+  intent: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/"
+  record: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/record.yaml"
+  brief: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/brief.md"
+  stories: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/stories/"
+  story: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/stories/{SSS}-{story-slug}.md"
+  proof: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/proof/{SSS}.json"
+  # Generated view of the brief, the stories and the test cases. Written by
+  # scripts/intent-overview.cjs from the overview template, with the C4 model
+  # of the v5 page kit embedded in it as a tab, never by hand. The same page
+  # before and after the build.
+  overview: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/overview.html"
+  # The Code Scaffold page: the overview opening on its technical view, saved
+  # by scripts/intent-overview.cjs --scaffold once the approval round is done,
+  # and its update as built at finish. Never written with the Code Scaffold
+  # off; the inception one is never overwritten.
+  code-scaffold: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/code-scaffold.html"
+  code-scaffold-built: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/code-scaffold-built.html"
+  # test-case and twin only exist when config.tester.enabled is true. With the
+  # tester off nothing creates the tests/ folder.
+  test-case: ".specs-aidlc-turbo/docs/{inception}/{intent-slug}/tests/US-{SSS} - {story title}.md"
+  twin: "{repo.codebase.playwright_test_dir}/aidlc-twins/{intent-slug}-{story-slug}.spec.ts"
+
+  # Agent ownership of the artifacts
+  ownership:
+    inception: [record, brief, stories, overview, code-scaffold, pages, project-pages, digests, register, sync]
+    construction: [stories, proof, test-case, twin, overview, code-scaffold-built, sync]
+
+# Templates (in the installed flow resources)
+templates:
+  record: ".specsmd/aidlc-turbo/templates/inception/record-template.yaml"
+  brief: ".specsmd/aidlc-turbo/templates/inception/brief-template.md"
+  story: ".specsmd/aidlc-turbo/templates/inception/story-template.md"
+  test-case: ".specsmd/aidlc-turbo/templates/construction/test-case-template.md"
+  twin: ".specsmd/aidlc-turbo/templates/construction/twin-template.md"
+  overview: ".specsmd/aidlc-turbo/templates/overview/overview-template.html"
+
+# Status machines
+statuses:
+  brief:
+    values: [draft, approved, building, done]
+    transitions:
+      draft: "approved, at the inception review (the approval of the plan)"
+      approved: "building, at the first construction dispatch"
+      building: "done, at construction finish, before the approval of the finished intent"
+  story:
+    values: [todo, building, review, done, blocked]
+    transitions:
+      todo: "building, when story-start.cjs claims it"
+      building: "review when the builder returns done, or blocked"
+      review: "done when story-land.cjs lands it, or building when a fix is needed"
+      blocked: "building, after the human decides"
+
+# Workflow
+workflow:
+  phases:
+    - name: inception
+      command: "/specsmd-aidlc-turbo-inception"
+      writes: [record, brief, stories, overview, code-scaffold, register, sync]
+      checkpoints: 1
+      note: "Intake into the record, render-specs.cjs and spec-lint.cjs, cross-checker and docs-verifier, the human approval of the plan"
+    - name: construction
+      command: "/specsmd-aidlc-turbo-construction"
+      writes: [stories, proof, test-case, twin, overview, code-scaffold-built, sync]
+      checkpoints: 1
+      note: "Builders side by side, fresh reviewers per story, the escalation ladder, one intent review, then the human approval of the finished intent before anything is pushed. Only a story that misses three times, or a mismatch, waits for the human during the build"
+
+  # Phase detection from the files on disk
+  state_detection:
+    MIGRATE: "The old layout: config.yaml, project.yaml, intents/ or another old folder at the top of .specs-aidlc-turbo/"
+    CONFIGURE: "No .specs-aidlc-turbo/repo/config.yaml"
+    INITIALISE: "config.yaml exists but repo/standards/tech-stack.md or project/project.yaml is missing"
+    START: "No intents, or every brief has status done"
+    INCEPTION: "A record or brief with status draft"
+    CONSTRUCTION: "A brief with status approved or building"

@@ -1,0 +1,86 @@
+/* AI-DLC Turbo - Code Scaffold, what the details of one element say (design-show.js, design-about.js,
+   design-stories.js), wherever the details are: the panel right of the drawing, under it on a phone and in
+   the drawing's own view.
+   The column of the details: the body that scrolls (the head, the rows of the review, the chips of the
+   stories; the step held is in the box over the drawing, design-stepbox.css) and under it, outside what scrolls, the walk to the element or the step before or
+   after it, a footer of its own with a solid ground, so nothing slides under it (design-pane.css,
+   design-browse.css and design.css give the column its height where it scrolls). After the style of the
+   details, before the Maquette look. */
+
+/* the column: the body, then the walk; where the column has a height of its own the body scrolls and the walk
+   stays at the bottom */
+.td-dcol { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.td-dcol > .td-dgrid { flex: 1 1 auto; min-height: 0; }
+.td-dcol > .td-walk { flex: none; margin-top: 0; }
+.td-dcol > .td-walk.td-browse { position: relative; z-index: 1; margin-top: 14px; padding: 10px 0 2px; border-top: 1px solid var(--td-line); background: var(--td-surface); }
+/* the chips of the stories over the whole width of the details, the head and the rows of the review side by
+   side where there is room (design.css); without rows, one column that reads well */
+.td-dgrid > .td-cs-foot { grid-column: 1 / -1; }
+.td-dgrid.td-dgrid-one { grid-template-columns: minmax(0, 46rem); }
+
+/* the way to the change in the Review tab, under the name (after the build, a part with a change in the code or a
+   deviation, design-detail.js): a clear button in the accent, as wide as its words */
+.td-dhead > .td-dreview { align-self: flex-start; margin: 4px 0 6px; border-color: color-mix(in srgb, var(--td-accent) 55%, transparent); background: color-mix(in srgb, var(--td-accent) 10%, var(--td-surface)); color: var(--td-heading); }
+.td-dhead > .td-dreview:hover { border-color: var(--td-accent); background: color-mix(in srgb, var(--td-accent) 18%, var(--td-surface)); }
+.td-touch .td-dhead > .td-dreview { min-height: 44px; }
+
+/* what it does, what changed, where it deviated and what it does in the flow: short sections, each under a small
+   heading, at a length of line that reads well */
+.td-dabout { display: grid; gap: 16px; overflow-wrap: anywhere; }
+.td-dabout > * { max-width: 68ch; }
+.td-dabout p { margin: 0; }
+.td-dsec { display: grid; gap: 4px; }
+/* the small heading stands out: bold, in the heading colour (purple in light, white in dark) */
+.td-dsec-t { margin: 0; font: 700 14.5px/1.3 var(--td-font); color: var(--td-subhead); }
+.td-dwhat { font-size: 15px; line-height: 1.55; color: var(--td-ink); text-wrap: pretty; }
+.td-dchg-p { font-size: 15px; line-height: 1.55; color: var(--td-ink); text-wrap: pretty; }
+/* more stories: each under its number and short title, as on the chips of the stories */
+.td-dchg-s { display: grid; gap: 3px; }
+.td-dchg-s + .td-dchg-s { margin-top: 8px; }
+.td-dchg-n { display: flex; align-items: center; gap: 7px; font: 600 13.5px/1.3 var(--td-font); color: var(--td-heading); }
+.td-dchg-n .td-badge { width: 20px; height: 20px; font-size: 11px; }
+/* code in a text, between backticks in the notes */
+.td-cin { padding: 0 .3em; border-radius: 4px; background: color-mix(in srgb, var(--td-ink) 7%, transparent); color: var(--td-code-ink); font: .88em/1.4 var(--td-mono); overflow-wrap: anywhere; }
+.td-dflow { display: grid; gap: 4px; font-size: 14.5px; line-height: 1.55; color: var(--td-ink-2); text-wrap: pretty; }
+.td-dflow ul { display: grid; gap: 3px; margin: 0; padding-left: 1.1em; list-style: disc outside; }
+.td-dflow li::marker { color: var(--td-ink-3); }
+.td-dflow-more { color: var(--td-ink-3); }
+
+/* after the build, one calm card where it deviated, tinted in the colour of its mark on the drawing (light and dark
+   from the same tokens): the mark of the legend and what happened as its heading, then Planned, Built and Why,
+   each a short paragraph under its label */
+.td-ddev { --td-dv: var(--td-bi-different); display: grid; gap: 10px; padding: 12px 14px 13px; border: 1px solid color-mix(in srgb, var(--td-dv) 28%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--td-dv) 7%, var(--td-surface)); }
+.td-ddev.td-ddev-added { --td-dv: var(--td-bi-added); }
+.td-ddev.td-ddev-gone { --td-dv: var(--td-bi-gone); }
+.td-ddev p { margin: 0; }
+.td-ddev-t { display: flex; align-items: center; gap: 8px; margin: 0; font: 650 14.5px/1.35 var(--td-font); color: var(--td-heading); }
+.td-ddev-i { flex: none; width: 20px; height: 20px; }
+.td-ddev-p { font-size: 14.5px; line-height: 1.55; color: var(--td-ink); text-wrap: pretty; overflow-wrap: anywhere; }
+.td-ddev-k { display: block; margin-bottom: 1px; font: 600 13px/1.35 var(--td-font); color: var(--td-ink-2); }
+
+/* at the bottom of the body: a chip per story, number and short title; the one folded out under them */
+.td-cs-foot { display: grid; gap: 6px; margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--td-line); }
+.td-cs-lead { font: 600 14px/1.3 var(--td-font); color: var(--td-ink-2); }
+.td-cs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.td-cs-s { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 3px 6px 3px 4px; border: 1px solid var(--td-line-strong); border-radius: 999px; background: none; color: inherit; font: 600 14px/1.2 var(--td-font); cursor: pointer; }
+:is(.td-cs-s, .td-cs-name):hover { background: color-mix(in srgb, var(--td-accent) 12%, transparent); }
+.td-cs-s[aria-expanded="true"] { border-color: var(--td-accent); background: color-mix(in srgb, var(--td-accent) 14%, transparent); }
+.td-cs-s .td-cs-t { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.td-cs-s .td-badge { flex: none; }
+.td-cs-chev { flex: none; width: 14px; height: 14px; color: var(--td-ink-3); transition: transform 160ms var(--td-ease); }
+.td-cs-s[aria-expanded="true"] .td-cs-chev { transform: rotate(180deg); }
+/* the story chosen on the drawing: its number as there */
+.td-cs-s.td-on .td-badge { background: var(--td-orange); color: var(--td-purple); }
+.td-cs-more { display: grid; gap: 6px; padding: 8px 10px 10px; border-radius: 10px; background: color-mix(in srgb, var(--td-accent) 6%, transparent); }
+.td-cs-more[hidden] { display: none; }
+/* its full title: a way to choose the story while it is not chosen */
+.td-cs-name { justify-self: start; margin: 0 0 0 -6px; padding: 2px 6px; border: 0; border-radius: 8px; background: none; color: var(--td-heading); font: 600 15px/1.35 var(--td-font); text-align: left; cursor: pointer; }
+.td-cs-name.td-on { cursor: default; }
+.td-cs-name.td-on:hover { background: none; }
+.td-cs-over { margin: 0; font: 600 14px/1.3 var(--td-font); color: var(--td-ink-2); }
+.td-cs-us, .td-cs-built, .td-cs-plain { margin: 0; }
+.td-cs-plain { color: var(--td-ink); text-wrap: pretty; }
+.td-cs-us b { font-weight: 700; color: var(--td-heading); }
+:is(.td-cs-s, .td-cs-name):focus-visible { outline: 2px solid var(--td-accent); outline-offset: -2px; }
+@media (prefers-reduced-motion: reduce) { .td-cs-chev { transition: none; } }
+

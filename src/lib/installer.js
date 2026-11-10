@@ -5,6 +5,7 @@ const yaml = require('js-yaml');
 const CLIUtils = require('./cli-utils');
 const InstallerFactory = require('./InstallerFactory');
 const { FLOWS, LINKS } = require('./constants');
+const { FLOW_CONFIGS, flowConfigExists } = require('./flow-config');
 const analytics = require('./analytics');
 const { stageFlow } = require('./install/stage');
 const { applyInstall, InstallError } = require('./install/transaction');
@@ -128,12 +129,19 @@ async function install() {
   // Track flow selection (await to ensure delivery before potential cancel)
   await analytics.trackFlowSelected(selectedFlow);
 
+  // A flow with a per-project config asks its questions now, unless the config
+  // is there already: a reinstall keeps the tuned config and asks nothing.
+  const flowConfig = FLOW_CONFIGS[selectedFlow];
+  const config = (flowConfig && !flowConfigExists(flowConfig))
+    ? await flowConfig.prompt()
+    : undefined;
+
   // Step 4: Install flow files
   console.log('');
   CLIUtils.displayStep(4, 4, `Installing ${FLOWS[selectedFlow].name} flow...`);
 
   try {
-    const filesCreated = await installFlow(selectedFlow, selectedToolKeys);
+    const filesCreated = await installFlow(selectedFlow, selectedToolKeys, { config });
 
     // Track successful installation for each tool
     const durationMs = Date.now() - installStartTime;
@@ -150,7 +158,7 @@ async function install() {
 
     const nextSteps = [
       `Read .specsmd/${selectedFlow}/quick-start.md for getting started`,
-      `Open ${selectedToolNames.join(' or ')} and run /specsmd-master-agent`
+      `Open ${selectedToolNames.join(' or ')} and run ${FLOWS[selectedFlow].entryCommand || '/specsmd-master-agent'}`
     ];
     CLIUtils.displayNextSteps(nextSteps);
 
@@ -221,7 +229,32 @@ async function installFlow(flowKey, toolKeys, options = {}) {
     log: (line) => console.log(theme.warning(line)),
   });
   CLIUtils.displayStatus('', `Installed ${count} files and wrote .specsmd/${flowKey}/flow.lock`, 'success');
+  writeFlowConfig(root, flowKey, options.config);
   return count;
+}
+
+/**
+ * Gets the per-project config of a flow in FLOW_CONFIGS ready: `prepare` first (AI-DLC
+ * Turbo moves an old layout to repo/, project/, docs/), then the config file from the
+ * answers, every missing answer at its default. The file belongs to the project, not to
+ * the install: it stays out of the lock and an existing one is never overwritten.
+ */
+function writeFlowConfig(root, flowKey, answers) {
+  const flowConfig = FLOW_CONFIGS[flowKey];
+  if (!flowConfig) return;
+  const dir = path.join(root, flowConfig.dir);
+  if (flowConfig.prepare) {
+    for (const line of flowConfig.prepare(dir)) console.log(theme.dim(`  ${line}`));
+  }
+  const display = `${flowConfig.dir}/${flowConfig.file}`;
+  if (flowConfigExists(flowConfig, root)) {
+    CLIUtils.displayStatus('', `Kept existing ${display}`, 'success');
+    return;
+  }
+  const configPath = path.join(dir, flowConfig.file);
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, flowConfig.render(answers), 'utf8');
+  CLIUtils.displayStatus('', `Created ${display}`, 'success');
 }
 
 /**

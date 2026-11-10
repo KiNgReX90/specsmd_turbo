@@ -1,0 +1,6 @@
+/* Maquette, after the build: the colours of a piece as it was built, a part different in blue, a part added
+   in green. The "Built" row of the details is drawn as that piece (maquette-draw.css, maquette-draw.js). */
+body.mq {
+  --mq-dif-f: #EAF8FA; --mq-dif-s: #B4E2EA; --mq-dif-l: #36A6BD; --mq-dif-ink: #1F7A8F;
+  --mq-add-f: #E8F7ED; --mq-add-s: #AEDDBF; --mq-add-l: #1F9D57; --mq-add-ink: #167A43;
+}
