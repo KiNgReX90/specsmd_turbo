@@ -12,7 +12,9 @@
  * At plan time, `--only wiring --plan <intent>` asks the wiring question of the plan before
  * anything is built, one scanner per slice of its work items (run-scan-slices.cjs), and its
  * collect merges every slice and hands each LEGAL or MAKER gap back to the planner instead of
- * recording. A BUILD line never blocks a plan, and a plan that builds on an unmerged intent
+ * recording. It writes every GAP line to a gaps file in the cache dir, prints them as far as the
+ * line cap allows, and ends in the step that names that file; a clean collect removes the file.
+ * A BUILD line never blocks a plan, and a plan that builds on an unmerged intent
  * waits for that merge, so it is scanned once against the real tree.
  */
 
@@ -33,6 +35,9 @@ const { RunError } = lib;
 
 /** The questions the plan-time scan asks: nothing is built yet, so only the wiring can be held. */
 const PLAN_IDS = ['wiring'];
+
+/** The lines run.cjs prints of an answer (lib.capLines); the plan collect fits its step inside them. */
+const MAX_LINES = 30;
 
 /** How many scanners a host spawns in one message: every one on Claude, three on Codex. */
 const GROUP = { claude: Infinity, codex: 3 };
@@ -201,21 +206,27 @@ function planGaps(tree, context, results) {
   const lines = numbered(results.map((result) => ({ ...result, lines: result.lines.filter(blocking) })));
   const build = results.flatMap((result) => result.lines.filter((line) => !blocking(line))).length;
   const left = build > 0 ? [`${build} BUILD line${build === 1 ? '' : 's'} left to the builder and the gate, never to the plan`] : [];
+  // The printout is capped and the gaps file is not, so the planner is resumed from the file.
+  const gapsFile = `${context.dir}-gaps.txt`;
   if (lines.length === 0) {
+    fs.rmSync(gapsFile, { force: true });
     return {
       exit: 0,
       payload: { ok: true, intent: context.intent, gaps: [], build },
       out: [`no LEGAL or MAKER gap in the plan of ${context.intent}: it goes to build`, ...left],
     };
   }
+  const gaps = lines.map((line) => `GAP ${line.id} ${line.kind} ${line.file}:${line.line}: ${line.claim} (proof: ${line.proof})`);
+  fs.mkdirSync(path.dirname(gapsFile), { recursive: true });
+  fs.writeFileSync(gapsFile, `${gaps.join('\n')}\n`);
+  const tail = [
+    ...left,
+    `resume the planner with every GAP line in ${gapsFile} as one message, then run ${scanCall(tree, context.options.plan)} again`,
+  ];
   return {
     exit: 2,
-    payload: { ok: false, intent: context.intent, gaps: lines, build },
-    out: [
-      ...lines.map((line) => `GAP ${line.id} ${line.kind} ${line.file}:${line.line}: ${line.claim} (proof: ${line.proof})`),
-      ...left,
-      `resume the planner with every GAP line as one message, then run ${scanCall(tree, context.options.plan)} again`,
-    ],
+    payload: { ok: false, intent: context.intent, gaps: lines, gapsFile, build },
+    out: [...lib.capLines(gaps, MAX_LINES - tail.length), ...tail],
   };
 }
 

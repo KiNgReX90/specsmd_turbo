@@ -133,6 +133,42 @@ test("a plan-time LEGAL or MAKER line does not collect clean, and only those rea
   }
 });
 
+/** The plan dispatched and every slice answered, `lines[i]` spread round the slices; then the collect. */
+function spread(lines) {
+  const { fixture } = bigPlan();
+  const briefs = dispatchLines(scan(fixture, PLAN_ARGS).out).map((line) => line[3]);
+  briefs.forEach((brief, index) => answer(brief, lines.filter((_, at) => at % briefs.length === index).join("")));
+  return { fixture, briefs, gaps: scan(fixture, ["--collect", ...PLAN_ARGS]) };
+}
+const gapsFileOf = (out) => /^resume the planner with every GAP line in (\S+) as one message, then run .*scan --only wiring --plan beta .*again$/m.exec(out.trimEnd().split("\n").pop());
+
+test("a plan collect with more gaps than the printout holds writes every one to the gaps file", () => {
+  const lines = Array.from({ length: 40 }, (_, index) => LINE(`gap ${index + 1}`, index % 2 === 0 ? "LEGAL" : "MAKER"));
+  const { fixture, gaps } = spread(lines);
+  assert.equal(gaps.code, 2, gaps.out + gaps.err);
+  const printed = gaps.out.trimEnd().split("\n");
+  assert.ok(printed.length <= 30, gaps.out);
+  const named = gapsFileOf(gaps.out);
+  assert.ok(named, gaps.out);
+  const held = fs.readFileSync(named[1], "utf8").trimEnd().split("\n");
+  assert.equal(held.length, 40, held.join("\n"));
+  assert.deepEqual(held.map((line) => /^GAP (\S+) /.exec(line)[1]), Array.from({ length: 40 }, (_, index) => `wiring-${index + 1}`));
+  for (const line of printed.filter((text) => text.startsWith("GAP "))) assert.ok(held.includes(line), line);
+  const payload = JSON.parse(scan(fixture, ["--collect", ...PLAN_ARGS, "--json"]).out);
+  assert.equal(payload.gaps.length, 40);
+  assert.equal(payload.gapsFile, named[1]);
+});
+
+test("a clean plan collect removes the stale gaps file", () => {
+  const { fixture, briefs, gaps } = spread([LINE("a maker gap")]);
+  const named = gapsFileOf(gaps.out);
+  assert.ok(named && fs.existsSync(named[1]), gaps.out);
+  for (const brief of briefs) answer(brief);
+  const clean = scan(fixture, ["--collect", ...PLAN_ARGS]);
+  assert.equal(clean.code, 0, clean.out + clean.err);
+  assert.equal(fs.existsSync(named[1]), false);
+});
+
 test("a plan-time line without a LEGAL, MAKER or BUILD kind is refused", () => {
   for (const lines of [`  - file: src/a.ts\n    line: 1\n    claim: c\n    proof: "rg x"\n`, LINE("c", "STYLE")]) {
     const refused = collected(lines);
