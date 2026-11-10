@@ -39,6 +39,18 @@ describe.sequential('Claude command-only files', { timeout: 30_000 }, () => {
     expect(Object.keys(readLock().files)).toContain('.claude/commands/specsmd-inferno-intents.md');
   });
 
+  it('installs the standards command to the commands only, never as an agent', async () => {
+    await installFlow('inferno', ['claude']);
+
+    const command = readFileSync('.claude/commands/specsmd-inferno-standards.md', 'utf8');
+    expect(command).toMatch(/\.specs-inferno\/standards\//);
+    expect(command).toMatch(/^standards:$/m);
+    expect(existsSync('.claude/agents/specsmd-inferno-standards.md')).toBe(false);
+    // It drafts in the user's own session, so it pins neither model nor effort.
+    expect(frontmatter(command)).not.toMatch(/^(model|effort):/m);
+    expect(Object.keys(readLock().files)).toContain('.claude/commands/specsmd-inferno-standards.md');
+  });
+
   it('installs the planner command as a launcher and the planner agent as the full body', async () => {
     await installFlow('inferno', ['claude']);
 

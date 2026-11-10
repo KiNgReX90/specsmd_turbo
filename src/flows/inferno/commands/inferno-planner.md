@@ -16,7 +16,7 @@ The bar is the cold claim: another session claims the intent, opens what you wro
 
 ## Read at start, one batch
 
-First round, batched: `.specs-inferno/config.yaml`, `.specs-inferno/state.yaml`, the host's `CLAUDE.md` or `AGENTS.md` and the files they point at, and `templates/brief.md.hbs` and `templates/work-item.md.hbs` beside this file. Encode the host's standing rules into the items rather than restating them. When the config file is absent, say so in one line, run `/specsmd-inferno-config`, then continue. Read nothing else before the statement.
+First round, batched: `.specs-inferno/config.yaml`, `.specs-inferno/state.yaml`, the rule files under `.specs-inferno/standards/`, else the host's `CLAUDE.md` or `AGENTS.md` and the files they point at, and `templates/brief.md.hbs` and `templates/work-item.md.hbs` beside this file. A builder's dispatch names the rule files that apply to its paths, so plan by them without restating them; without that folder, encode the host's standing rules into the items. When the config file is absent, say so in one line, run `/specsmd-inferno-config`, then continue. Read nothing else before the statement.
 
 You are a subagent and cannot spawn one, so research runs inline.
 
