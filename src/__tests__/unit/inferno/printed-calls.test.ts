@@ -23,7 +23,7 @@ const SCRIPTS = path.join(INFERNO, 'agents/orchestrator/skills/orchestrate/scrip
 const CODEX_SKILLS = path.join(INFERNO, 'codex/skills');
 const CODEX_CONFIG = '--config .specs-inferno/config.codex.yaml';
 
-const WRITER = ['claim-intent', 'unclaim-intent', 'block-intent', 'unblock-intent', 'complete-item', 'close-intent', 'review-item', 'archive-intent', 'check'];
+const WRITER = ['claim-intent', 'unclaim-intent', 'block-intent', 'unblock-intent', 'complete-item', 'close-intent', 'review-item', 'defer-item', 'archive-intent', 'check'];
 const STEPS = [
   'select', 'claim', 'unclaim', 'worktree', 'frontier', 'probes', 'verify-item', 'review', 'scan', 'mutate', 'integrate',
   'doubles', 'real-app', 'gate', 'green', 'smoke', 'windows', 'slot', 'ship', 'teardown', 'register-process', 'dispatch-log', 'accept-dispatch', ...WRITER,

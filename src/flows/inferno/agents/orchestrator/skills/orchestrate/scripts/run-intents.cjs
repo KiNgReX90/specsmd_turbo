@@ -60,12 +60,14 @@ function unmetPrerequisites(ledger, intent) {
 }
 
 function grades(intent) {
-  const open = intent.items.filter((item) => !isComplete(item.status));
+  const open = intent.items.filter((item) => !isComplete(item.status) && !writer.isDeferred(item.status));
   const counted = ['low', 'medium', 'high']
     .map((grade) => [grade, open.filter((item) => item.complexity === grade).length])
     .filter(([, count]) => count > 0)
     .map(([grade, count]) => `${count} ${grade}`);
-  return `${open.length} items${counted.length > 0 ? `: ${counted.join(', ')}` : ''}`;
+  // A deferred item is counted apart: it waits for a later plan, and nothing in this one builds it.
+  const deferred = intent.items.filter((item) => writer.isDeferred(item.status)).length;
+  return `${open.length} items${counted.length > 0 ? `: ${counted.join(', ')}` : ''}${deferred > 0 ? `; ${deferred} deferred` : ''}`;
 }
 
 /** Tester cases the intent names, from its ledger field or from its own prose. */

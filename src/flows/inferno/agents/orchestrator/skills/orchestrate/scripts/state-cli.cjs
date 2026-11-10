@@ -17,6 +17,7 @@ const USAGE = `INFERNO state.yaml single-writer
   node state-transition.cjs complete-item --intent <id> --item <id> --proof <sha>
   node state-transition.cjs close-intent  --intent <id>
   node state-transition.cjs review-item --intent <id> --item <id> --verdict clean|fix|settled --files-hash <hex> --tier cheap|strong|escalate --commit <sha>
+  node state-transition.cjs defer-item --intent <id> --item <id> --reason "<why>" [--rewire <item>=<new-dep>]...
   node state-transition.cjs archive-intent [--intent <id>] [--sweep]
   node state-transition.cjs check [--intent <id>]
 
@@ -25,6 +26,8 @@ Options
   --run <run-id>  the run taking the intent, recorded as claimed_by (claim-intent)
   --reason <why>  what the intent waits on, recorded as blocked_reason (block-intent)
   --proof <sha>   the integrated tree run.cjs integrate ran the checks on (complete-item)
+  --rewire <a>=<b> give dependent a an edge on b in place of its edge on the deferred item, or
+                  drop that edge with <a>=none; once per open dependent (defer-item)
   --tree <dir>    the worktree a complete-item refusal prints into the call it names
   --config <file> the host config that call carries, so it runs on the caller's host
   --now <iso>     override the timestamp (tests / backfill)
@@ -51,7 +54,16 @@ verdict, and run.cjs review --item is its one caller. close-intent refuses while
 check exits 1 when the ledger drifts from its work items, when an intent waiting to be claimed
 does not open its INTENT. line with the triage criterion that makes it one, as in "INTENT. (c)
 <reason>" (a request or an order is no criterion, a batch is criterion (a)), when .specs-inferno/quick-fixes.md exists
-beside it (nothing builds from a parking file).`;
+beside it (nothing builds from a parking file).
+
+defer-item takes one item out of its intent for a later plan: status deferred plus deferred_at and
+deferred_reason, on the ledger and on the item's spec. close-intent and check read it as closed
+for this intent; nothing builds, reviews or integrates it, and archive-intent keeps it with its
+reason for the next plan. It refuses an item a builder was dispatched on, reviewed, or committed a
+file only it owns, a completed one, and the last item not deferred. Every open item that depends
+on it needs a --rewire, which changes the edge in the ledger and the spec front matter together;
+a Test Plan line that integrates with the deferred item is the planner's to repair, and plan-lint
+names it. The caller commits what it wrote.`;
 
 function parseArgs(argv) {
   const options = { file: DEFAULT_STATE_PATH };
@@ -68,7 +80,9 @@ function parseArgs(argv) {
     if (value === undefined || value.startsWith('--')) {
       throw new TransitionError(`missing value for ${arg}`, 'BAD_ARGS');
     }
-    options[arg.slice(2).replace(/-/g, '_')] = value;
+    // A dependent each: --rewire repeats, and every one is kept.
+    if (arg === '--rewire') options.rewire = [...(options.rewire || []), value];
+    else options[arg.slice(2).replace(/-/g, '_')] = value;
     i += 1;
   }
   return { command, options };
@@ -77,7 +91,7 @@ function parseArgs(argv) {
 function main(argv, commands) {
   const {
     claimIntent, unclaimIntent, blockIntent, unblockIntent, completeItem, closeIntent,
-    archiveIntent, check, reviewItem,
+    archiveIntent, check, reviewItem, deferItem,
   } = commands;
   const { command, options } = parseArgs(argv);
   caller(options);
@@ -166,6 +180,25 @@ function main(argv, commands) {
     return 0;
   }
 
+  if (command === 'defer-item') {
+    // Each flag is named on its own, so the usage error says which one the caller left out.
+    for (const flag of ['intent', 'item', 'reason']) {
+      if (!options[flag]) throw new TransitionError(`defer-item requires --${flag}`, 'BAD_ARGS');
+    }
+    const result = deferItem(options);
+    if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+    else if (result.changed) {
+      process.stdout.write(`deferred ${result.item} (was ${result.previous || 'unset'}) at ${result.deferred_at}: ${result.reason}\n`);
+      for (const edge of result.rewired) {
+        process.stdout.write(edge.to
+          ? `  rewired ${edge.item} from ${edge.from} to ${edge.to}\n`
+          : `  dropped ${edge.item}'s edge on ${edge.from}\n`);
+      }
+      process.stdout.write(`  wrote ${[options.file, ...result.markdown].join(', ')}: commit them\n`);
+    } else process.stdout.write(`${result.item} ${result.note}. no change\n`);
+    return 0;
+  }
+
   if (command === 'close-intent') {
     if (!options.intent) throw new TransitionError('close-intent requires --intent', 'BAD_ARGS');
     const result = closeIntent(options);
@@ -173,7 +206,8 @@ function main(argv, commands) {
     else if (result.changed) {
       process.stdout.write(
         `closed intent ${result.intent} (was ${result.previous || 'unset'}) at ${result.completed_at}; ` +
-          `${result.items} work items completed\n`
+          `${result.items - result.deferred.length} work items completed` +
+          `${result.deferred.length > 0 ? `, ${result.deferred.length} deferred` : ''}\n`
       );
     } else process.stdout.write(`intent ${result.intent} already completed. no change\n`);
     return 0;

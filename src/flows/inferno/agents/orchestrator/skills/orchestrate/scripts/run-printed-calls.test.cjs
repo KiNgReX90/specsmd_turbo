@@ -244,6 +244,10 @@ test("each call builder prints its exact line from its own flags, the site's dec
     closeIntentCall: [[["beta"], `state-transition.cjs close-intent --intent beta --tree /t --config ${CODEX}`]],
     blockIntentCall: [[["beta"], `state-transition.cjs block-intent --reason "<why it cannot be built yet>" --intent beta --tree /t --config ${CODEX}`]],
     unclaimIntentCall: [[["beta"], `state-transition.cjs unclaim-intent --intent beta --tree /t --config ${CODEX}`]],
+    deferItemCall: [
+      [["beta", "b-one"], `state-transition.cjs defer-item --item b-one --reason "<why it waits for a later plan>" --intent beta --tree /t --config ${CODEX}`],
+      [["beta", "b-one", ["b-two"]], `state-transition.cjs defer-item --item b-one --reason "<why it waits for a later plan>" --rewire b-two=<new-dep> --intent beta --tree /t --config ${CODEX}`],
+    ],
   };
   calls.caller({ config: CODEX, intent: "alpha", tree: "/t" });
   try {
@@ -282,4 +286,22 @@ test("on Codex the block, release and close lines the writer prints run as print
   assert.deepEqual(wideClose, close, wide.out + wide.err);
   const closed = writer(done, wideClose);
   assert.equal(closed.code, 0, closed.out + closed.err);
+});
+
+test("on Codex the defer refusal over a hanging dependent prints the call to finish it, on the caller's host", () => {
+  const fixture = repo({ files: codex() });
+  const defer = (args) => {
+    const result = spawnSync(process.execPath, [path.join(__dirname, "state-transition.cjs"), ...args], {
+      cwd: fixture.root, encoding: "utf8", env: { ...process.env, XDG_CACHE_HOME: fixture.cache },
+    });
+    return { code: result.status, out: result.stdout || "", err: result.stderr || "" };
+  };
+  const owed = defer(["defer-item", "--intent", "alpha", "--item", "a-one", "--reason", "later", "--config", CODEX]);
+  assert.equal(owed.code, 2, owed.out + owed.err);
+  const filled = owed.err.replace('"<why it waits for a later plan>"', "later").replace("<new-dep>", "none");
+  const [call] = printed(filled, "defer-item --item", "state-transition");
+  assert.ok(call && call.join(" ").includes(`--rewire a-two=none --intent alpha --config ${CODEX}`), owed.err);
+  const done = defer(call);
+  assert.equal(done.code, 0, done.out + done.err);
+  assert.match(fs.readFileSync(path.join(fixture.root, ".specs-inferno/state.yaml"), "utf8"), /- id: a-one\n[\s\S]*?status: deferred\n/);
 });

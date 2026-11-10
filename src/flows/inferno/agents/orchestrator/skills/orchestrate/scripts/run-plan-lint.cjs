@@ -28,7 +28,8 @@
  * an item that leaves its sections out is a finding, never an old item.
  *
  * A completed item is never linted, as the frontier never re-validates one: its spec is the
- * tree of the day it landed. Only what it delivers is read, so its criteria stay delivered.
+ * tree of the day it landed. Only what it delivers is read, so its criteria stay delivered. A
+ * deferred item is read the same way: it is out of this intent and a later plan rewrites it.
  *
  * Every finding prints ids and paths from the plan only, never its prose.
  */
@@ -37,7 +38,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
-const { isComplete } = require('./state-transition.cjs');
+const { isComplete, isDeferred } = require('./state-transition.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
 
 const ITEM_SECTIONS = [
@@ -340,7 +341,7 @@ function lintPlan(tree, intent) {
   const open = new Set();
   for (const item of intent.items) {
     const spec = readSpec(tree, intent.id, item.id);
-    if (isComplete(item.status)) {
+    if (isComplete(item.status) || isDeferred(item.status)) {
       // Read for what it delivers, never linted.
       delivered.set(item.id, spec ? list(spec.frontmatter.delivers) : undefined);
       continue;

@@ -18,7 +18,7 @@ const scheduler = require('./team-scheduler.cjs');
 const ownership = require('./run-ownership.cjs');
 const probes = require('./run-probes.cjs');
 const { wiringErrors } = require('./run-wiring.cjs');
-const { isComplete } = require('./state-transition.cjs');
+const { isComplete, isDeferred } = require('./state-transition.cjs');
 const { REINSTALL, completedBeforeReviewRule, reviewLands, reviewRuleSince } = require('./state-review.cjs');
 // The tier and the ladder live with the review that moves an item up it, so frontier and
 // `run.cjs review --item` print the same actor.
@@ -77,8 +77,9 @@ function codexProject(tree) {
 }
 
 function loadItems(tree, intent) {
+  // A deferred item is out of this intent (state-defer.cjs): never validated, never offered.
   return intent.items
-    .filter((item) => !isComplete(item.status))
+    .filter((item) => !isComplete(item.status) && !isDeferred(item.status))
     .map((item) => {
       const spec = lib.readItemSpec(tree, intent.id, item.id);
       const manifest = spec.manifest || {};
@@ -259,7 +260,9 @@ function frontier(intentId, options) {
     out.push(`ready ${item.id} ${item.complexity} ${item.kind || 'unset'} ${actorLabel(item, config)}`);
     if (item.review === 'fix') out.push(nextLine(item.id, item, config));
   }
-  for (const item of waiting) out.push(`waiting ${item.id} on ${item.depends_on.join(', ')}`);
+  const deferred = intent.items.filter((item) => isDeferred(item.status));
+  const dependency = (id) => (deferred.some((item) => item.id === id) ? `${id} (deferred)` : id);
+  for (const item of waiting) out.push(`waiting ${item.id} on ${item.depends_on.map(dependency).join(', ')}`);
   for (const pair of serialize) out.push(`serialize ${pair.items.join(' + ')} (shares ${pair.shared.join(', ')})`);
   for (const group2 of batch) out.push(`batch ${group2.join(',')}`);
   // The ownership the planner missed: a file outside the item that names what the item owns.
@@ -267,6 +270,7 @@ function frontier(intentId, options) {
   out.push(...ownership.candidateLines(closure));
   out.push(...stale.map((error) => `INVALID ${error}`));
   if (out.length === 0) out.push('no item left in this intent');
+  for (const item of deferred) out.push(`deferred ${item.id}: ${item.deferred_reason || 'no reason recorded'}`);
   return {
     exit: held.length > 0 ? 3 : 0,
     payload: {
@@ -274,6 +278,7 @@ function frontier(intentId, options) {
       waiting: waiting.map(shape),
       held: held.map((item) => item.id),
       blocked: blocked.map((item) => item.id),
+      deferred: deferred.map((item) => ({ id: item.id, reason: item.deferred_reason })),
       serialize,
       dispatch,
       batch,

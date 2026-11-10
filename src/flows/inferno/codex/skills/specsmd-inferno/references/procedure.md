@@ -70,7 +70,7 @@ Repeat until all items are completed or the run blocks or halts.
    - `dispatch.constraints` pasted verbatim;
    - every `standards` line `dispatch-log` prints, verbatim: the rule files under `.specs-inferno/standards/` that apply to the item's `ownership.editable`. A rule the item's own criterion asks to break is no fault of the builder: it goes to the oracle;
    - firewall files by name with the sanctioned alternative for each;
-   - already-landed dependency outputs, semantics that must survive, skipped items and known hazards;
+   - already-landed dependency outputs, semantics that must survive, deferred items and known hazards;
    - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold, and every `SLICE` line from `run.cjs scan --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` and the collect it prints, run once per item, a `conflict` line sent to the planner once instead.
    Pass pointers, not file bodies or broad search instructions. Never ask for residual risks: that slot is how a builder parks a defect it could have fixed.
 7. Use `wait_agent` until every dispatched builder returns, tracking each outstanding worker by id.
@@ -146,13 +146,13 @@ Finalize automatically once no work remains.
    ```
 
    Reconcile only demonstrably integrated work, then require exit zero.
-3. Close through the single writer, committing only the resulting intent artifacts:
+3. Close through the single writer:
 
    ```sh
    node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/state-transition.cjs close-intent --intent <intent-id> --config .specs-inferno/config.codex.yaml
    ```
 
-   Its refusal over open items is authoritative. Then archive, so the live ledger holds open work only:
+   Its refusal is authoritative; an item the user drops leaves only through `defer-item`. Then archive, so the live ledger holds open work only:
 
    ```sh
    node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/state-transition.cjs archive-intent --intent <intent-id> --sweep --config .specs-inferno/config.codex.yaml

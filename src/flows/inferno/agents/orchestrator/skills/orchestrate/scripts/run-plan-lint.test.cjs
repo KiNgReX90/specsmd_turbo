@@ -326,3 +326,13 @@ test("frontier stops on a plan finding before it prints a ready set, and never l
   assert.equal(landed.code, 0, landed.out + landed.err);
   assert.match(landed.out, /^ready show-balance /m);
 });
+
+test("a deferred item is never linted, and the criteria it delivers stay delivered", () => {
+  // show-balance waits for a later plan: its spec lost a section, and it alone delivers SC-2.
+  const items = { ...ITEMS, "show-balance": ITEMS["show-balance"].replace("## Out of Scope\n\n- Topping a card up\n\n", "") };
+  assert.equal(lint(plan({ items })).code, 2);
+  const deferred = { ...DEPENDS, "show-balance": { depends: ["card-store"], status: "deferred", extra: "\n        deferred_reason: later" } };
+  const result = lint(plan({ items, state: deferred }));
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /^clean gift-cards: 1 open items, 2 criteria$/m);
+});

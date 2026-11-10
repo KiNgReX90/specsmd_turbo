@@ -253,6 +253,7 @@ function readLedger(root) {
       review_rejections: Number(field(lines, item, 'review_rejections')) || 0,
       review_weight: field(lines, item, 'review_weight'),
       reviewed_at: field(lines, item, 'reviewed_at'),
+      deferred_reason: field(lines, item, 'deferred_reason'),
       depends_on: listValues(lines, item, 'depends_on'),
     })),
   }));
