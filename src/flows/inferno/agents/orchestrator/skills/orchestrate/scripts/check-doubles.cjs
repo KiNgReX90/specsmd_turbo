@@ -142,7 +142,11 @@ function checkDoubles(options, config) {
   }
   const rules = settings(read, label);
   const base = options.base || resolveBase(read, null, tree);
-  const before = matching(tree, baseline(tree, base, options.since), rules);
+  const point = baseline(tree, base, options.since);
+  // On the base the count is held to the since commit, so the line names that commit, never the
+  // base it would read as counted against itself.
+  const from = base === lib.currentBranch(tree) ? lib.git(tree, ['rev-parse', '--short', point]) : base;
+  const before = matching(tree, point, rules);
   const now = matching(tree, 'HEAD', rules);
   const payload = { ok: now.length <= before.length, base: before.length, head: now.length };
   if (payload.ok) {
@@ -154,7 +158,7 @@ function checkDoubles(options, config) {
     exit: 2,
     payload,
     out: [
-      `FAIL doubles ${before.length} -> ${now.length} against ${base}: more files match ${rules.pattern}.`,
+      `FAIL doubles ${before.length} -> ${now.length} against ${from}: more files match ${rules.pattern}.`,
       RULE,
       ...payload.added.slice(0, LISTED).map((file) => `  new: ${file}`),
       ...(payload.added.length > LISTED ? [`  and ${payload.added.length - LISTED} more`] : []),
@@ -167,11 +171,11 @@ if (require.main === module) {
   const options = { cwd: process.cwd() };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--json') options.json = true;
-    else if (['--tree', '--config', '--base'].includes(argv[i]) && argv[i + 1]) {
+    else if (['--tree', '--config', '--base', '--since'].includes(argv[i]) && argv[i + 1]) {
       options[argv[i].slice(2)] = argv[i + 1];
       i += 1;
     } else {
-      process.stderr.write('usage: node check-doubles.cjs [--tree <dir>] [--config <file>] [--base <branch>] [--json]\n');
+      process.stderr.write('usage: node check-doubles.cjs [--tree <dir>] [--config <file>] [--base <branch>] [--since <ref>] [--json]\n');
       process.exit(1);
     }
   }

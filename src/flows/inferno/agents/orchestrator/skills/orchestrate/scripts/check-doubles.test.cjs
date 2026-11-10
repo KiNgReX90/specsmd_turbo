@@ -247,3 +247,12 @@ test("a base that shares no history with the branch is refused, never counted at
   assert.equal(result.code, 2, result.out);
   assert.match(result.out, /merge base/);
 });
+
+test("on the base branch the check alone counts against --since and names that commit", () => {
+  const fixture = repo(BRIDGE, {});
+  git(fixture.root, ["checkout", "-q", "main"]);
+  land(fixture, { "e2e/new.spec.ts": BRIDGED });
+  const result = run(fixture, CHECK, ["--tree", fixture.root, "--since", "HEAD~1"]);
+  assert.equal(result.code, 2, result.out);
+  assert.match(result.out, /FAIL doubles 0 -> 1 against [0-9a-f]{7,}:/);
+});
