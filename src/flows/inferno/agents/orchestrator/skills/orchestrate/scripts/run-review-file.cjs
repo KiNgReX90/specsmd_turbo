@@ -17,7 +17,7 @@ const { SAME_ITEM, deltaProblem } = require('./run-review-delta.cjs');
 
 const { RunError } = lib;
 
-const ITEM_KEYS = ['item', 'verdict', 'files', 'findings', 'mutants'];
+const ITEM_KEYS = ['item', 'verdict', 'files', 'findings', 'mutants', 'pins'];
 /** What run.cjs adds when it records a review. A reviewer that writes them is refused. */
 const RECORDED_KEYS = ['tree', 'commit', 'reviewer'];
 /**
@@ -43,6 +43,15 @@ const RUNNER_KEYS = ['caught', 'why'];
 const CAUGHT = ['yes', 'no', 'none'];
 
 const PROPOSE = `propose {${MUTANT_KEYS.join(', ')}}; the runner runs it and writes caught`;
+/**
+ * A pin as a reviewer writes it: the criterion its test holds by pinning reader-facing copy
+ * verbatim, the product file the copy stands in, that test file, and the text both hold. The
+ * runner checks it when it records the file (run-review-pins.cjs), and a checked pin counts where
+ * a caught mutant does. The text holds at least `PIN_WORDS` words that hold a letter, so a pin is
+ * copy and never a count, a computed value or a code token, which keep their mutant.
+ */
+const PIN_KEYS = ['criterion', 'file', 'test', 'text'];
+const PIN_WORDS = 4;
 
 function reviewPath(intentId, itemId) {
   return path.join(lib.SPECS_DIR, 'intents', intentId, 'reviews', `${itemId}.yaml`);
@@ -143,11 +152,11 @@ function readDoc(tree, rel) {
  */
 function parseItemReview(tree, rel, itemId, { recorded }) {
   const doc = readDoc(tree, rel);
-  if (!isMap(doc)) throw bad(rel, 'an item review is a map of item, verdict, files, findings and mutants');
+  if (!isMap(doc)) throw bad(rel, `an item review is a map of ${ITEM_KEYS.join(', ')}`);
   for (const key of Object.keys(doc)) {
     if (ITEM_KEYS.includes(key) || (recorded && RECORDED_KEYS.includes(key))) continue;
     if (RECORDED_KEYS.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
-    throw bad(rel, `unknown key ${key}: an item review holds item, verdict, files, findings and mutants only`);
+    throw bad(rel, `unknown key ${key}: an item review holds ${ITEM_KEYS.join(', ')} only`);
   }
   if (doc.item !== itemId) throw bad(rel, `item reads ${doc.item || 'nothing'}, and this is the review of ${itemId}`);
   if (doc.verdict !== 'clean' && doc.verdict !== 'fix') throw bad(rel, 'verdict must be clean or fix');
@@ -163,7 +172,8 @@ function parseItemReview(tree, rel, itemId, { recorded }) {
   // A delta review being recorded reads the fix and nothing else (run-review-delta.cjs).
   const delta = recorded ? null : deltaProblem(tree, rel, findings, SAME_ITEM);
   if (delta) throw bad(rel, delta);
-  return { item: itemId, verdict: doc.verdict, files, findings, mutants, survivors, reviewer: recorded ? recordedReviewer(doc) : null };
+  const pins = pinsOf(rel, doc);
+  return { item: itemId, verdict: doc.verdict, files, findings, mutants, survivors, pins, reviewer: recorded ? recordedReviewer(doc) : null };
 }
 
 /**
@@ -197,6 +207,34 @@ function mutantsOf(rel, doc) {
     return mutant;
   });
 }
+
+/** The words of a pin's text that hold a letter. */
+const pinWords = (text) => text.split(/\s+/).filter((word) => /\p{L}/u.test(word)).length;
+
+/**
+ * The pins of a review, held to their shape: paths inside the tree and outside the ledger, and a
+ * text of copy. `criterionOf` names what is wrong with a criterion's name, as for a proposal; a
+ * recorded file was named when it was recorded, so its read leaves it out.
+ */
+function pinsOf(rel, doc, criterionOf = () => null) {
+  return entries(rel, doc, 'pins', PIN_KEYS).map((pin, index) => {
+    const at = `pins entry ${index + 1}`;
+    const problem = criterionOf(pin.criterion);
+    if (problem) throw bad(rel, `${at} ${problem}`);
+    const [file, test] = [relativePath(rel, pin.file, at), relativePath(rel, pin.test, at)];
+    const ledger = [file, test].find((name) => name === lib.SPECS_DIR || name.startsWith(`${lib.SPECS_DIR}/`));
+    if (ledger) throw bad(rel, `${at} names ${ledger}; a pin reads the code, never the ledger`);
+    const words = pinWords(pin.text);
+    if (words < PIN_WORDS) {
+      throw bad(rel, `${at} text holds ${words} word${words === 1 ? '' : 's'}; a pin holds reader-facing copy of at least ${PIN_WORDS}, ` +
+        'and a pattern, a count or a computed value keeps its mutant');
+    }
+    return { criterion: pin.criterion, file, test, text: pin.text };
+  });
+}
+
+/** Two pins are one when they name the same criterion, files and text. */
+const samePin = (a, b) => PIN_KEYS.every((key) => (a[key] || '') === (b[key] || ''));
 
 /** Two mutants are one when they break the same text the same way for the same test; a moved line is the same mutant. */
 const sameMutant = (a, b) => ['criterion', 'file', 'find', 'replace', 'test'].every((key) => (a[key] || '') === (b[key] || ''));
@@ -237,7 +275,7 @@ function refuseNew(rel, doc, previous) {
   mutantsOf(rel, doc).forEach((mutant, index) => {
     if (previous.some((entry) => sameMutant(entry, mutant))) return;
     throw bad(rel, `mutants entry ${index + 1} is new: a delta review proposes no mutant. Leave mutants out: the runner carries ` +
-      'the last review\'s over and reruns its survivors, and a criterion still without a caught mutant is the intent review\'s');
+      'the last review\'s over and reruns its survivors, and a criterion still without a caught mutant or a checked pin is the intent review\'s');
   });
 }
 
@@ -271,6 +309,6 @@ function verdictParts(rel, doc, findingKeys, optional = []) {
 }
 
 module.exports = {
-  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, RECORDED_KEYS, SEVERITIES, bad, entries, isMap, itemCriterion, mutantsOf, parseItemReview, proposalsOf,
-  readDoc, recordedReviewer, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, verdictParts, weightOf,
+  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, entries, isMap, itemCriterion, mutantsOf, parseItemReview,
+  pinsOf, proposalsOf, readDoc, recordedReviewer, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, samePin, verdictParts, weightOf,
 };
