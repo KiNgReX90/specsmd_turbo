@@ -32,8 +32,12 @@
  *    then the file's bytes with `from` replaced by `to` on that one line, the
  *    test in the code root with the timeout (its whole process tree is
  *    killed then), the original bytes back in a `finally`, their sha256
- *    checked, and only then the marker deleted. Exit not 0 is `killed` (a
- *    timeout is exit 124), 0 is `survived`. A SIGINT, SIGTERM or SIGHUP only
+ *    checked, and only then the marker deleted. lib/mutant-verdict.cjs
+ *    reads the run: exit 0 is `survived`; `killed` only when a test failed
+ *    (a failed count of at least 1, or a red exit without counts); a timeout
+ *    (exit 124) is `invalid: timed out`, a run that did not build, parse or
+ *    collect is `invalid` with that reason, counts with no failed test under
+ *    a red exit `invalid: no test failed`. A SIGINT, SIGTERM or SIGHUP only
  *    sets a flag: once the current mutant is restored the run stops, prints
  *    the lines before it and `interrupted`, exits 1 and writes nothing.
  *    Before every test run (the baseline too) and once after the last, the
@@ -76,6 +80,7 @@ const {
     mutantId, checkList, fieldProblem, testProgram, testProblem, locate, mutateBuffer,
 } = require('./lib/mutants.cjs');
 const { markerPath, withMutant, recoverMarker } = require('./lib/mutant-marker.cjs');
+const { mutantVerdict } = require('./lib/mutant-verdict.cjs');
 
 const DEFAULT_TIMEOUT = 900;
 const DIFF_CHANGED = 'diff changed: run story-verify.cjs again';
@@ -252,7 +257,8 @@ async function runAll({ todo, proof, proofFile, story, dir, notes, diffMoved, st
         // A signal during this run may have reached the test too: its result is not kept.
         await tick();
         if (stop()) return interrupted(results);
-        results.push({ ...entry, result: r.exit === 0 ? 'survived' : 'killed', exit: r.exit });
+        const v = mutantVerdict(r, c.abs);
+        results.push({ ...entry, result: v.result, exit: r.exit, ...(v.reason ? { reason: v.reason } : {}) });
     }
 
     const lines = results.map(mutantLine);
