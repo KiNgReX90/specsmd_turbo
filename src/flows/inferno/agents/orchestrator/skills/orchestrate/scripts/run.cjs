@@ -59,8 +59,8 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs scan --collect [--tree <dir>]            record and commit scan.yaml: 0 recorded, 3 a result missing, 2 a line without its proof
   node run.cjs scan [--collect] --only wiring --plan <intent-id> the plan-time scan, one scanner per slice of the plan: 3 spawn or wait on an unmerged intent, then 0 no LEGAL or MAKER gap, 2 every such gap for the planner
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
-  node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] break one line, run the test, restore: caught yes|no
-  node run.cjs mutate --batch <file> [--tree <dir>]      every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
+  node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] [--config <file>] break one line, run the test, restore: caught yes|no
+  node run.cjs mutate --batch <file> [--tree <dir>] [--config <file>] every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
   node run.cjs integrate --item <id> [--since <ref>] [--tree <dir>] fold the base in, run the checks, complete the item
   node run.cjs integrate --items <a,b> [--since <ref>] [--tree <dir>] the same for an explicitly batched chain
   node run.cjs integrate [--since <ref>] [--tree <dir>] [--config <file>] fold and check without completing anything
@@ -87,7 +87,7 @@ const USAGE = `INFERNO orchestrator runner
 Options
   --json            machine-readable output
   --tree <dir>      the worktree to operate in (default: the repository of the cwd)
-  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml);
+  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, mutate, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml);
                     on an intent run branch, worktree, integrate, gate, green, ship and the lane accepts default to the config
                     claim, worktree, integrate or gate last recorded for that branch
   --base <branch>   integrate, doubles, gate, ship and teardown: the base branch to fold in (default: the config's base)
