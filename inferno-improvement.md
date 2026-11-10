@@ -71,6 +71,16 @@ How the numbers are read:
 - A mutant names a numbered criterion when its `criterion` starts with a number. Everything else is free text.
 - Tokens are summed once per API message id. Context per round is input plus cache-read plus cache-creation tokens of that message.
 
+### Items built wholly on 0.1.82, counted by hand
+
+Until the readout reads both lenses and counts a mutant once (section 4 of `inferno-0.1.82-run-defects-handoff.md`), each item whose builder and reviewers were all dispatched after the reinstall gets one row here. The full readout follows on the first intent of ten or more such items.
+
+| Item, on the app repo | Rounds, both lenses | Round 1 findings | Mutants per criterion | Grants | Build commit to clean review |
+| --- | --- | --- | --- | --- | --- |
+| `a14-the-store-holds-a-vulnerability-the-maker-found`, 2026-11-10, review records `d650ef038` and `3ff216c44` | 2 | contract: 1 blocker, 1 minor. quality: 1 major, 2 minor | 1.0 (6 proposals, 6 criteria), none run at the item, all owed to the intent review | 1 | 21 minutes |
+
+What the first row shows. The quality lens found a major finding of its own in round 1. Both reviewers came back warm for round 2 and both signed clean. The readout printed "12 in 2 rounds" for the 6 proposals, which is the double count of the handoff.
+
 ## 4. Findings from the first host
 
 A session that meets a defect in the new flow works around it and adds one handoff file beside this one, named `inferno-<what>-handoff.md`: what is wrong, the evidence and how to fix it. Nothing is built on the host's account. This section lists those files, newest last, with the date and one line each.
