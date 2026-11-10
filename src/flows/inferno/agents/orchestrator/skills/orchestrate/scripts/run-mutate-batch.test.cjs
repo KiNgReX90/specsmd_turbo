@@ -156,7 +156,9 @@ test("a test red with every switch off stops the batch with no verdict at all, a
 
 test("a JavaScript entry runs its test once in place beside the Rust ones", (t) => {
   const f = batchTree(t, { "src/lib.rs": LIB, "src/m.js": "module.exports = 1;\n" });
-  const check = "node -e \"process.exit(require('./src/m.js') === 1 ? 0 : 1)\"";
+  // The check prints node --test's failing summary when it is red, as a real runner does: a red run
+  // without one reads no verdict.
+  const check = "node -e \"process.exit(require('./src/m.js') === 1 ? 0 : 1)\" || { s=$?; echo '# fail 1'; exit $s; }";
   const result = runBatch(f, [
     entry(f, "AC1", 3, "3", "9", "gamma", "{ 3 }"),
     { criterion: "AC2", file: "src/m.js", line: 1, find: "1", replace: "2", test: check },

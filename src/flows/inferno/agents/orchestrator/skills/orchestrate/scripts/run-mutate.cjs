@@ -10,8 +10,9 @@
  * mutant there costs a full install or compile. That is safe only on a clean tree, so a dirty
  * one is refused. The restore runs in a finally, a signal is held until it has run, and a run
  * killed outright leaves a journal that the next call restores from before it starts
- * (run-mutate-journal.cjs). A red run counts as caught only when the test ran: a build that
- * failed, a file that does not parse and a killed run read no verdict (run-mutate-verdict.cjs).
+ * (run-mutate-journal.cjs). A red run counts as caught only when the test ran and its summary
+ * reports a failure: a build that failed, a file that does not parse, a killed run and a red run
+ * with no failing test summary read no verdict (run-mutate-verdict.cjs).
  */
 
 const fs = require('fs');
