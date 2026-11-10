@@ -25,3 +25,14 @@ What is wrong. The record of an item review runs the reviewer's mutant proposals
 Evidence. Item `r4r-every-installer-carries-its-licence-and-third-party-notices` on Skoft_CRA: `review --item --reviewer --quality-reviewer` printed "no mutant ran: the tree holds uncommitted work in .../reviews/quality/r4r-every-installer-carries-its-licence-and-third-party-notices.yaml, so 5 proposals stay owed to the intent review", and recorded both files in the host's commit `5de2b04b4`. There is no workaround at the item: the two lenses cannot be recorded apart.
 
 How to fix. `busy` takes the set of files this record signs, which `run-review.cjs` already holds as `signed` (:230), and allows all of them. A test: an item with both lenses pending records, its proposals run, and each lands with `caught` in the contract file.
+
+## 4. The readout cannot yet judge the flow it was built to judge
+
+What is wrong. Two things in `evals/review-loop/`, both seen on the first item that finished its review loop after the reinstall.
+
+- It does not read the quality lens. The readers key on `intents/<id>/reviews/<item>.yaml` (`history.cjs`, the `reviews` pattern), so `reviews/quality/<item>.yaml` is never counted. The item's readout said 2 rounds and no later finding, while the item had a third round: a minor finding of the quality lens, settled by its warm builder. Two rows of the measure cannot be filled: the findings of the quality lens per item, and the reviewer tokens of both lenses together.
+- It counts a carried mutant again in every round. `stats.cjs` adds up the mutants each recorded version of a review file lists. On the old flow every round planted new ones, so the sum was the number run. On 0.1.82 a later round carries the caught mutants over and runs only the survivors, and the file does not say which of its mutants ran in this round. The item's readout said "28 in 2 rounds, so 7.0 per acceptance criterion" for 15 mutants in round 1 and 13 listed in round 2, of which 2 were the survivors of round 1.
+
+Evidence. Skoft_CRA, intent `the-app-shows-its-licence-its-notices-and-its-data-sources`, item `r4a-about-opens-the-licences-and-credits-the-data-sources`, review records `d8f1d2131` and `2a42e8220` on its intent branch. Its first round was written by a reviewer dispatched before the reinstall, so the item is no clean measure of the new flow either way.
+
+How to fix. Read both lenses: rounds, fix rounds and findings by weight for `reviews/quality/` beside the contract file, and one total per item. Count a mutant once: key it by criterion, file, line, find and replace, and count a later listing only when its verdict changed, or have the runner mark in the review file which mutants it ran in this record. Until then the row "mutants per acceptance criterion" reads too high on the new flow.
