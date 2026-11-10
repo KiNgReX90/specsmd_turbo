@@ -45,6 +45,11 @@ test("after a push --since names the landing, and without it every scoped check 
   const named = integrate(fixture, "--since", "HEAD~1");
   assert.equal(named.code, 0, named.out + named.err);
   assert.match(named.out, /PASS \d+s echo scoped/);
+  assert.doesNotMatch(named.out, /every scoped check runs/);
+  const none = integrate(fixture, "--since", "HEAD");
+  assert.equal(none.code, 0, none.out + none.err);
+  assert.match(none.out, /SKIP echo scoped \(no path in scope changed\)/);
+  assert.doesNotMatch(none.out, /every scoped check runs/);
   const bare = integrate(fixture);
   assert.equal(bare.code, 0, bare.out + bare.err);
   assert.match(bare.out, /^on main with no unpushed commit and no --since: every scoped check runs$/m);
@@ -67,7 +72,7 @@ test("doubles on the base counts HEAD against the landing", () => {
   commit(rose, "src/fake.ts", "export const fake = 'FAKE';\n");
   const refused = integrate(rose);
   assert.equal(refused.code, 2, refused.out + refused.err);
-  assert.match(refused.out, /FAIL doubles 0 -> 1/);
+  assert.match(refused.out, /FAIL doubles 0 -> 1 against [0-9a-f]{7,}:/);
   assert.doesNotMatch(refused.out, /echo scoped/);
 
   const held = repo({ config: DOUBLES });
@@ -76,6 +81,13 @@ test("doubles on the base counts HEAD against the landing", () => {
   assert.equal(passed.code, 0, passed.out + passed.err);
   assert.match(passed.out, /PASS doubles/);
   assert.match(passed.out, /PASS \d+s echo scoped/);
+
+  const pushed = repo({ config: DOUBLES });
+  commit(pushed, "src/fake.ts", "export const fake = 'FAKE';\n");
+  git(pushed.root, ["push", "-q", "origin", "main"]);
+  const named = integrate(pushed, "--since", "HEAD~1");
+  assert.equal(named.code, 2, named.out + named.err);
+  assert.match(named.out, /FAIL doubles 0 -> 1 against [0-9a-f]{7,}:/);
 });
 
 test("run.cjs doubles on the base counts against --since and refuses without a landing to count from", () => {
@@ -84,9 +96,32 @@ test("run.cjs doubles on the base counts against --since and refuses without a l
   git(fixture.root, ["push", "-q", "origin", "main"]);
   const since = run(fixture, ["doubles", "--tree", fixture.root, "--since", "HEAD~1"]);
   assert.equal(since.code, 2, since.out + since.err);
-  assert.match(since.out, /FAIL doubles 0 -> 1/);
+  assert.match(since.out, /FAIL doubles 0 -> 1 against [0-9a-f]{7,}:/);
   const bare = run(fixture, ["doubles", "--tree", fixture.root]);
   assert.equal(bare.code, 2, bare.out + bare.err);
   assert.match(bare.err, /BAD_CONFIG/);
   assert.match(bare.err, /or pass --since <the commit before your edit>/);
+});
+
+// The cases block of run-gate.test.cjs: a changed expectation no case answers is refused.
+const CASES = `cases:
+  files:
+    - path: integration/TEST-CASES.md
+      case: '^### (TC-\\d+)'
+  tests: ["integration/*.test.mjs"]
+  sources: ["src/**"]
+  expectations: ["e2e/**"]
+`;
+const SPEC = "test('lays fields in two columns', async () => {\n\texpect(columns).toBe(2);\n});\n";
+
+test("a commit on the base answers for the tester cases it changes", () => {
+  const fixture = repo({ config: BASE + CASES });
+  write(fixture.root, "integration/TEST-CASES.md", "### TC-101 The form\nIt draws two columns.\n");
+  commit(fixture, "e2e/form.spec.ts", SPEC);
+  git(fixture.root, ["push", "-q", "origin", "main"]);
+  commit(fixture, "e2e/form.spec.ts", SPEC.replace("toBe(2)", "toBe(1)"));
+  const result = integrate(fixture);
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.match(result.out, /expectations changed while no case was edited or answered/);
+  assert.doesNotMatch(result.out, /echo scoped/);
 });
