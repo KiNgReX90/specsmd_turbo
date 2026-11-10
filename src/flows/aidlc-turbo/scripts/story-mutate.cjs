@@ -3,8 +3,9 @@
 /**
  * specsmd AI-DLC Turbo - run the mutants of one story.
  *
- * The story reviewer proposes a few mutants: one line of the story's code
- * broken on purpose, and the narrow test that should go red. This script runs
+ * The story reviewer proposes one mutant per acceptance criterion a test
+ * covers: one line of the story's code broken on purpose, and the narrow test
+ * that should go red. This script runs
  * them and writes the result into the story's proof, so whether the tests
  * catch a broken line never rests on an agent's word. Sandbox mode runs them
  * exactly as production.
@@ -14,7 +15,16 @@
  *    `{intent}/proof/{SSS}.json` exists and passed; `git add -N .` in the code
  *    root (so a file the story added shows up as `+` lines), and the diff
  *    hash still equals the proof's diff_sha.
- * 2. Each mutant { id, file, line, from, to, test, criterion } is checked
+ * 2. One per criterion (lib/mutant-criteria.cjs): `criterion` starts with the
+ *    criterion's number in the story's list, `--untested` names the criteria
+ *    no test covers, and `construction.mutants` of repo/config.yaml caps the
+ *    criteria with a test that get one (no number is no cap); the mutants of
+ *    the others do not run. A mutant is `invalid` when it names no criterion
+ *    of the story by its number or one that has a mutant already, but a
+ *    criterion whose mutant was invalid may have one new proposal in a later
+ *    --only run. A story whose criteria cannot be read is not checked here:
+ *    the cap keeps the first mutants of the list.
+ *    Each mutant { id, file, line, from, to, test, criterion } is checked
  *    (lib/mutants.cjs). It is `invalid`, and never runs, when a field is
  *    missing or mistyped (`missing {fields}`, `{fields} must be text`; no
  *    usable id gives `#{position}`), from equals to, the file is outside the
@@ -49,11 +59,16 @@
  *    wrote files, nothing is written to the proof.
  * 6. The proof gets `mutants: [{ id, file, line, from, to, test, criterion,
  *    result, exit, reason }]` (`line` the line used, `reason` only for
- *    invalid). Every other field stays as story-verify.cjs wrote it, so
- *    story-land.cjs still lands the story. --only replaces just those entries.
+ *    invalid), and `criteria: [{ criterion, result, mutants, reason }]`, one
+ *    per acceptance criterion: survived, killed, invalid (with the reason),
+ *    missing (a test and no mutant), untested or capped. Every other field
+ *    stays as story-verify.cjs wrote it, so story-land.cjs still lands the
+ *    story. --only replaces just those entries and recomputes `criteria`; a
+ *    proof without `criteria` is read from its `mutants`.
  *
  * Stdout: one line per mutant `KILLED|SURVIVED|INVALID {id} {file}:{line}`,
- * with ` ({reason})` for invalid, then `MUTANTS {story} {killed}/{ran} killed,
+ * with ` ({reason})` for invalid, then one line per criterion
+ * `CRITERION {n} {result}[ {id}][ ({reason})]`, then `MUTANTS {story} {killed}/{ran} killed,
  * {survived} survived, {invalid} invalid`. Exit 0 also with survivors. Exit 1
  * on bad input (no proof, a proof that did not pass, a file that is not a
  * JSON array, an id used twice, an unknown --only id), on a cut-off run's file
@@ -62,7 +77,7 @@
  *
  * Usage:
  *   node .specsmd/aidlc-turbo/scripts/story-mutate.cjs <intent-slug> <SSS> --code-root <dir> \
- *     --mutants <json file> [--only M1,M2] [--timeout <seconds per mutant, default 900>] \
+ *     --mutants <json file> [--untested 3,5] [--only M1,M2] [--timeout <seconds per mutant, default 900>] \
  *     [--root .specs-aidlc-turbo]
  *
  * Node builtins only, plus ./frontmatter.cjs and ./lib/*.cjs: the target
@@ -72,7 +87,8 @@
 const fs = require('fs');
 const path = require('path');
 const { DEFAULT_ROOT, normId, resolveIntent, findStory, readBrief } = require('./intent-status.cjs');
-const { git, artifactPrefix } = require('./story-start.cjs');
+const { git, artifactPrefix, parseYamlMap } = require('./story-start.cjs');
+const paths = require('./lib/paths.cjs');
 const { runCommand, diffSha, playwrightDir } = require('./story-verify.cjs');
 const { addedLines, changedFiles } = require('./lib/diff-lines.cjs');
 const { normPath, isTestFile, touchFiles } = require('./lib/test-files.cjs');
@@ -81,6 +97,7 @@ const {
 } = require('./lib/mutants.cjs');
 const { markerPath, withMutant, recoverMarker } = require('./lib/mutant-marker.cjs');
 const { mutantVerdict } = require('./lib/mutant-verdict.cjs');
+const { capOf, criteriaCount, planMutants, criteriaResults } = require('./lib/mutant-criteria.cjs');
 
 const DEFAULT_TIMEOUT = 900;
 const DIFF_CHANGED = 'diff changed: run story-verify.cjs again';
@@ -92,12 +109,13 @@ const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 /** Parse argv into positionals and flags. */
 function parseArgs(argv) {
-    const out = { positional: [], codeRoot: null, mutants: null, only: null, timeout: DEFAULT_TIMEOUT, root: DEFAULT_ROOT };
+    const out = { positional: [], codeRoot: null, mutants: null, only: null, untested: null, timeout: DEFAULT_TIMEOUT, root: DEFAULT_ROOT };
     for (let i = 0; i < argv.length; i += 1) {
         const arg = argv[i];
         if (arg === '--code-root') { out.codeRoot = argv[i + 1] || null; i += 1; }
         else if (arg === '--mutants') { out.mutants = argv[i + 1] || null; i += 1; }
         else if (arg === '--only') { out.only = argv[i + 1] || ''; i += 1; }
+        else if (arg === '--untested') { out.untested = argv[i + 1] || ''; i += 1; }
         else if (arg === '--timeout') { out.timeout = Number(argv[i + 1]); i += 1; }
         else if (arg === '--root') { out.root = argv[i + 1] || DEFAULT_ROOT; i += 1; }
         else if (arg === '--help' || arg === '-h') out.help = true;
@@ -112,6 +130,16 @@ function readMutants(file) {
         return { mutants: JSON.parse(fs.readFileSync(file, 'utf8')) };
     } catch (error) {
         return { error: `cannot read the mutants file ${file}: ${error.message}` };
+    }
+}
+
+/** The cap of `construction.mutants` in repo/config.yaml; null is no cap. */
+function readCap(absRoot) {
+    const file = paths.layout(absRoot).config;
+    try {
+        return fs.existsSync(file) ? capOf(parseYamlMap(fs.readFileSync(file, 'utf8'))) : null;
+    } catch {
+        return null;
     }
 }
 
@@ -149,7 +177,7 @@ function check(m, ctx) {
  */
 async function mutateStory({
     root = DEFAULT_ROOT, intentSlug, storyId, codeRoot, mutants: given = null, mutantsFile = null,
-    only = null, timeout = DEFAULT_TIMEOUT, cwd = process.cwd(), runner = runCommand,
+    only = null, untested = null, timeout = DEFAULT_TIMEOUT, cwd = process.cwd(), runner = runCommand,
 }) {
     const absRoot = path.resolve(cwd, root);
     const { intent, error } = resolveIntent(absRoot, intentSlug);
@@ -178,7 +206,12 @@ async function mutateStory({
     const ids = only ? String(only).split(',').map((x) => x.trim()).filter(Boolean) : null;
     const unknown = (ids || []).filter((id) => !all.some((a) => a.id === id));
     if (unknown.length) return fail(`--only names unknown mutants: ${unknown.join(', ')}`);
-    const todo = ids ? all.filter((a) => ids.includes(a.id)) : all;
+    const listed = ids ? all.filter((a) => ids.includes(a.id)) : all;
+    const plan = planMutants({
+        count: criteriaCount(intent, story, absRoot), cap: readCap(absRoot), untestedFlag: untested,
+        todo: listed, previous: ids ? proof : null,
+    });
+    const todo = listed.filter((a) => !plan.skipped.has(a.id));
 
     const prefix = artifactPrefix(cwd, root);
     const diffMoved = () => {
@@ -200,7 +233,7 @@ async function mutateStory({
     SIGNALS.forEach((sig) => process.on(sig, onSignal));
     try {
         return await runAll({
-            todo, proof, proofFile, story, dir, notes, diffMoved, stop: () => stopped,
+            todo, plan, proof, proofFile, story, dir, notes, diffMoved, stop: () => stopped,
             marker: markerPath(intent.proof, story.id),
             ctx: {
                 dir, pwDir,
@@ -217,10 +250,10 @@ async function mutateStory({
 }
 
 /** Baseline, every mutant, the diff check and the proof. Stops after a signal. */
-async function runAll({ todo, proof, proofFile, story, dir, notes, diffMoved, stop, marker, ctx, merge, runTest }) {
+async function runAll({ todo, plan, proof, proofFile, story, dir, notes, diffMoved, stop, marker, ctx, merge, runTest }) {
     const interrupted = (results) => ({ lines: [...results.map(mutantLine), INTERRUPTED], exitCode: 1, notes });
     const checked = todo.map(({ m, id }) => {
-        const shape = fieldProblem(m);
+        const shape = plan.reasons.get(id) || fieldProblem(m);
         const c = shape ? { file: m && m.file, line: m && m.line, reason: shape } : check(m, ctx);
         return { m: m && typeof m === 'object' ? m : {}, id, c };
     });
@@ -271,11 +304,14 @@ async function runAll({ todo, proof, proofFile, story, dir, notes, diffMoved, st
         if (at === -1) merged.push(r); else merged[at] = r;
     }
     proof.mutants = merged;
+    const perCriterion = plan.count ? criteriaResults(plan, merged) : null;
+    if (perCriterion) proof.criteria = perCriterion.criteria;
     fs.writeFileSync(proofFile, `${JSON.stringify(proof, null, 2)}\n`, 'utf8');
 
     const n = (result) => results.filter((r) => r.result === result).length;
     const killed = n('killed');
     const survived = n('survived');
+    if (perCriterion) lines.push(...perCriterion.lines);
     lines.push(`MUTANTS ${story.id} ${killed}/${killed + survived} killed, ${survived} survived, ${n('invalid')} invalid`);
     return { lines, exitCode: 0, notes, proof };
 }
@@ -294,6 +330,7 @@ Options:
   --code-root <dir>   Where the story's code is: its worktree (required)
   --mutants <file>    JSON array of { id, file, line, from, to, test, criterion } (required)
   --only <M1,M2>      Run just these mutants and update only their entries in the proof
+  --untested <3,5>    The acceptance criteria no test covers, by number: no mutant is owed
   --timeout <sec>     Timeout per test run, default ${DEFAULT_TIMEOUT}
   --root <dir>        Artifact root, default ${DEFAULT_ROOT}
   --help, -h          Show this message
@@ -303,7 +340,7 @@ Options:
     } else {
         mutateStory({
             root: options.root, intentSlug, storyId, codeRoot: options.codeRoot,
-            mutantsFile: options.mutants, only: options.only, timeout: options.timeout,
+            mutantsFile: options.mutants, only: options.only, untested: options.untested, timeout: options.timeout,
         }).then((result) => {
             (result.notes || []).forEach((note) => console.error(note));
             if (result.error) {

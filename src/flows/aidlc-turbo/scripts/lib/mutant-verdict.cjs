@@ -31,8 +31,8 @@
  * 6. No counts: past the markers above, the red exit is `killed`.
  *
  * The markers are read in the tail the run keeps, where each of these
- * runners ends its output. Ported from INFERNO's run-mutate-verdict.cjs,
- * with the markers of Turbo's stacks added.
+ * runners ends its output. Ported from the mutant verdict of the INFERNO
+ * flow's orchestrator scripts, with the markers of Turbo's stacks added.
  *
  * Node builtins only: the target project often has no node_modules at all.
  */
