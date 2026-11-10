@@ -2,7 +2,7 @@
 
 Written 2026-11-10 as a handoff. Nothing in this plan is built. Whoever picks it up runs it as section 4 describes.
 
-The goal: INFERNO becomes the faster sibling of AI-DLC Turbo, with the same quality of output. It takes over the parts of Turbo's build loop that are both stricter and cheaper than its own. It keeps what it does better: no human stop, and a caught mutant for every acceptance criterion. Turbo takes two fixes from INFERNO in return.
+The goal: INFERNO becomes the faster sibling of AI-DLC Turbo, with the same quality of output. It takes over the parts of Turbo's build loop that are both stricter and cheaper than its own, and the parts of Turbo's planning that make a spec complete before a builder starts. It keeps what it does better: no human stop, and a caught mutant for every acceptance criterion. Turbo takes two fixes from INFERNO in return.
 
 Every item keeps its cold review. No package removes a review that judges a blocker or a major finding.
 
@@ -33,6 +33,8 @@ The source is one intent of 28 items on the app repo, built by INFERNO 0.1.81. 1
 
 Why the loop does not end: a first review breaks one line per criterion, and every later round samples again. About 6% of mutants survive, so a round of 50 mutants is clean about one time in twenty-five. Each survivor adds a test, and the next round breaks the new code. Meanwhile the reviewer is resumed warm (`run-review.cjs:113`) and carries everything it ever read.
 
+The planning side, as the host's campaign log reports it and not measured again here. One intent ran six whole-plan scan rounds in about six hours, and its open gaps rose from 25 to 44. A second ran five rounds in four hours with 21, 8, 11, 8 and 30 gaps, and 19 of the last 30 sat in text that earlier repairs had written. The scanner is told to be exhaustive with no cap on lines (`agents/scanner/agent.md`), so every repair gives the next round more to read.
+
 One case to remember: in one item the round after a minor-only review held a blocker that a second cold reviewer had found. A single review that finds only minors does not prove there is nothing serious.
 
 ## 2. The two flows side by side
@@ -55,6 +57,10 @@ Turbo paths are under `src/flows/aidlc-turbo/`, INFERNO paths under `src/flows/i
 | Is the code itself sound | A reviewer of its own, `lens: quality` | No check asks it | A quality lens (P6) |
 | A hard judgment call | The human | The oracle, then a higher tier on the user's yes | Routed by impact and complexity (P7) |
 | The running application | Live test and break test at finish | Host lanes in the gate only | Shape recorded (P8) |
+| Where the project's rules live | In the flow's own folder, `.specs-aidlc-turbo/repo/standards/` and the project pages. Builders get them and a reviewer judges against them | In the host's `CLAUDE.md` and what it points at. A few are hardcoded in the reviewer text | In `.specs-inferno/standards/` (P9) |
+| The spec a builder gets | Criteria as given, when, then with where a tester checks each, an edge-case table, an out-of-scope list, a test plan | Prose, a criteria list and a manifest | Turbo's sections beside INFERNO's manifest (P10) |
+| The gate on a plan's form | A script, `scripts/spec-lint.cjs` | `run.cjs frontier` checks the manifest only | A plan lint (P11) |
+| The check on a plan's meaning | One cross-check: six named kinds of problem, a tool-call budget, at most two fix rounds | Scanners told to be exhaustive, round after round | One bounded cross-check (P12) |
 | Isolation | A worktree per story | One worktree per intent | Unchanged, see section 9 |
 | Human stops | Approval, mismatches, miss 3 | None | Unchanged |
 
@@ -99,9 +105,13 @@ Every brief carries all of this:
 | P3 | The ladder has an end | INFERNO | saves | P2 |
 | P4 | The proof comes from a script | INFERNO | saves | P3 |
 | P5 | New scope is a new item | INFERNO | saves, measure first | P0 |
-| P6 | A quality lens beside the contract review | INFERNO | one more reviewer per item | P4 |
+| P6 | A quality lens beside the contract review | INFERNO | one more reviewer per item | P4, P9 |
 | P7 | The oracle is routed by impact and complexity | INFERNO | fewer top-tier calls | P3 |
 | P8 | Live test and break test | INFERNO | real time, per host | P7, on the owner's go |
+| P9 | The project's rules live in the INFERNO folder | INFERNO | one setup per host, shorter agent texts | P4 |
+| P10 | The spec says more before the build starts | INFERNO | about even | P9 |
+| P11 | A script checks the plan's form | INFERNO | saves | P10 |
+| P12 | One bounded cross-check replaces the scan rounds | INFERNO | saves | P11 |
 | T1 | A mutant is killed only when a test failed | Turbo | none | none |
 | T2 | Every acceptance criterion gets a mutant | Turbo | test runs | T1 |
 
@@ -214,7 +224,7 @@ Every brief carries all of this:
 
 **Change.**
 
-1. A second agent, `specsmd-inferno-reviewer-quality`, with its Codex twin: Opus 5.5 at effort high, read-only. Its checklist is Turbo's: correctness the tests do not reach, error handling, security at the boundary, fit with the code around it, readability, cost, leftovers. When the host config names lint or analysis commands, it runs them once and takes over only findings on lines the item added.
+1. A second agent, `specsmd-inferno-reviewer-quality`, with its Codex twin: Opus 5.5 at effort high, read-only. Its checklist is Turbo's: correctness the tests do not reach, error handling, security at the boundary, fit with the code around it, readability, cost, leftovers. It also judges the change against the rule files of P9 that apply to the changed paths, and names the rule in each such finding. When the host config names lint or analysis commands, it runs them once and takes over only findings on lines the item added.
 2. For a first review `run.cjs review --item` prints both dispatches, to be sent in one message. Each lens writes its own file. The record step makes one verdict: `fix` when either says so, and the same fault found twice goes to the builder once at the higher severity.
 3. In a delta each lens re-reads its own findings under P2.
 4. An item of `kind: test`, docs-only or config-only gets no quality lens, because it has no production code to judge.
@@ -250,6 +260,77 @@ Every brief carries all of this:
 
 **Why it waits.** It costs real wall time and tokens per intent, and a host must supply the start command. A desktop host supplies its own headless display. Build it on the owner's go, after P1 to P7 are measured.
 
+### P9. The project's rules live in the INFERNO folder
+
+**Model.** Turbo keeps the stack, the coding rules and the architecture under `.specs-aidlc-turbo/repo/standards/`, set up once by `skills/master/project-init.md`. Builders receive those paths, and the `docs` lens of `skills/construction/review.md` judges every story against them and names the rule it found broken.
+
+**Why.** INFERNO's planner reads the host's `CLAUDE.md` and the files it points at and is told to encode the rules into the items. Its reviewer carries a few host rules in its own text: a 500 line ceiling, no dashes, no suppression, reader-facing copy. So a rule reaches a builder only when the planner remembered it, and the canonical flow text holds rules that belong to one host.
+
+**Change.**
+
+1. A host keeps its rules in `.specs-inferno/standards/`, one file per topic, one rule per heading, each with the command that checks it where one exists. `.specs-inferno/config.yaml` lists every file under `standards:` with the path globs it applies to.
+2. A setup step, `/specsmd-inferno-standards`, drafts those files once from the host's `CLAUDE.md`, `AGENTS.md` and the files they point at. Every rule carries the line it came from. The owner reads the draft and approves it. From then on the folder is what the flow reads, and the host's instruction files point at it.
+3. The planner reads the folder at start. A builder's dispatch names the files that apply to its `ownership.editable`. The quality lens of P6 judges the change against the files that apply to the changed paths.
+4. A finding on a rule names the file and the heading, so the builder reads just that. A rule the item's own criterion asks to break is no fault of the builder: it goes to the oracle.
+5. The reviewer's check 6 keeps ownership and secrets, and loses every rule that is one host's own. Those move into that host's standards at its reinstall.
+
+**Files owned.** `agents/planner/agent.md` ("Read at start"), `agents/reviewer/agent.md` (check 6), the quality reviewer of P6, `agents/orchestrator/agent.md` (the dispatch list), `agents/orchestrator/config.example.yaml`, a new `claude/commands/inferno-standards.md` with its Codex twin, `S/run-dispatch.cjs` (the paths that apply), tests.
+
+**What it costs.** One setup per host. After it the agent texts are shorter, and no extra reviewer is needed, because the quality lens reads only the rule files that apply.
+
+### P10. The spec says more before the build starts
+
+**Model.** Turbo `templates/inception/story-template.md` and `skills/inception/plan.md` steps 2b, 3 and 4.
+
+**Why.** On the measured intent the reviews added criteria, the oracle added behaviour and 35 grants widened items. All three are signs that the spec was not complete when the builder started.
+
+**Change.** `agents/planner/templates/work-item.md.hbs` and the planner's "Decompose" section gain the four things a Turbo story has and an INFERNO item lacks. The manifest stays as it is.
+
+1. **Edge cases.** A table of case and expected behaviour. Every row gets a test, and the contract reviewer checks each row as it checks a criterion.
+2. **Out of scope.** What this item does not build, one line each. The reviewer's scope check of P5 reads it.
+3. **Test plan.** The test files the item adds, the integration test against each earlier item it builds on, run against that item's real code, and every existing test that asserts a value this item changes. That last list comes from Turbo's rule that a breaking test belongs to the item that breaks it.
+4. **Reuse before create.** For every structure the item creates (a command, a table, a screen, a setting, a module), the spec names the existing one that fits, or says with file and line that none does.
+
+The prose that explains what the code does today is cut in return (`inferno-future-improvements.md`, item 1). The brief numbers its success criteria and carries an item map: which items deliver which criterion.
+
+**Files owned.** `agents/planner/agent.md`, `agents/planner/templates/work-item.md.hbs`, `agents/planner/templates/brief.md.hbs`, `agents/planner/scripts/team-work-item-contract.test.cjs`, the Codex planner twin, `agents/reviewer/agent.md` (edge-case rows), the builder texts where they name the sections of an item.
+
+**What it costs.** The planner writes four short sections and less prose. The planner's standing text has a word ceiling, so every added sentence replaces one.
+
+### P11. A script checks the plan's form
+
+**Model.** Turbo `scripts/spec-lint.cjs`, the hard gate before its approval.
+
+**Change.** `run.cjs plan-lint <intent>` prints one finding per line and exits 2 on any. `run.cjs frontier` runs it before it prints a ready set.
+
+- Every success criterion of the brief is delivered by at least one item, and every item names at least one.
+- Every acceptance criterion names its test and the value it must show.
+- Every item has its edge cases, its out-of-scope list and its test plan, and none holds a `TBD` or a `TODO`.
+- Every test the test plan names as breaking is in that item's `ownership.editable`.
+- Two items with no `depends_on` path between them that share an editable file are printed, so the planner orders them on purpose.
+
+**Files owned.** A new `S/run-plan-lint.cjs` with its test, `S/run.cjs` (one subcommand line, after the intent in flight has landed), `S/run-frontier.cjs` (the call), the planner text (one line).
+
+**What it costs.** No tokens. It finds by script what a scanner otherwise finds by reading.
+
+### P12. One bounded cross-check replaces the scan rounds
+
+**Model.** Turbo `skills/inception/cross-check.md` and `commands/aidlc-turbo-cross-checker.md`.
+
+**Why.** The plan-time scan does not converge. Turbo's check is smaller than INFERNO's, not larger: one reader, a fixed list of what to look for, a budget, and an end.
+
+**Change.**
+
+1. After the plan lint is clean, one cross-checker reads the brief and every item in one batch. A plan too large for one reader is cut along its dependency chains, one cross-checker per chain, all in one message.
+2. It looks for Turbo's kinds of problem: `conflict` (two items that cannot both hold), `gap` (a case, a step or a file nobody owns, a producer without a consumer), `misreading` (an item that implements the brief differently), `deviation` (an item against a rule of P9 or outside the intent's scope) and `wrong_assumption` (a symbol, path or behaviour that is not in the code, or something built new that already exists).
+3. It checks claims against the code inside a budget of tool calls, grep before read, line ranges only. Every finding carries the code that shows it.
+4. At most two fix rounds. The second round checks each earlier finding and only the parts the repair changed. What is still open after that goes to the oracle, routed by P7. The plan is never scanned whole a third time.
+5. The slice scan per item just before its dispatch, which the queued direct build adds, stays. It reads the tree the item's predecessors left.
+
+**Files owned.** `agents/scanner/agent.md` (the plan-time half becomes the cross-check), `claude/commands/inferno-planner.md` and its Codex twin, `S/run-scan.cjs` (`--plan`), `S/run-scan.test.cjs`.
+
+**Order with the queued work.** The direct build that limits the plan-time scan to one round with one repair lands first. P12 then changes what that one round looks for and how it ends.
+
 ### T1. A mutant is killed only when a test failed
 
 **Where.** `src/flows/aidlc-turbo/scripts/story-mutate.cjs:255` reads `r.exit === 0 ? 'survived' : 'killed'`.
@@ -277,16 +358,19 @@ Every brief carries all of this:
 ## 6. Order
 
 1. **In parallel from the start.** P0. T1 and then T2, which touch only Turbo files. The P5 classification, read-only.
-2. **In series, because they share `S/run-review.cjs`, `S/run-review-file.cjs` and the reviewer text.** P1, P2, P3, P4, P6, P7.
-3. **The release.** Validate, pack, install eval, e2e smoke, version, changelog, merge.
-4. **P5** as its own follow-up when its measurement says so. **P8** on the owner's go.
+2. **The review chain, in series, because its packages share `S/run-review.cjs`, `S/run-review-file.cjs` and the reviewer text.** P1, P2, P3, P4, P9, P6, P7.
+3. **The planning chain, in series, because its packages share the planner text.** P10, P11, P12. It starts once P9 has changed the planner's "Read at start", and then runs beside the review chain.
+4. **The release.** Validate, pack, install eval, e2e smoke, version, changelog, merge.
+5. **P5** as its own follow-up when its measurement says so. **P8** on the owner's go.
 
-Expectation for steps 1 to 3: about two working days of agent and machine time. It depends on where the tests may run.
+Expectation for steps 1 to 4: about three working days of agent and machine time. It depends on where the tests may run.
 
 ## 7. Rollout to a host
 
 - One reinstall commit from the released tarball. A session that was running before the reinstall keeps its old agent definitions, so every orchestrator session restarts first.
 - An item whose review was recorded before the reinstall keeps that review. Its next review follows the new rules.
+- A host runs `/specsmd-inferno-standards` once and approves the draft before its first intent on the new flow. Without the folder the flow runs as today, with no rule files to judge against.
+- An intent planned before the reinstall builds from its old items. The plan lint and the cross-check apply to plans written after it.
 - A host that runs its own second review per item decides whether the quality lens replaces it.
 - A host sets `models.oracle_hard` only when its account has that tier. Without it every ask takes the normal route.
 
@@ -302,6 +386,8 @@ Run P0 on the first intent of ten or more items built after the reinstall.
 | Fix rounds that are serious only through a survivor | 18 of 45 | under one in five |
 | Reviewer tokens per item, both lenses together | measure on the old flow first | at least a third lower |
 | Oracle asks on the hard route | none, it needed the user | under one in five |
+| Whole-plan check rounds per intent | 5 and 6 | 3 at most: one pass and two fix rounds |
+| Ownership grants per intent | 35 | under 10 |
 | Findings of the quality lens per item | none, it did not exist | reported, with their severity |
 | Intent review findings of blocker or major weight | measure on the same intent | no rise per item |
 | Gate reds per intent | measure on the same intent | no rise |
@@ -312,10 +398,9 @@ The last two rows are the quality check. If either rises, the package that cause
 
 - **A worktree per item.** Turbo has it, and it removes a whole class of waits between siblings. On a host with a compile tree per worktree it costs gigabytes and cold builds. The intent in flight in this repo fixes those waits inside the shared worktree instead.
 - **Fresh fix builders.** Turbo dispatches every fix fresh. INFERNO resumes the warm builder, whose thread reaches 467k tokens. Measure it with P0 after P2 before changing it.
-- **A docs lens.** Turbo judges a story against the project's own rule pages. INFERNO hosts keep their rules in different places, so it needs a config key first.
 - **The plan-time scan rule** and three smaller runner fixes, which are already queued as direct builds here. The intent in flight owns `run-integrate.cjs`, `run-attribute.cjs`, `run-peers.cjs`, `run.cjs` and a new `run-config-record.cjs`. This plan touches none of those. Let that work land first.
 - **The orchestrator's own thread.** 390M tokens at about 267k of context per round is the third largest cost. It has no design yet.
-- **Turbo's inception.** This plan compares the build loops only. Whether INFERNO's planner should take anything from Turbo's intake and cross-check is not studied here.
+- **The rest of Turbo's inception.** The questions to the user and the one human approval, the record that a script renders into specs, the drawn Code Scaffold, the overview page and the Confluence and Jira sync. They serve a team that signs off a plan. INFERNO plans without a person.
 
 ## Appendix: how the numbers were read
 
