@@ -96,18 +96,48 @@ test("an earlier finding with another criterion, evidence or fix is a new one; a
   assert.equal(regraded.code, 2, shown(regraded));
 });
 
-test("a finding that carries mutant is the runner's: neither an earlier one to repeat nor a new one to refuse", () => {
+/** a-one reviewed with a survivor, so its record holds the runner's finding, and a fix that leaves src/a.ts alone. */
+function survivorOnRecord() {
   const fixture = mutantRepo();
   write(fixture.root, ITEM_REVIEW, withMutants(CAUGHT_ONE, SURVIVES_TWO));
   assert.equal(recordItem(fixture).code, 2);
+  const [runners] = parseItemReview(fixture.root, ITEM_REVIEW, "a-one", { recorded: true }).findings;
+  assert.equal(runners.mutant, "2");
   write(fixture.root, "checks/one.expect", "src/a.ts a = 1\nsrc/a.ts export\n");
   git(fixture.root, ["commit", "-qam", "a fix that leaves the survivor's test as it was"]);
+  return { fixture, runners };
+}
+
+test("a finding that carries mutant is the runner's: neither an earlier one to repeat nor a new one to refuse", () => {
+  const { fixture } = survivorOnRecord();
   const copied = finding({ criterion: "2", line: 2, evidence: "copied from the runner", fix: "none", severity: "minor", extra: "    mutant: 2\n" });
   write(fixture.root, ITEM_REVIEW, itemReview(`findings:\n${copied}`, "fix"));
   const result = recordItem(fixture);
   assert.equal(result.code, 2, shown(result));
   const recorded = parseItemReview(fixture.root, ITEM_REVIEW, "a-one", { recorded: true });
   assert.deepEqual(recorded.findings.map((one) => [one.mutant, one.severity]), [["2", "major"]], "the runner wrote its own finding again");
+});
+
+test("the runner's finding copied without its mutant key is no earlier finding: as a minor, or outside the range, it is new and refused", () => {
+  const { fixture, runners } = survivorOnRecord();
+  const copy = (severity) => itemReview(`findings:\n${finding({ ...runners, evidence: JSON.stringify(runners.evidence), fix: JSON.stringify(runners.fix), severity })}`, "fix");
+  itemRefused(fixture, copy("minor"), /findings entry 1 is new and minor/);
+  itemRefused(fixture, copy("major"), /findings entry 1 names src\/a\.ts, which the range [0-9a-f]{7,}\.\.[0-9a-f]{7,} did not change/);
+});
+
+test("a previous review whose commit this history does not hold still refuses a new minor, and takes a new blocker or major on any file", () => {
+  const fixture = repo();
+  recordedByHand(fixture.root, itemFix(finding(OPEN_MAJOR)), "fix");
+  const recorded = read(fixture.root, ITEM_REVIEW).replace(/^commit: [0-9a-f]{40}$/m, `commit: ${"f".repeat(40)}`);
+  write(fixture.root, ITEM_REVIEW, recorded);
+  git(fixture.root, ["commit", "-qam", "a record whose commit a rewritten history dropped"]);
+  write(fixture.root, "src/a.ts", "export const a = 2;\n");
+  git(fixture.root, ["commit", "-qam", "the fix"]);
+  itemRefused(fixture, itemFix(finding({ ...OPEN_MINOR, evidence: "b reads oddly" })), /findings entry 1 is new and minor/);
+  write(fixture.root, ITEM_REVIEW, itemFix(finding({ ...OPEN_MINOR, evidence: "b breaks criterion 2", severity: "blocker" })));
+  const result = recordItem(fixture);
+  assert.equal(result.code, 2, shown(result));
+  assert.match(result.out, /^review a-one fix, recorded at /m);
 });
 
 test("a review recorded under the released flow still parses, a delta recorded before this rule reads as recorded, and only the file being recorded is held to it", () => {
