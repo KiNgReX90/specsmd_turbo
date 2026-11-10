@@ -87,3 +87,22 @@ source installs 278 files and writes the lock.
 
 How to fix. Drive the eval with the scripted install, or derive the keystroke count from
 the position of `inferno` in `src/lib/constants.js` FLOWS.
+
+## 5. Two shipped flow suites read files only the source repository holds
+
+What is wrong. A host's `test:inferno` runs the installed `scripts/*.test.cjs`. Two of them
+reach outside the install, so they fail in every host:
+`run-oracle-route.test.cjs:12` requires `../../../../../../../../evals/review-loop/measure.cjs`
+(the repo's `evals/`, never installed) and fails at load; `run-scan-item.test.cjs:14,117`
+reads `../../../../../codex/skills/specsmd-inferno/references/procedure.md`, a source path
+the installer writes to `.agents/skills/specsmd-inferno/references/procedure.md` instead.
+
+Evidence. Skoft_CRA `npm run test:definitions` on Delta with 0.1.82 installed: 1271 of 1273
+flow tests pass, these two fail (log
+`proof/remote-host-tests-final2.clean.log` of the compatibility run).
+Skoft_CRA now leaves exactly these two out of `test:inferno`, pinned by
+`scripts/inferno-config.test.mjs`, which goes red once the flow fixes them.
+
+How to fix. Keep the measure helper a test needs inside `scripts/` (or skip the case when
+the eval is absent), and read the Codex procedure from the path the install writes when the
+source path is missing. Add an installed-layout run of every suite to the install eval.

@@ -71,7 +71,7 @@ How the numbers are read:
 
 A session that meets a defect in the new flow works around it and adds one handoff file beside this one, named `inferno-<what>-handoff.md`: what is wrong, the evidence and how to fix it. Nothing is built on the host's account. This section lists those files, newest last, with the date and one line each.
 
-- 2026-11-10, `inferno-0.1.82-host-install-handoff.md`. Found before the install, by a compatibility run. The flow's text is over the host's word ceiling in five roles, which blocks the install. Seven host tests that pin the flow go red, three of them on rules the host asked the flow to carry. The flow's YAML reader turns a list item with a trailing comment into a map. The install eval installs the ideation flow.
+- 2026-11-10, `inferno-0.1.82-host-install-handoff.md`. Found before the install, by a compatibility run. The flow's text is over the host's word ceiling in five roles, which blocks the install. Seven host tests that pin the flow go red, three of them on rules the host asked the flow to carry. The flow's YAML reader turns a list item with a trailing comment into a map. The install eval installs the ideation flow. Two flow test files read files that only the source repository holds, so they fail in every host.
 
 The reinstall on the app repo had not landed when this was written, so nothing here comes from real work yet.
 
