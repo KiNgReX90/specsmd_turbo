@@ -164,7 +164,8 @@ function accept(tree, config, lane, proof, options) {
   const earlier = repeats(tree, resolveBase(config, null, tree), tests);
   const { file, ...identity } = proof;
   const record = {
-    ...identity, tests, reason: options.reason.trim(), by: options.by.trim(), run: last.run, log: last.log, verdicts: read.file, entries: read.entries,
+    ...identity, tests, reason: options.reason.trim(), by: options.by.trim(), run: last.run, log: last.log, verdicts: read.file, named: lane.verdicts,
+    entries: read.entries,
     stamp: new Date().toISOString(), branch: lib.currentBranch(tree),
   };
   atomicWrite(`${file}${RECORD}`, `${JSON.stringify(record)}\n`);
@@ -176,10 +177,15 @@ function accept(tree, config, lane, proof, options) {
   };
 }
 
-/** The ship commit's line for one lane's intermittent accept. */
+/**
+ * The ship commit's line for one lane's intermittent accept. A repository may be public, so it
+ * names no path of the machine that ran the lane: the log by its file name, the verdicts file as
+ * the config names it relative to the tree, or by its file name when the config names it absolute.
+ */
 function exceptionLine(lane, record) {
-  const { tests, reason, by, run, log, verdicts } = record;
-  return `exception: ${lane} intermittent ${JSON.stringify({ tests, reason, by, run, log, verdicts })}`;
+  const { tests, reason, by, run, named } = record;
+  const verdicts = path.isAbsolute(named) ? path.basename(named) : named;
+  return `exception: ${lane} intermittent ${JSON.stringify({ tests, reason, by, run, log: path.basename(record.log), verdicts })}`;
 }
 
 /** The exception lines a ship commit carries for `held`, each lane's accept refused once the base holds its limit. */

@@ -10,14 +10,20 @@ const { writeFile } = require("./test-write.cjs");
 
 const TEST = 'checkout/gift-card.test.mjs "redeems a card twice"';
 
-/** A repo whose main carries a smoke lane that writes a verdicts file proving TEST intermittent and exits 10. */
-function laned() {
+/**
+ * A repo whose main carries a smoke lane that writes a verdicts file proving TEST intermittent and
+ * exits 10, at `verdicts` as the config names it: relative to the tree, in a folder git ignores, or
+ * absolute when null names one outside the tree.
+ */
+function laned(verdicts = null) {
   const fixture = repo();
   const next = path.join(fixture.dir, "verdicts-next.json");
-  const verdicts = path.join(fixture.dir, "verdicts.json");
+  const named = verdicts || path.join(fixture.dir, "verdicts.json");
   writeFile(next, `${JSON.stringify({ red: [{ name: TEST, base: "green", again: "green" }] })}\n`);
-  write(fixture.root, "lane.cjs", `require("node:fs").copyFileSync(${JSON.stringify(next)}, ${JSON.stringify(verdicts)});\nprocess.exit(10);\n`);
-  const lane = `  smoke:\n    command: node lane.cjs\n    scope: ["src/**"]\n    verdicts: ${verdicts}\n`;
+  write(fixture.root, "lane.cjs", `const fs = require("node:fs");\nconst to = ${JSON.stringify(named)};\n` +
+    `fs.mkdirSync(require("node:path").dirname(to), { recursive: true });\nfs.copyFileSync(${JSON.stringify(next)}, to);\nprocess.exit(10);\n`);
+  write(fixture.root, ".gitignore", "node_modules/\n.lane/\n");
+  const lane = `  smoke:\n    command: node lane.cjs\n    scope: ["src/**"]\n    verdicts: ${named}\n`;
   write(fixture.root, ".specs-inferno/config.yaml", CONFIG.replace("verification:\n", `verification:\n${lane}`));
   git(fixture.root, ["add", "-A"]);
   git(fixture.root, ["commit", "-qm", "smoke lane"]);
@@ -44,10 +50,13 @@ function landed(fixture, body) {
   return git(fixture.root, ["rev-parse", "--short", "HEAD"]).trim();
 }
 
-const exceptionLines = (fixture) => git(fixture.root, ["log", "-1", "--format=%B", "main"]).split("\n").filter((line) => line.startsWith("exception:"));
+const message = (fixture) => git(fixture.root, ["log", "-1", "--format=%B", "main"]);
+const exceptionLines = (fixture) => message(fixture).split("\n").filter((line) => line.startsWith("exception:"));
+/** Every path in a text that starts with a slash: a path of the machine that ran the lane. */
+const absolute = (text) => text.match(/(?:^|[\s"'])\/[^\s"']*/gm) || [];
 
-test("ship writes the intermittent accept into the ship commit as one exception line", () => {
-  const fixture = laned();
+test("ship writes the intermittent accept into the ship commit as one exception line that names no path of the machine", () => {
+  const fixture = laned(".lane/verdicts.json");
   const { tree, branch } = accepted(fixture);
   const shipped = run(fixture, ["ship", "alpha", "--tree", tree]);
   assert.equal(shipped.code, 0, shipped.out + shipped.err);
@@ -59,8 +68,10 @@ test("ship writes the intermittent accept into the ship commit as one exception 
   assert.deepEqual(record.tests, [TEST]);
   assert.equal(record.reason, "a race under load");
   assert.equal(record.by, "lead");
-  assert.match(record.log, /lane-smoke-\S+\.log$/);
+  assert.match(record.log, /^lane-smoke-\S+\.log$/);
+  assert.equal(record.verdicts, ".lane/verdicts.json");
   assert.equal(typeof record.run, "string");
+  assert.deepEqual(absolute(message(fixture)), []);
   assert.equal(fs.existsSync(tree), false);
   // The line ship wrote is the one a later accept reads back from the base.
   const { repeats } = require("./run-lanes-intermittent.cjs");
@@ -88,4 +99,7 @@ test("ship refuses a third accept of a test until a commit on the base names its
   const shipped = run(fixture, ["ship", "alpha", "--tree", tree]);
   assert.equal(shipped.code, 0, shipped.out + shipped.err);
   assert.equal(exceptionLines(fixture).length, 1);
+  // A verdicts file the config names by an absolute path reaches the commit by its file name alone.
+  assert.equal(JSON.parse(/\{.*\}$/.exec(exceptionLines(fixture)[0])[0]).verdicts, "verdicts.json");
+  assert.deepEqual(absolute(message(fixture)), []);
 });
