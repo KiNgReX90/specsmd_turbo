@@ -4,9 +4,21 @@
 // signed dispatch, and verify-item and every sibling's check read it from there.
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
-const { fixture } = require('./run-attribution-fixture.cjs');
+const { fixture, spec } = require('./run-attribution-fixture.cjs');
+
+/** Every file of the fixture's cache with its bytes, where the signed dispatch records live. */
+function cacheBytes(f) {
+  const files = {};
+  for (const name of fs.readdirSync(f.cache, { recursive: true })) {
+    const file = path.join(f.cache, name);
+    if (fs.statSync(file).isFile()) files[name] = fs.readFileSync(file, 'utf8');
+  }
+  return files;
+}
 
 const SPEC = '.specs-inferno/intents/alpha/work-items/a.md';
 
@@ -97,6 +109,10 @@ test('a grant names one exact path inside the tree and outside the ledger', (t) 
     assert.equal(refused.code, 2, `${file}: ${refused.out}`);
     assert.match(refused.out, reason, file);
   }
+  f.write('lib/helper.cjs', 'module.exports = 1;\n');
+  const directory = f.call('grant', dispatch, '--path', 'lib', '--tree', f.root);
+  assert.equal(directory.code, 2, directory.out);
+  assert.match(directory.out, /never a directory/);
   const usage = f.call('grant', dispatch, '--tree', f.root);
   assert.equal(usage.code, 1, usage.out);
 });
@@ -141,4 +157,27 @@ test('a sibling that changes a path granted to another dispatch overlaps it', (t
   const result = f.verify('b');
   assert.equal(result.code, 2, result.out);
   assert.match(result.out, /overlaps at other\.cjs/);
+});
+
+test('a path the dispatch already owns through a directory entry leaves the signed record as it was', (t) => {
+  const f = fixture(t, { a: ['src/'] });
+  const dispatch = f.start('--item', 'a');
+  const before = cacheBytes(f);
+  const owned = f.call('grant', dispatch, '--path', 'src/a.cjs', '--tree', f.root);
+  assert.equal(owned.code, 0, owned.out);
+  assert.deepEqual(owned.data.granted, []);
+  assert.deepEqual(owned.data.started, ['src/']);
+  assert.deepEqual(cacheBytes(f), before);
+});
+
+test('a correction whose spec now lists an earlier grant starts with that path once, never as granted', (t) => {
+  const f = fixture(t, { a: ['a.cjs'] });
+  const first = f.start('--item', 'a');
+  assert.equal(f.call('grant', first, '--path', 'other.cjs', '--tree', f.root).code, 0);
+  f.write('.specs-inferno/intents/alpha/work-items/a.md', spec('a', ['a.cjs', 'other.cjs']));
+  const fix = f.start('--item', 'a');
+  const read = f.call('grant', fix, '--path', 'other.cjs', '--tree', f.root);
+  assert.equal(read.code, 0, read.out);
+  assert.deepEqual(read.data.granted, []);
+  assert.deepEqual(read.data.started, ['a.cjs', 'other.cjs']);
 });
