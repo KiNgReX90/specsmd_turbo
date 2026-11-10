@@ -13,7 +13,7 @@ const { execFileSync } = require('node:child_process');
 
 const { tempDir } = require('./test-temp.cjs');
 const { writeFile } = require('./test-write.cjs');
-const { readStandards, standardsFor } = require('./run-standards.cjs');
+const { overlaps, readStandards, standardsFor } = require('./run-standards.cjs');
 
 const BLOCK = `standards:
   - file: typescript.md
@@ -104,9 +104,29 @@ test('an entry the block cannot use is refused with its reason', (t) => {
   refused('standards:\n  - file: typescript.md\n', /typescript\.md[\s\S]*paths/);
   refused('standards:\n  - file: typescript.md\n    paths: []\n', /typescript\.md[\s\S]*paths/);
   refused('standards:\n  - paths: ["src/**"]\n', /file/);
-  refused('standards:\n  - file: ../secrets.md\n    paths: ["src/**"]\n', /\.\.\/secrets\.md/);
   refused('standards:\n  - file: /etc/rules.md\n    paths: ["src/**"]\n', /\/etc\/rules\.md/);
   refused('standards: typescript.md\n', /standards/);
+});
+
+test('a file that climbs out of the standards folder is refused by name, even when the file it reaches exists', (t) => {
+  // config.yaml sits one folder up, so only the refusal of the climb stops it, never the check that the file exists.
+  for (const name of ['../config.yaml', 'a/../../config.yaml', '..']) {
+    const root = project(t, { config: `standards:\n  - file: ${name}\n    paths: ["src/**"]\n` });
+    const named = new RegExp(`needs a file inside \\.specs-inferno/standards/, not ${name.replace(/[./]/g, '\\$&')}$`);
+    assert.throws(() => readStandards(root), named);
+    assert.throws(() => standardsFor(root, ['src/a.ts']), named);
+  }
+});
+
+test('a single star or a question mark never reaches across a slash when two globs are compared', () => {
+  // Each pair shares a path only if a star or a question mark could stand for a slash.
+  assert.equal(overlaps('src/*', 'src/api/*.ts'), false);
+  assert.equal(overlaps('src/api/*.ts', 'src/*'), false);
+  assert.equal(overlaps('src/a?b/*', 'src/a/b/*'), false);
+  // Beside them, pairs that do share a path.
+  assert.equal(overlaps('src/*', 'src/*.ts'), true);
+  assert.equal(overlaps('src/**', 'src/api/*.ts'), true);
+  assert.equal(overlaps('src/a?b/*', 'src/a-b/*'), true);
 });
 
 test('a host config without the block takes the block of config.yaml, and one with its own block keeps it', (t) => {
