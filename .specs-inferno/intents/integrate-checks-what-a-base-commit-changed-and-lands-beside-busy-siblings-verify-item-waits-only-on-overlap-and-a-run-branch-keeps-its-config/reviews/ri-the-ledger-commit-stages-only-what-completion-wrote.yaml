@@ -1,50 +1,30 @@
 item: ri-the-ledger-commit-stages-only-what-completion-wrote
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs
-findings:
-  - criterion: "a file staged beside an integrate is not swept into the ledger commit"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
-    line: 61
-    evidence: |
-      No case reaches a completion that writes nothing, and two lines of the diff rest on it. Mutants run in a clean scratch worktree at c745505d on Beta, with run-integrate-ledger, run-integrate and run-integrate-review (plus run-review-recover for the second):
-      - run-integrate.cjs:61, `['diff', '--cached', '--name-only', '--', ...paths]` made `['diff', '--cached', '--name-only']`: 27 pass, 0 fail.
-      - run-integrate.cjs:82, `if (result.markdown) written.push(result.markdown);` made `written.push(result.markdown);`: 42 pass, 0 fail.
-      The case is reachable: owedReviews passes a completed item whose clean review is current (run-review.cjs:308-324), and completeItem then returns `already completed` with no markdown (state-transition.cjs:136-138). Without the guard at :82, path.join(tree, undefined) throws and the re-run crashes. Without the narrowed check at :61, a file a sibling staged makes the check non-empty, and `git commit -- .specs-inferno/state.yaml` over an unchanged path exits 1 with `nothing added to commit` (probed with plain git), so integrate fails beside the staged file this item exists to tolerate.
-    fix: |
-      Add a fourth case to run-integrate-ledger.test.cjs, "an item integrated again beside a staged file commits nothing and leaves it staged". Use landing() with a command that writes and `git add`s HALT only when `.specs-inferno/state.yaml` already contains `integrated_sha`, so the first `integrate --item a-one` completes the item on a clean tree and the second meets the staged file. Run integrate twice and record HEAD after the first. Assert the second exits 0, HEAD is unchanged, and `git diff --cached --name-only` still lists HALT. Both mutants above then fail it.
-    severity: minor
-  - criterion: "its review step then records it"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs
-    line: 57
-    evidence: |
-      The criterion says the committed file ends with the `tree:`, `commit:` and `reviewer: rev-2` lines. The case reads the working-tree file with fs.readFileSync at :57, so it never checks the commit. Mutant in the scratch worktree on Beta: run-review.cjs:225, record's `lib.git(tree, ['commit', ...])` guarded by `if (item.id !== 'a-two')`, so a-two's record never commits. `node --test --test-name-pattern="its review step then records it"` still printed 1 pass, 0 fail.
-    fix: |
-      At :57 read the committed text, `git(fixture.root, ["show", `HEAD:${REVIEW}`]).split("\n")`, instead of the working-tree file. Then assert `git(fixture.root, ["status", "--porcelain", "--", REVIEW])` is empty, so the case fails when the record leaves the file uncommitted.
-    severity: minor
 mutants:
   - criterion: "a review file written while integrate runs stays out of the ledger commit"
-    test: "node --test --test-name-pattern=\"stays out of the ledger commit\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:57 stages .specs-inferno/intents whole)"
+    test: "node --test --test-name-pattern=\"stays out of the ledger commit\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:58 stages .specs-inferno/intents whole)"
     caught: yes
   - criterion: "a review file written while integrate runs stays out of the ledger commit"
-    test: "node --test --test-name-pattern=\"stays out of the ledger commit\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:82 collects no markdown path)"
+    test: "node --test --test-name-pattern=\"stays out of the ledger commit\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:83 collects no markdown path)"
     caught: yes
   - criterion: "its review step then records it"
-    test: "node --test --test-name-pattern=\"its review step then records it\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:57 stages .specs-inferno/intents whole)"
+    test: "node --test --test-name-pattern=\"its review step then records it\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:58 stages .specs-inferno/intents whole)"
     caught: yes
   - criterion: "its review step then records it"
-    test: "node --test --test-name-pattern=\"its review step then records it\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-review.cjs:225 skips the commit for a-two)"
-    caught: no
-  - criterion: "a file staged beside an integrate is not swept into the ledger commit"
-    test: "node --test --test-name-pattern=\"not swept into the ledger commit\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:62 commits the whole index)"
+    test: "node --test --test-name-pattern=\"its review step then records it\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-review.cjs:227 skips the commit for a-two)"
     caught: yes
   - criterion: "a file staged beside an integrate is not swept into the ledger commit"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-review.test.cjs (run-integrate.cjs:61 checks the whole index)"
-    caught: no
+    test: "node --test --test-name-pattern=\"not swept into the ledger commit\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:63 commits the whole index)"
+    caught: yes
   - criterion: "a file staged beside an integrate is not swept into the ledger commit"
-    test: "node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-review.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review-recover.test.cjs (run-integrate.cjs:82 pushes a missing markdown path)"
-    caught: no
+    test: "node --test --test-name-pattern=\"integrating a completed item again\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:62 checks the whole index)"
+    caught: yes
+  - criterion: "a file staged beside an integrate is not swept into the ledger commit"
+    test: "node --test --test-name-pattern=\"integrating a completed item again\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-ledger.test.cjs (run-integrate.cjs:83 pushes a missing markdown path)"
+    caught: yes
 tree: 2cafa9b6fe3819f317c90578df2f1acf847abff4510f3a2a40502b317bad4bdf
-commit: 3575c5e0d0fde5c4996b464a24f40bf07b30f174
+commit: 7ec3d298cc7916b1984cbbe21999762497dc5055
 reviewer: a8fb82185b63437a9

@@ -38,13 +38,13 @@ intents:
         complexity: low
         mode: autopilot
         status: pending
-        review: fix
+        review: clean
         review_hash: 2cafa9b6fe3819f317c90578df2f1acf847abff4510f3a2a40502b317bad4bdf
-        review_commit: 3575c5e0d0fde5c4996b464a24f40bf07b30f174
-        review_tier: cheap
-        review_rejections: 1
-        review_weight: serious
-        reviewed_at: 2026-11-10T05:15:31Z
+        review_commit: 7ec3d298cc7916b1984cbbe21999762497dc5055
+        review_tier: strong
+        review_rejections: 0
+        review_weight: none
+        reviewed_at: 2026-11-10T05:21:17Z
         depends_on: []
       - id: ri-integrate-refuses-only-the-dirt-it-reads-or-commits
         title: "Integrate refuses only the uncommitted files it would read or commit, so a reviewed item lands beside a busy sibling"
