@@ -25,6 +25,7 @@ const crypto = require('crypto');
 
 const lib = require('./run-lib.cjs');
 const snapshots = require('./run-snapshot.cjs');
+const grants = require('./run-grant.cjs');
 
 const { dispatchDirectory, hash, readJson, refuse, sequencedSnapshot, snapshotDelta, stable } = snapshots;
 
@@ -146,23 +147,23 @@ function recordDispatch(tree, options) {
   const prior = readJson(recordFile(tree, id));
   if (prior) {
     validateDispatch(tree, prior, { intent: options.intent }, false);
-    if (hash([itemsOf(prior), prior.assignment.ownership.editable]) !== hash([items, options.editable])) {
+    if (hash([itemsOf(prior), grants.startedWith(prior)]) !== hash([items, options.editable])) {
       throw refuse('dispatch ownership is immutable');
     }
     return prior;
   }
-  const previous = new Set();
+  const previous = new Map();
   for (const item of items) {
     const current = readJson(currentFile(tree, options.intent, item));
-    if (current) previous.add(validateSigned(tree, current).dispatchId);
+    if (current) previous.set(validateSigned(tree, current).dispatchId, current);
   }
   return saveDispatch(tree, {
     version: 2,
     tree: fs.realpathSync(tree),
     dispatchId: id,
     phase: 'started',
-    assignment: { intent: options.intent, items, ownership: { editable: options.editable } },
-    previous: [...previous].sort(),
+    assignment: { intent: options.intent, items, ownership: grants.withGrants({ editable: options.editable }, grants.inherited([...previous.values()])) },
+    previous: [...previous.keys()].sort(),
     beforeSnapshot: sequencedSnapshot(tree),
   });
 }
@@ -247,5 +248,6 @@ module.exports = {
   loadDispatch,
   recordDispatch,
   recordFile,
+  saveDispatch,
   validateDispatch,
 };

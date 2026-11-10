@@ -17,7 +17,9 @@
  * A held signal is read before every run, so the batch starts no run after it, and every entry
  * still to run reads not run. One journal covers every file (run-mutate-journal.cjs), so a run
  * killed outright is put back by the next step that reads the tree. A file the host seals is
- * resealed after each write and its seal put back after each restore (run-mutate-seal.cjs).
+ * resealed after each write, and its seal goes back before the next reseal and in the finally
+ * (run-mutate-seal.cjs). A reseal that a signal or the timeout ended stops the batch, as a seal
+ * that could not go back does, so no test runs against a stale seal.
  */
 
 const fs = require('fs');
@@ -28,7 +30,7 @@ const { afterRecovery, openSession, recoverInterrupted } = require('./run-mutate
 const { readBatch } = require('./run-mutate-entries.cjs');
 const { applySwitches, blame, planRust } = require('./run-mutate-rust.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
-const { reseal, sealedOf, unseal } = require('./run-mutate-seal.cjs');
+const { reseal, sealOf } = require('./run-mutate-seal.cjs');
 
 const { RunError } = lib;
 const OFF = 'unset INFERNO_MUTANT; ';
@@ -85,8 +87,8 @@ function execute(session, e, prefix, label) {
   return { ...verdictOf(run, readLog(run.log), e.abs), code: run.code, log: run.log, signal: run.signal };
 }
 
-/** The verdict of a mistake whose reseal did not exit 0: none. */
-const unsealedVerdict = (failed) => ({ caught: null, why: failed.why, code: failed.code, log: failed.log });
+/** The verdict of a mistake whose reseal did not exit 0: none, with the signal that stops the batch if one ended it. */
+const unsealedVerdict = (failed) => ({ caught: null, why: failed.why, code: failed.code, log: failed.log, signal: failed.signal });
 
 async function runAll(session, sealed, entries, plans) {
   const verdicts = new Map();
@@ -98,6 +100,7 @@ async function runAll(session, sealed, entries, plans) {
     const failed = reseal(session, sealed, [...written], `build-${builds + 1}`);
     if (failed) {
       for (const e of switched) verdicts.set(e.k, unsealedVerdict(failed));
+      if (failed.signal) return { builds, verdicts, stopped: `the reseal of the switched entries ended on ${failed.signal}, so the batch stopped` };
       switched = [];
       break;
     }
@@ -118,19 +121,19 @@ async function runAll(session, sealed, entries, plans) {
     if (verdict.signal) return { builds, verdicts, stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
   for (const rel of written) session.putBack(rel);
-  unseal(session);
   for (const e of entries.filter((item) => plans.get(item.k).form === 'classic')) {
     const signal = await signalled(session);
     if (signal) return { builds, verdicts, stopped: signal };
     const line = session.original(e.rel).split('\n')[e.n - 1];
     session.write(e.rel, new Map([[e.n, line.slice(0, e.col) + e.replace + line.slice(e.col + e.find.length)]]));
     const failed = reseal(session, sealed, [e.rel], `own-${e.k}`);
+    if (failed && failed.left) return { builds, verdicts, stopped: `the batch stopped, since ${failed.why}` };
     const verdict = failed ? unsealedVerdict(failed) : execute(session, e, OFF, `own-${e.k}`);
     session.putBack(e.rel);
-    unseal(session);
     if (e.rust) builds += 1;
     verdicts.set(e.k, verdict);
-    if (verdict.signal) return { builds, verdicts, stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
+    const what = failed ? 'reseal' : 'test';
+    if (verdict.signal) return { builds, verdicts, stopped: `the ${what} of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
   return { builds, verdicts };
 }
@@ -179,7 +182,7 @@ function report(session, recovered, entries, plans, result) {
 async function batch(options) {
   const tree = options.tree || lib.repoRoot(options.cwd);
   const file = path.resolve(options.cwd || process.cwd(), options.batch);
-  const sealed = sealedOf(lib.readConfig(tree, options.config));
+  const sealed = sealOf(lib.readConfig(tree, options.config));
   const recovered = recoverInterrupted(tree);
   const rel = path.relative(tree, file).split(path.sep).join('/');
   const dirty = lib.dirtyPaths(tree, rel.startsWith('../') || path.isAbsolute(rel) ? [] : [rel]);
@@ -197,7 +200,9 @@ async function batch(options) {
   } finally {
     failed = session.close();
   }
-  if (failed.length > 0) return { exit: 2, payload: { restored: false, failed }, out: [...recovered, ...failed] };
+  // A batch that stopped says why, before the paths it could not put back.
+  const stopped = result && result.stopped ? [result.stopped] : [];
+  if (failed.length > 0) return { exit: 2, payload: { restored: false, failed, stopped: stopped[0] }, out: [...recovered, ...stopped, ...failed] };
   return report(session, recovered, entries, plans, result);
 }
 

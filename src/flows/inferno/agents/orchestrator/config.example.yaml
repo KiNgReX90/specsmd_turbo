@@ -30,6 +30,7 @@ models:
 #   config: {model: claude-sonnet-5-5, effort: high}
 #   oracle: {model: claude-opus-5-5, effort: xhigh}
 #   planner: {model: claude-opus-5-5, effort: xhigh}
+#   reviewer-quality: {model: claude-opus-5-5, effort: high}   # the quality lens beside the contract review of every item
 #   scanner: {model: claude-opus-5-5, effort: high}
 
 # planner:
@@ -52,6 +53,8 @@ verification:
     - npm run test:e2e
   # merge_slot: true              # optional: gate --detach folds and starts only when its ticket heads one queue shared by every worktree of the repository; without it every gate folds and starts at once
   # ship_cleanup: "node scripts/ship-cleanup.mjs"   # optional: the host command ship and teardown run from the primary checkout once the worktree and branch are gone, with INFERNO_BRANCH and INFERNO_TREE set; a failure prints its line and never undoes the ship; without it ship ends at the teardown
+  # lint:                         # optional: lint and analysis commands the quality reviewer runs once per item review, in the worktree; it takes over only what they report on lines the item added
+  #   - npm run lint
   integrate:                      # optional: the cheap checks, run by `run.cjs integrate` after every item lands, on the committed tree with the base folded in; a red goes back to the warm builder instead of waiting for the gate
     - npm run check
   finalize_scopes:                # optional: a listed command runs only when the diff since the merge base touches a matching path, an unlisted command always runs
@@ -97,9 +100,10 @@ wiring:                           # optional: per kind (command, table or event)
 #   sources: ["src/**", "src-tauri/src/**"]   # product source; the tests and case files are never source
 #   expectations: ["e2e/**", "src/**/*.test.ts"]   # tests whose changed lines a case may describe
 
-# mutate:                         # optional: files the host seals with a manifest of their digests; run.cjs mutate runs the reseal after a mutant lands in one, so the test sees a valid seal; every other path the reseal changed gets its committed bytes back after the revert; a reseal that exits non-zero reads no verdict; a --config file inherits it
+# mutate:                         # optional: files the host seals with a manifest of their digests; run.cjs mutate runs the reseal after a mutant lands in one, so the test sees a valid seal; every other path the reseal changed gets its bytes from before back after the revert, on every exit; a reseal that exits non-zero reads no verdict, and one that a signal ended or that ran past reseal_seconds reads no verdict and stops the run; a --config file inherits it
+#   reseal_seconds: 300           # optional: the most seconds one reseal may run; past it, mutate ends the reseal and every process it started (default 300)
 #   sealed:
-#     - paths: ["definitions/**"]                          # globs of the sealed files
+#     - paths: ["definitions/**"]                          # globs of the sealed files and of the seal; a seal git ignores goes back only when these globs cover it
 #       reseal: "node scripts/lib/definitions/pack.mjs --write"   # the command that rewrites the seal, run in the tree
 
 # standards:                      # optional: the project's rule files under .specs-inferno/standards/, each with the path globs it applies to; dispatch-log prints every file that applies to a builder's ownership.editable, and a listed file that does not exist refuses the dispatch; /specsmd-inferno-standards drafts them; a --config file without the block takes this one

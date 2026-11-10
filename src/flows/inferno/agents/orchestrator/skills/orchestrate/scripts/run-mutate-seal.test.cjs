@@ -2,117 +2,23 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
-const crypto = require("node:crypto");
-const { execFileSync, spawn, spawnSync } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 
 // A host can seal files: a manifest holds their digests, and the loader refuses them all when one
 // byte differs. A mutant in a sealed file then fails every test before the code under test runs.
 // `mutate.sealed` names the sealed paths and the reseal command, so mutate reseals after the
-// mutant lands and puts every path the reseal changed back byte for byte after the revert.
+// mutant lands and puts every path the reseal changed back byte for byte, an ignored one included,
+// on every exit. These are the live runs; run-mutate-seal-recover.test.cjs holds the killed ones.
 
-const { RUN, batchTree, fakeTest } = require("./run-mutate-fixture.cjs");
-const { tempDir } = require("./test-temp.cjs");
+const {
+  VALUE, assertSealed, configFile, existsIn, fakeTest, readIn, reseals, runs, sealBatch, sealConfig, sealEnv, sealMutate, sealTree,
+  sealedRustTree, singleArgs, until,
+} = require("./run-mutate-fixture.cjs");
 const { writeFile } = require("./test-write.cjs");
-
-const VALUE = "defs/value.txt";
-const digest = (text) => crypto.createHash("sha256").update(text).digest("hex");
-// Committed with a comment the reseal never writes, so only a byte restore gives it back.
-const manifest = (rel, body) => `# sealed by hand\n${digest(body)}  ${rel}\n`;
-const MANIFEST = manifest(VALUE, "1\n");
-
-// The reseal: it counts its runs outside the tree, rewrites the manifest and leaves a new file.
-// It overwrites a file by removing it and appending, so this test holds no direct write.
-const SEAL = String.raw`'use strict';
-const fs = require('fs');
-const crypto = require('crypto');
-const rel = process.argv[2];
-fs.appendFileSync(process.env.SEAL_RUNS, 'reseal\n');
-fs.rmSync('manifest.txt', { force: true });
-fs.appendFileSync('manifest.txt', crypto.createHash('sha256').update(fs.readFileSync(rel)).digest('hex') + '  ' + rel + '\n');
-fs.appendFileSync('.seal-stamp', 'resealed\n');
-if (process.argv.includes('--fail')) process.exit(3);
-`;
-
-// The test: red on a stale digest, as the host's loader refuses the whole pack. With `strict` it
-// also checks the value the mutant changed. A red run prints node --test's failing summary.
-const CHECK = String.raw`'use strict';
-const fs = require('fs');
-const crypto = require('crypto');
-const fail = (why) => { console.log(why); console.log('# fail 1'); process.exit(1); };
-for (const line of fs.readFileSync('manifest.txt', 'utf8').split('\n')) {
-  const [sum, rel] = line.split('  ');
-  if (!rel || line.startsWith('#')) continue;
-  if (crypto.createHash('sha256').update(fs.readFileSync(rel)).digest('hex') !== sum) fail('stale seal on ' + rel);
-}
-if (process.argv[2] === 'strict' && fs.readFileSync('defs/value.txt', 'utf8') !== '1\n') fail('wrong value');
-`;
-
-const config = (glob, reseal) => `mutate:\n  sealed:\n    - paths: ["${glob}"]\n      reseal: "${reseal}"\n`;
-
-function git(cwd, ...args) {
-  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-}
-
-function sealTree(t) {
-  const dir = tempDir("inferno-mutate-seal-");
-  t.after(() => {
-    spawnSync("chmod", ["-R", "u+w", dir]);
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-  const tree = path.join(dir, "app");
-  const files = {
-    [VALUE]: "1\n",
-    "src/plain.txt": "x\n",
-    "manifest.txt": MANIFEST,
-    "seal.cjs": SEAL,
-    "check.cjs": CHECK,
-    ".specs-inferno/config.yaml": config("defs/**", `node seal.cjs ${VALUE}`),
-    ".specs-inferno/config.fail.yaml": config("defs/**", `node seal.cjs ${VALUE} --fail`),
-  };
-  for (const [rel, body] of Object.entries(files)) {
-    fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true });
-    writeFile(path.join(tree, rel), body);
-  }
-  git(tree, "init", "-q", "-b", "main");
-  git(tree, "config", "user.email", "test@example.com");
-  git(tree, "config", "user.name", "Test");
-  git(tree, "add", "-A");
-  git(tree, "commit", "-qm", "init");
-  return { dir, tree, cache: path.join(dir, "cache"), runs: path.join(dir, "seal-runs") };
-}
-
-// CLAUDE_BUILD_WRAPPED is claude-build's nested-call marker: a fake command runs as is and never queues on the machine-wide build lock.
-const env = (f) => ({ ...process.env, CLAUDE_BUILD_WRAPPED: "1", XDG_CACHE_HOME: f.cache, SEAL_RUNS: f.runs });
-const single = (f, test, extra = []) =>
-  [RUN, "mutate", "--tree", f.tree, "--file", VALUE, "--line", "1", "--replace", "2", "--test", test, ...extra];
-
-function mutate(f, test, extra = []) {
-  const result = spawnSync(process.execPath, single(f, test, extra), { cwd: f.tree, encoding: "utf8", env: env(f) });
-  return { code: result.status, out: result.stdout, err: result.stderr, json: extra.includes("--json") ? JSON.parse(result.stdout || "null") : null };
-}
-
-function batch(f, entries, extra = []) {
-  const file = path.join(f.dir, "batch.json");
-  writeFile(file, JSON.stringify(entries));
-  const result = spawnSync(process.execPath, [RUN, "mutate", "--tree", f.tree, "--batch", file, "--json", ...extra],
-    { cwd: f.tree, encoding: "utf8", env: env(f) });
-  return { code: result.status, out: result.stdout, err: result.stderr, payload: JSON.parse(result.stdout || "null") };
-}
-
-const read = (f, rel) => fs.readFileSync(path.join(f.tree, rel), "utf8");
-const reseals = (f) => (fs.existsSync(f.runs) ? fs.readFileSync(f.runs, "utf8").split("\n").filter(Boolean).length : 0);
-
-/** The tree is exactly as committed: the value, the manifest's own bytes, and no file the reseal left. */
-function assertCommitted(f, value = "1\n", sealed = MANIFEST) {
-  assert.equal(read(f, "manifest.txt"), sealed);
-  assert.equal(git(f.tree, "status", "--porcelain"), "");
-  assert.equal(fs.existsSync(path.join(f.tree, ".seal-stamp")), false);
-  if (value !== null) assert.equal(read(f, VALUE), value);
-}
 
 test("a mutant in a sealed file is resealed, so a test that does not notice it reads caught no", (t) => {
   const f = sealTree(t);
-  const result = mutate(f, "node check.cjs any");
+  const result = sealMutate(f, "node check.cjs any");
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /^caught no$/m);
   assert.equal(reseals(f), 1);
@@ -120,7 +26,7 @@ test("a mutant in a sealed file is resealed, so a test that does not notice it r
 
 test("a mutant in a sealed file that the test notices reads caught yes", (t) => {
   const f = sealTree(t);
-  const result = mutate(f, "node check.cjs strict", ["--json"]);
+  const result = sealMutate(f, "node check.cjs strict", ["--json"]);
   assert.equal(result.code, 0, result.out + result.err);
   assert.equal(result.json.caught, true);
   const log = fs.readFileSync(result.json.log, "utf8");
@@ -128,83 +34,152 @@ test("a mutant in a sealed file that the test notices reads caught yes", (t) => 
   assert.doesNotMatch(log, /stale seal/);
 });
 
-test("the seal is restored byte for byte after the revert", (t) => {
+test("after the revert the seal git tracks and the seal git ignores hold their bytes from before, and no file the reseal made is left", (t) => {
   const f = sealTree(t);
-  const result = mutate(f, "node check.cjs any");
+  const result = sealMutate(f, "node check.cjs any");
   assert.equal(result.code, 0, result.out + result.err);
   assert.equal(reseals(f), 1, "the reseal ran once and nothing resealed again");
-  assertCommitted(f);
+  assertSealed(f);
 });
 
-test("a reseal that fails reads no verdict and leaves the tree clean", (t) => {
+test("a batch puts the ignored seal back between entries and at the end", (t) => {
   const f = sealTree(t);
-  const result = mutate(f, "node check.cjs strict", ["--config", ".specs-inferno/config.fail.yaml", "--json"]);
+  const result = sealBatch(f, [
+    { criterion: "AC1", file: VALUE, line: 1, find: "1", replace: "2", test: "node check.cjs any" },
+    { criterion: "AC2", file: "src/plain.txt", line: 1, find: "x", replace: "y", test: `cat ${f.lock.rel} > ${path.join(f.dir, "seen")}` },
+  ]);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.equal(fs.readFileSync(path.join(f.dir, "seen"), "utf8"), f.lock.body, "the second entry saw the ignored seal as it was");
+  assertSealed(f);
+});
+
+test("a reseal that fails reads no verdict and leaves the tree as it was", (t) => {
+  const f = sealTree(t);
+  const result = sealMutate(f, "node check.cjs strict", ["--config", ".specs-inferno/config.fail.yaml", "--json"]);
   assert.equal(result.code, 0, result.out + result.err);
   assert.equal(result.json.caught, null);
   assert.equal(result.json.why, "reseal failed (exit 3)");
   assert.equal(reseals(f), 1);
-  assertCommitted(f);
-  const human = mutate(f, "node check.cjs strict", ["--config", ".specs-inferno/config.fail.yaml"]);
+  assertSealed(f);
+  const human = sealMutate(f, "node check.cjs strict", ["--config", ".specs-inferno/config.fail.yaml"]);
   assert.match(human.out, /^no verdict: reseal failed \(exit 3\)$/m);
-  assertCommitted(f);
+  assertSealed(f);
 });
 
-/** Start `args` with a test that marks its start and holds; kill it outright once the test runs. */
-async function killedDuringTest(f, args) {
-  const started = path.join(f.dir, "started");
-  const release = path.join(f.dir, "release");
-  const child = spawn(process.execPath, args(`touch ${started}; until [ -f ${release} ] || [ ! -d ${f.dir} ]; do sleep 0.05; done; true`),
-    { cwd: f.tree, env: env(f), stdio: "ignore" });
-  const done = new Promise((resolve) => child.on("close", resolve));
-  for (let i = 0; i < 400 && !fs.existsSync(started); i += 1) await new Promise((r) => setTimeout(r, 25));
-  const ran = fs.existsSync(started);
-  child.kill("SIGKILL");
-  await done;
-  writeFile(release, "");
-  assert.ok(ran, "the test never started");
+// A reseal a signal ended, or one its shell reports killed (a wrapper's cap gives 137 or 143), is
+// this machine's failure and not the mutant's.
+for (const [name, reseal, why] of [
+  ["a signal ends", `node seal.cjs ${VALUE} && kill -KILL $$`, "reseal ended on SIGKILL"],
+  ["its shell reports killed", `node seal.cjs ${VALUE}; exit 143`, "reseal ended on SIGTERM (exit 143)"],
+]) {
+  test(`a reseal that ${name} reads no verdict, exits 2 and leaves the tree as it was`, (t) => {
+    const f = sealTree(t);
+    const result = sealMutate(f, "node check.cjs strict", ["--config", configFile(f, "c.yaml", sealConfig(reseal)), "--json"]);
+    assert.equal(result.code, 2, result.out + result.err);
+    assert.equal(result.json.caught, null);
+    assert.equal(result.json.why, why);
+    assertSealed(f);
+  });
 }
 
-test("a run killed after the reseal is restored by the next call", async (t) => {
-  const f = sealTree(t);
-  await killedDuringTest(f, (test) => single(f, test));
-  assert.notEqual(read(f, "manifest.txt"), MANIFEST, "the reseal ran before the kill");
-  const next = mutate(f, "node check.cjs strict");
-  assert.equal(next.code, 0, next.out + next.err);
-  assert.match(next.out, /restored manifest\.txt/);
-  assert.match(next.out, /^caught yes$/m);
-  assertCommitted(f);
-});
+// The reseal writes the seals, then leaves a writer behind that ignores SIGTERM and would write into
+// the tree a second later, and hangs.
+const HANGS = (f) => `node seal.cjs ${VALUE}; touch ${path.join(f.dir, "started")}; (trap '' TERM; sleep 1; echo late >> .late) & sleep 20`;
 
-test("a batch killed after the reseal is restored by the next call", async (t) => {
+test("a reseal past mutate.reseal_seconds is ended with every process it started, reads no verdict and exits 2", async (t) => {
   const f = sealTree(t);
-  const file = path.join(f.dir, "held.json");
-  await killedDuringTest(f, (test) => {
-    writeFile(file, JSON.stringify([{ criterion: "AC1", file: VALUE, line: 1, find: "1", replace: "2", test }]));
-    return [RUN, "mutate", "--tree", f.tree, "--batch", file];
-  });
-  assert.notEqual(read(f, "manifest.txt"), MANIFEST, "the reseal ran before the kill");
-  const next = mutate(f, "node check.cjs strict");
-  assert.equal(next.code, 0, next.out + next.err);
-  assert.match(next.out, /restored manifest\.txt/);
-  assertCommitted(f);
-});
-
-test("a sealed key without reseal fails at config load", (t) => {
-  const f = sealTree(t);
-  const bad = path.join(f.dir, "bad.yaml");
-  writeFile(bad, `mutate:\n  sealed:\n    - paths: ["defs/**"]\n`);
-  const result = mutate(f, "node check.cjs any", ["--config", bad]);
+  const config = configFile(f, "c.yaml", sealConfig(HANGS(f), { extra: "  reseal_seconds: 0.5\n" }));
+  const started = Date.now();
+  const result = sealMutate(f, "node check.cjs strict", ["--config", config, "--json"]);
   assert.equal(result.code, 2, result.out + result.err);
-  assert.match(result.err, /BAD_CONFIG/);
-  assert.match(result.err, /mutate\.sealed\[0\]\.reseal/);
-  assert.ok(result.err.includes(bad), result.err);
-  assert.equal(reseals(f), 0);
-  assertCommitted(f);
+  assert.equal(result.json.why, "reseal timed out after 0.5 seconds");
+  assert.ok(Date.now() - started < 8000, "the timeout ended the reseal, not its own sleep");
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, started + 2500 - Date.now())));
+  assert.equal(existsIn(f, ".late"), false, "a process the reseal started outlived the timeout and wrote into the tree");
+  assertSealed(f);
 });
 
-test("batch entries on a sealed file are resealed, and an entry after them sees the committed seal", (t) => {
+test("a reseal that ignores the timeout's SIGTERM is killed after a grace, and reads no verdict", (t) => {
   const f = sealTree(t);
-  const result = batch(f, [
+  const config = configFile(f, "c.yaml", sealConfig(`trap '' TERM; node seal.cjs ${VALUE}; sleep 15`, { extra: "  reseal_seconds: 0.5\n" }));
+  const started = Date.now();
+  const result = sealMutate(f, "node check.cjs strict", ["--config", config, "--json"]);
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.equal(result.json.why, "reseal timed out after 0.5 seconds");
+  assert.ok(Date.now() - started < 8000, "the reseal ran on after the timeout and its grace");
+  assertSealed(f);
+});
+
+test("a stop signal to mutate's process group ends the reseal and every process it started", async (t) => {
+  const f = sealTree(t);
+  const config = configFile(f, "c.yaml", sealConfig(HANGS(f)));
+  const child = spawn(process.execPath, singleArgs(f, "node check.cjs strict", ["--config", config]),
+    { cwd: f.tree, env: sealEnv(f), stdio: ["ignore", "pipe", "pipe"], detached: true });
+  t.after(() => spawnSync("kill", ["-KILL", `-${child.pid}`]));
+  let out = "";
+  child.stdout.on("data", (chunk) => { out += chunk; });
+  const done = new Promise((resolve) => child.on("close", (code) => resolve(code)));
+  assert.ok(await until(() => fs.existsSync(path.join(f.dir, "started"))), "the reseal never started");
+  const stopped = Date.now();
+  process.kill(-child.pid, "SIGTERM");
+  const code = await done;
+  assert.equal(code, 2, out);
+  assert.match(out, /^no verdict: reseal ended on SIGTERM$/m);
+  assert.ok(Date.now() - stopped < 4000, "the reseal ran on after the stop");
+  await new Promise((resolve) => setTimeout(resolve, Math.max(0, stopped + 1500 - Date.now())));
+  assert.equal(existsIn(f, ".late"), false, "a process the reseal started outlived the stop and wrote into the tree");
+  assertSealed(f);
+});
+
+test("a heavy reseal goes through the machine's build wrapper", (t) => {
+  const f = sealTree(t);
+  const bin = path.join(f.dir, "bin");
+  fs.mkdirSync(bin);
+  writeFile(path.join(bin, "claude-build"), `#!/bin/sh\necho "$*" >> ${path.join(f.dir, "wrapped")}\nshift\nexec "$@"\n`);
+  fs.chmodSync(path.join(bin, "claude-build"), 0o755);
+  const config = configFile(f, "c.yaml", sealConfig(`node seal.cjs ${VALUE} --build`));
+  const result = spawnSync(process.execPath, singleArgs(f, "node check.cjs any", ["--config", config]),
+    { cwd: f.tree, encoding: "utf8", env: { ...sealEnv(f), PATH: `${bin}${path.delimiter}${process.env.PATH}` } });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^caught no$/m);
+  assert.match(fs.readFileSync(path.join(f.dir, "wrapped"), "utf8"), /^-- bash -c node seal\.cjs defs\/value\.txt --build$/m);
+  assertSealed(f);
+});
+
+test("a sealed key without reseal, and a reseal_seconds that is no positive number, fail at config load", (t) => {
+  const f = sealTree(t);
+  for (const [body, key] of [
+    [`mutate:\n  sealed:\n    - paths: ["defs/**"]\n`, /mutate\.sealed\[0\]\.reseal/],
+    [sealConfig("node seal.cjs", { extra: "  reseal_seconds: 0\n" }), /mutate\.reseal_seconds in \S+ must be a positive number of seconds/],
+    [sealConfig("node seal.cjs", { extra: "  reseal_seconds: soon\n" }), /mutate\.reseal_seconds/],
+  ]) {
+    const bad = configFile(f, "bad.yaml", body);
+    const result = sealMutate(f, "node check.cjs any", ["--config", bad]);
+    assert.equal(result.code, 2, result.out + result.err);
+    assert.match(result.err, /BAD_CONFIG/);
+    assert.match(result.err, key);
+    assert.ok(result.err.includes(bad), result.err);
+  }
+  assert.equal(reseals(f), 0);
+  assertSealed(f);
+});
+
+test("a selected config without a mutate block inherits the default's, and a broken inherited block names the default", (t) => {
+  const f = sealTree(t, { ".specs-inferno/config.bare.yaml": "host: claude\n" });
+  const result = sealMutate(f, "node check.cjs any", ["--config", ".specs-inferno/config.bare.yaml"]);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /^caught no$/m);
+  assert.equal(reseals(f), 1, "the selected config resealed with the default's mutate block");
+  assertSealed(f);
+  const g = sealTree(t, { ".specs-inferno/config.yaml": "mutate:\n  sealed: none\n", ".specs-inferno/config.bare.yaml": "host: claude\n" });
+  const broken = sealMutate(g, "node check.cjs any", ["--config", ".specs-inferno/config.bare.yaml"]);
+  assert.equal(broken.code, 2, broken.out + broken.err);
+  assert.match(broken.err, /mutate\.sealed in \S+\/\.specs-inferno\/config\.yaml must be/);
+});
+
+test("batch entries on a sealed file are resealed, and an entry after them sees the seal as it was", (t) => {
+  const f = sealTree(t);
+  const result = sealBatch(f, [
     { criterion: "AC1", file: VALUE, line: 1, find: "1", replace: "2", test: "node check.cjs any" },
     { criterion: "AC2", file: VALUE, line: 1, find: "1", replace: "2", test: "node check.cjs strict" },
     { criterion: "AC3", file: "src/plain.txt", line: 1, find: "x", replace: "y", test: "node check.cjs any" },
@@ -212,43 +187,129 @@ test("batch entries on a sealed file are resealed, and an entry after them sees 
   assert.equal(result.code, 0, result.out + result.err);
   assert.deepEqual(result.payload.entries.map((e) => e.caught), [false, true, false]);
   assert.equal(reseals(f), 2);
-  assertCommitted(f);
+  assertSealed(f);
 });
 
-test("a batch entry whose reseal fails reads no verdict, and the next entry sees the committed seal", (t) => {
+test("a batch entry whose reseal fails reads no verdict, and the next entry sees the seal as it was", (t) => {
   const f = sealTree(t);
-  const result = batch(f, [
+  const result = sealBatch(f, [
     { criterion: "AC1", file: VALUE, line: 1, find: "1", replace: "2", test: "node check.cjs strict" },
     { criterion: "AC2", file: "src/plain.txt", line: 1, find: "x", replace: "y", test: "node check.cjs any" },
   ], ["--config", ".specs-inferno/config.fail.yaml"]);
   assert.equal(result.code, 0, result.out + result.err);
   assert.deepEqual(result.payload.entries.map((e) => [e.caught, e.why]), [[null, "reseal failed (exit 3)"], [false, undefined]]);
-  assertCommitted(f);
+  assertSealed(f);
 });
+
+test("a batch entry whose reseal a signal ends stops the batch, and every entry after it reads not run", (t) => {
+  const f = sealTree(t);
+  const config = configFile(f, "c.yaml", sealConfig(`node seal.cjs ${VALUE} && kill -KILL $$`));
+  const result = sealBatch(f, [
+    { criterion: "AC1", file: VALUE, line: 1, find: "1", replace: "2", test: "node check.cjs strict" },
+    { criterion: "AC2", file: "src/plain.txt", line: 1, find: "x", replace: "y", test: `touch ${path.join(f.dir, "ran")}` },
+  ], ["--config", config]);
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.caught, e.why]), [[null, "reseal ended on SIGKILL"], [null, "not run"]]);
+  assert.equal(result.payload.stopped, "the reseal of entry 1 ended on SIGKILL, so the batch stopped");
+  assert.equal(fs.existsSync(path.join(f.dir, "ran")), false);
+  assertSealed(f);
+});
+
+test("a seal the batch cannot put back stops it before the next test, and the batch exits 2 naming the path", (t) => {
+  const f = sealTree(t);
+  const ran = path.join(f.dir, "ran");
+  const result = sealBatch(f, [
+    { criterion: "AC1", file: VALUE, line: 1, find: "1", replace: "2", test: `node check.cjs any && chmod a-w ${f.lock.rel}` },
+    { criterion: "AC2", file: "src/plain.txt", line: 1, find: "x", replace: "y", test: `touch ${ran}` },
+  ]);
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.equal(result.payload.restored, false);
+  assert.match(result.payload.failed.join("\n"), /the restore of defs\/seal\.lock, which a reseal changed, failed/);
+  assert.equal(result.payload.stopped, "the batch stopped, since a seal could not be put back");
+  assert.equal(fs.existsSync(ran), false, "the next entry ran its test against a seal that was not put back");
+  assert.equal(readIn(f, VALUE), "1\n");
+  assert.equal(readIn(f, "src/plain.txt"), "x\n");
+});
+
+test("a seal mutate cannot put back exits 2 and names the path, and the next call puts it back from the journal", (t) => {
+  const f = sealTree(t);
+  const result = sealMutate(f, `node check.cjs any && chmod a-w ${f.lock.rel}`, ["--json"]);
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.equal(result.json.restored, false);
+  assert.match(result.json.failed.join("\n"), /the restore of defs\/seal\.lock, which a reseal changed, failed/);
+  assert.equal(readIn(f, VALUE), "1\n");
+  fs.chmodSync(path.join(f.tree, f.lock.rel), 0o644);
+  const next = sealMutate(f, "node check.cjs any");
+  assert.equal(next.code, 0, next.out + next.err);
+  assert.match(next.out, /^restored defs\/seal\.lock, which a reseal changed, from an interrupted mutate$/m);
+  assertSealed(f);
+});
+
+const RUST = "pub fn alpha() -> usize { 1 }\npub fn beta() -> usize { 2 }\npub const fn delta() -> usize { 4 }\n";
 
 test("switched Rust entries in a sealed file share one reseal before the control run", (t) => {
   const lib = "pub fn alpha() -> usize { 1 }\npub fn beta() -> usize { 2 }\n";
-  const sealed = manifest("src/lib.rs", lib);
-  const f = batchTree(t, {
-    "src/lib.rs": lib,
-    "manifest.txt": sealed,
-    "seal.cjs": SEAL,
-    "check.cjs": CHECK,
-    ".specs-inferno/config.yaml": config("src/**", "node seal.cjs src/lib.rs"),
-  });
-  const g = { dir: f.dir, tree: f.root, cache: f.cache, runs: path.join(f.dir, "seal-runs") };
-  const file = path.join(f.dir, "batch.json");
-  const entries = [
+  const f = sealedRustTree(t, lib);
+  const result = sealBatch(f, [
     { criterion: "AC1", file: "src/lib.rs", line: 1, find: "1", replace: "7", test: `node check.cjs any && ${fakeTest(f, "alpha", "usize")}` },
     { criterion: "AC2", file: "src/lib.rs", line: 2, find: "2", replace: "8", test: `node check.cjs any && ${fakeTest(f, "beta", "{ 2 }")}` },
-  ];
-  writeFile(file, JSON.stringify(entries));
-  const result = spawnSync(process.execPath, [RUN, "mutate", "--tree", f.root, "--batch", file, "--json"],
-    { cwd: f.root, encoding: "utf8", env: { ...env(g), FAKE_RUST_STATE: f.state } });
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  const payload = JSON.parse(result.stdout);
-  assert.deepEqual(payload.entries.map((e) => [e.form, e.caught]), [["switch", false], ["switch", true]]);
-  assert.equal(reseals(g), 1);
-  assertCommitted(g, null, sealed);
-  assert.equal(read(g, "src/lib.rs"), lib);
+  ]);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.form, e.caught]), [["switch", false], ["switch", true]]);
+  assert.equal(reseals(f), 1);
+  assertSealed(f, lib, "src/lib.rs");
+});
+
+test("a switch that does not compile in a sealed file goes to its own build, and the rest keep their switches", (t) => {
+  const f = sealedRustTree(t, RUST);
+  const result = sealBatch(f, [
+    { criterion: "AC1", file: "src/lib.rs", line: 2, find: "2", replace: "8", test: `node check.cjs any && ${fakeTest(f, "beta", "{ 2 }")}` },
+    { criterion: "AC2", file: "src/lib.rs", line: 3, find: "4", replace: "5", test: `node check.cjs any && ${fakeTest(f, "delta", "{ 4 }")}` },
+  ]);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.form, e.caught]), [["switch", true], ["classic", true]]);
+  assert.deepEqual(runs(f).filter((run) => run.name === "beta").map((run) => run.on), [null, "1"], "beta's switch held on the second build");
+  assertSealed(f, RUST, "src/lib.rs");
+});
+
+test("switched Rust entries whose reseal fails read no verdict, and no control run starts on a stale seal", (t) => {
+  const f = sealedRustTree(t, RUST, "node seal.cjs src/lib.rs --fail");
+  const result = sealBatch(f, [
+    { criterion: "AC1", file: "src/lib.rs", line: 1, find: "1", replace: "7", test: `node check.cjs any && ${fakeTest(f, "alpha", "{ 1 }")}` },
+    { criterion: "AC2", file: "src/lib.rs", line: 2, find: "2", replace: "8", test: `node check.cjs any && ${fakeTest(f, "beta", "{ 2 }")}` },
+  ]);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.form, e.caught, e.why]),
+    [["switch", null, "reseal failed (exit 3)"], ["switch", null, "reseal failed (exit 3)"]]);
+  assert.deepEqual(runs(f), [], "no test ran");
+  assertSealed(f, RUST, "src/lib.rs");
+});
+
+test("switched Rust entries whose reseal a signal ends stop the batch before any other entry", (t) => {
+  const f = sealedRustTree(t, RUST, "node seal.cjs src/lib.rs && kill -KILL $$", { "notes.txt": "x\n" });
+  const ran = path.join(f.dir, "ran");
+  const result = sealBatch(f, [
+    { criterion: "AC1", file: "src/lib.rs", line: 1, find: "1", replace: "7", test: fakeTest(f, "alpha", "{ 1 }") },
+    { criterion: "AC2", file: "notes.txt", line: 1, find: "x", replace: "y", test: `touch ${ran}` },
+  ]);
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.caught, e.why]), [[null, "reseal ended on SIGKILL"], [null, "not run"]]);
+  assert.equal(result.payload.stopped, "the reseal of the switched entries ended on SIGKILL, so the batch stopped");
+  assert.equal(fs.existsSync(ran), false);
+  assertSealed(f, RUST, "src/lib.rs");
+});
+
+test("a seal the batch cannot put back between two builds stops it before the second control run", (t) => {
+  const f = sealedRustTree(t, RUST);
+  const lock = `chmod a-w ${f.lock.rel}`;
+  const result = sealBatch(f, [
+    { criterion: "AC1", file: "src/lib.rs", line: 2, find: "2", replace: "8", test: `${lock} && ${fakeTest(f, "beta", "{ 2 }")}` },
+    { criterion: "AC2", file: "src/lib.rs", line: 3, find: "4", replace: "5", test: `${lock} && ${fakeTest(f, "delta", "{ 4 }")}` },
+  ]);
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.equal(result.payload.restored, false);
+  assert.match(result.payload.failed.join("\n"), /the restore of src\/seal\.lock, which a reseal changed, failed/);
+  assert.equal(result.payload.stopped, "the batch stopped, since a seal could not be put back");
+  assert.deepEqual(runs(f), [], "only the first control build ran, and it failed to compile");
+  assert.equal(readIn(f, "src/lib.rs"), RUST);
 });
