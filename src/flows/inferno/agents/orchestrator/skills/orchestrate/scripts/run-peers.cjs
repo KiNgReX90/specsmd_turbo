@@ -33,8 +33,9 @@ function ownershipOverlaps(left, right, tree) {
  * to its acceptance and claims what it changed. An attempt nobody accepted runs until the next
  * attempt started, and claims what the attempts after it claim, back to the nearest accepted
  * one. A path an attempt carried is claimed by every attempt before it in the lineage. The tail
- * of an `open` lineage, still running, runs to the end of the timeline and claims every path its
- * frozen ownership covers.
+ * of an `open` lineage, still running, runs to the end of the timeline, and it and every attempt
+ * nobody accepted before it, back to the nearest accepted one, claim every path the tail's frozen
+ * ownership covers. Such a claim is `frozen`: it yields to a path the reviewed item claims.
  */
 function windows(tree, peer, open = false) {
   const members = dispatch.lineage(tree, peer);
@@ -63,7 +64,14 @@ function windows(tree, peer, open = false) {
       queue.push(...(prior.previous || []));
     }
   }
-  if (open) claims.set(members[0], { has: (file) => lib.ownedBy(file, peer.assignment.ownership.editable, tree) });
+  const frozen = { frozen: true, has: (file) => lib.ownedBy(file, peer.assignment.ownership.editable, tree) };
+  const unaccepted = open ? [members[0]] : [];
+  while (unaccepted.length > 0) {
+    const member = unaccepted.shift();
+    if (!member || member.phase === 'accepted' || claims.get(member) === frozen) continue;
+    claims.set(member, frozen);
+    unaccepted.push(...(member.previous || []).map((id) => byId.get(id)));
+  }
   return members.map((member) => {
     const end = member.phase === 'accepted' ? member.acceptedSnapshot : (next.get(member.dispatchId) || {}).beforeSnapshot;
     return { peer, member, start: seqOf(member.beforeSnapshot), end: end ? seqOf(end) : Infinity, claims: claims.get(member) };
@@ -116,7 +124,8 @@ function unexplainedChanges(tree, own, editable, peers, now, folded, open = []) 
     for (const file of dispatch.snapshotDelta(before, after, true)) {
       const claimed = own.claimed.includes(file);
       if (folded.has(file) && !claimed) continue;
-      const run = runs.find((entry) => entry.start <= before.seq && after.seq <= entry.end && entry.claims.has(file));
+      const run = runs.find((entry) => entry.start <= before.seq && after.seq <= entry.end && entry.claims.has(file) &&
+        !(claimed && entry.claims.frozen));
       if (run) checkPeerChange(tree, run, file, own, editable);
       if (run || claimed) {
         close(file);

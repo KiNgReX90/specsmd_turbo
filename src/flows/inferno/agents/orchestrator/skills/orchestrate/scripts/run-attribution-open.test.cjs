@@ -6,7 +6,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { fixture } = require('./run-attribution-fixture.cjs');
+const { fixture, spec } = require('./run-attribution-fixture.cjs');
 
 test('verify-item verifies beside an open dispatch with disjoint frozen ownership', (t) => {
   const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs'] });
@@ -77,4 +77,43 @@ test('a correction of a landed item beside a disjoint open one is explained by t
   const result = f.verify('c');
   assert.equal(result.code, 0, result.out);
   assert.deepEqual(result.data.outside, []);
+});
+
+test('the item\'s own escape into an open sibling\'s file is named outside it, not an overlap', (t) => {
+  const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs'] });
+  const one = f.start('--item', 'a');
+  f.start('--item', 'b');
+  f.write('a.cjs', 'module.exports = 2;\n');
+  f.write('b.cjs', 'escaped from a\n');
+  f.accepted(one, ['a.cjs', 'b.cjs']);
+  const result = f.verify('a');
+  assert.equal(result.code, 2, result.out);
+  assert.deepEqual(result.data.outside, ['b.cjs']);
+});
+
+test('a restarted open dispatch claims what its first attempt wrote inside its frozen ownership', (t) => {
+  const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs'] });
+  const one = f.start('--item', 'a');
+  f.start('--item', 'b');
+  f.write('b.cjs', 'module.exports = 2;\n');
+  f.start('--item', 'b');
+  f.write('a.cjs', 'module.exports = 2;\n');
+  f.accepted(one, ['a.cjs']);
+  const result = f.verify('a');
+  assert.equal(result.code, 0, result.out);
+  assert.deepEqual(result.data.outside, []);
+});
+
+test('overlap is read on the record\'s frozen ownership and on the spec, so a narrowed or widened spec still waits', (t) => {
+  for (const [frozen, now] of [[['a.cjs', 'shared.cjs'], ['a.cjs']], [['a.cjs'], ['a.cjs', 'shared.cjs']]]) {
+    const f = fixture(t, { a: frozen, b: ['shared.cjs', 'b.cjs'] });
+    const one = f.start('--item', 'a');
+    f.write('.specs-inferno/intents/alpha/work-items/a.md', spec('a', now));
+    const two = f.start('--item', 'b');
+    f.write('a.cjs', 'module.exports = 2;\n');
+    f.accepted(one, ['a.cjs']);
+    const result = f.verify('a');
+    assert.equal(result.code, 2, result.out);
+    assert.match(result.out, new RegExp(`dispatch ${two} for b is still open`));
+  }
 });
