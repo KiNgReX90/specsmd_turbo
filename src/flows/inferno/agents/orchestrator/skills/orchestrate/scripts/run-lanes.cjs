@@ -8,7 +8,9 @@
  * Exit contract of a host lane command: 0 green, 10 product red, 11 instrument red, and any
  * other code is instrument red too. The host runner does its own single retry; the flow never
  * retries a lane. An instrument red is accepted only against a harness fix already on the base
- * branch, recorded by `run.cjs smoke --accept --harness-fix <sha>` for the tree it ran on.
+ * branch, recorded by `run.cjs smoke --accept --harness-fix <sha>` for the tree it ran on. A
+ * product red is accepted only when the lane's verdicts file proves every red test intermittent
+ * (run-lanes-intermittent.cjs).
  */
 
 const fs = require('fs');
@@ -21,13 +23,14 @@ const { configuredLanes } = require('./run-lane-config.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const slot = require('./run-slot.cjs');
 const { resolveBase } = require('./run-intents.cjs');
-const { gateStartCall, gateWaitCall, laneAcceptCall } = require('./run-call.cjs');
+const intermittent = require('./run-lanes-intermittent.cjs');
+const { gateStartCall, gateWaitCall, laneAcceptCall, laneIntermittentCall } = require('./run-call.cjs');
 
 const { RunError } = lib;
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
 const PRODUCT_RED = 10;
 const ACCEPTED = '.instrument-red';
-/** gate --wait's exit when every job ended and a lane is instrument red with no accepted harness fix. */
+/** gate --wait's exit when every job ended and a lane red waits on its accept: an instrument red, or a product red proven intermittent. */
 const UNBOUNDED_EXIT = 3;
 /** run.cjs prints at most this many human lines. */
 const MAX_LINES = 30;
@@ -66,6 +69,14 @@ function readAccepted(tree, name, proof) {
   return matches && latest && latest.run === record.run ? record : null;
 }
 
+const heldLines = (name, record) => record.tests.map((test) => `ACCEPTED lane ${name} intermittent: ${test}`);
+
+/** Each configured lane an intermittent accept holds on this tree, with its record, as ship writes them down. */
+function intermittentHeld(tree, config, selected) {
+  return configuredLanes(config)
+    .map((lane) => ({ lane: lane.name, record: intermittent.readAccepted(tree, lane.name, laneProof(tree, selected, lane, config)) }))
+    .filter((entry) => entry.record);
+}
 
 function touched(lane, changed) {
   return changed.some((file) => lib.matchesAny(file, lane.scope));
@@ -77,6 +88,13 @@ function laneOf(config, name, selected) {
     throw new RunError(`no verification.${name} in ${selected || DEFAULT_CONFIG}: configure the lane there first.`, 'NO_LANE');
   }
   return lane;
+}
+
+/** Start one lane as its own job, by the one detach call every lane start shares; `head` is the commit it walks. */
+function startLane(tree, options, lane, head) {
+  const args = ['gate', '--lane', lane.name, '--tree', tree, '--json'];
+  if (options.config) args.push('--config', options.config);
+  return jobs.detach(tree, args, jobs.jobPaths(tree, lane.name), { lane: lane.name, head });
 }
 
 /** Start every configured lane the branch touched and holds no proof for; returns the started names. */
@@ -93,12 +111,12 @@ function startLanes(tree, options, config, changed) {
     const proof = laneProof(tree, options.config, lane, config);
     const green = !options.force && proofs.readProof(proof);
     const accepted = !options.force && readAccepted(tree, lane.name, proof);
+    const flaky = !options.force && intermittent.readAccepted(tree, lane.name, proof);
     if (green) out.push(`GREEN lane ${lane.name} (unchanged since ${green.stamp})`);
     else if (accepted) out.push(`ACCEPTED lane ${lane.name} instrument red, harness fix ${accepted.harness_fix.slice(0, 7)}`);
-    if (green || accepted) continue;
-    const args = ['gate', '--lane', lane.name, '--tree', tree, '--json'];
-    if (options.config) args.push('--config', options.config);
-    const job = jobs.detach(tree, args, jobs.jobPaths(tree, lane.name), { lane: lane.name, head });
+    else if (flaky) out.push(...heldLines(lane.name, flaky));
+    if (green || accepted || flaky) continue;
+    const job = startLane(tree, options, lane, head);
     started.push(lane.name);
     out.push(`${lane.name} lane started pid ${job.pid}`, `log ${job.log}`);
   }
@@ -115,7 +133,9 @@ function laneNow(options) {
   const runId = `${lib.stamp()}-${process.pid}`;
   const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `lane-${lane.name}-${lib.stamp()}.log`);
   // The lane names its log while it walks, so a wait can read a red line before the result exists.
-  writeRecord(jobs.jobPaths(tree, lane.name).run, { run: runId, log, started: new Date().toISOString() });
+  // The result keeps the start too, so a verdicts file written before this run never speaks for it.
+  const started = new Date().toISOString();
+  writeRecord(jobs.jobPaths(tree, lane.name).run, { run: runId, log, started });
   // runShell inherits this one-shot process's environment, so the lane reads the config the gate used.
   process.env.INFERNO_GATE_CONFIG = proof.config;
   const run = lib.runShell(lane.command, tree, log);
@@ -129,7 +149,7 @@ function laneNow(options) {
     const { file, ...identity } = proof;
     writeRecord(file, { ...identity, stamp: new Date().toISOString(), seconds: run.seconds, branch: lib.currentBranch(tree) });
   }
-  const payload = { lane: lane.name, run: runId, result, code: run.code, seconds: run.seconds, log, hash: proof.hash };
+  const payload = { lane: lane.name, run: runId, result, code: run.code, seconds: run.seconds, log, hash: proof.hash, started };
   return { exit: result === 'green' ? 0 : 2, payload, out: [`${result} lane ${lane.name} exit ${run.code} -> ${log}`] };
 }
 
@@ -174,15 +194,28 @@ function acceptFix(tree, lane, selected) {
   return `land the harness fix on ${base}, then: ${laneAcceptCall(lane, tree)}`;
 }
 
+/**
+ * A product red holds on its intermittent accept. Unaccepted, it is red, or owed that accept when
+ * the lane's verdicts file proves every red test of this run on this tree intermittent.
+ */
+function productRed(tree, selected, config, entry) {
+  const lane = laneOf(config, entry.lane, selected);
+  const proof = laneProof(tree, selected, lane, config);
+  const held = intermittent.readAccepted(tree, entry.lane, proof);
+  if (held) return { verdict: 'hold', out: heldLines(entry.lane, held) };
+  const out = [`RED lane ${entry.lane}: product red (exit ${entry.code}) -> ${entry.log}`, ...lib.tail(entry.log, 5)];
+  const read = intermittent.proven(tree, lane, entry, proof);
+  if (read.refusal) return { verdict: 'red', out };
+  return { verdict: 'unbounded', out: [...out, `the lane proved every red intermittent: ${laneIntermittentCall(entry.lane, tree, read.tests)}`] };
+}
+
 /** The lines for a lane, and whether it holds (green or bounded), fails (2) or is unbounded. */
 function describeLane(tree, selected, config, entry) {
   if (entry.state === 'running') return { verdict: 'running', out: [`${entry.lane} lane still running pid ${entry.pid}, log ${entry.log}`] };
   // The lane walks on and writes its result as today; its red line only ends the wait sooner.
   if (entry.state === 'running-red') return { verdict: 'red', out: [`RED lane ${entry.lane} while it walks: ${entry.line} -> ${entry.log}`] };
   if (entry.state === 'green') return { verdict: 'hold', out: [`GREEN lane ${entry.lane} ${entry.seconds}s`] };
-  if (entry.state === 'product-red') {
-    return { verdict: 'red', out: [`RED lane ${entry.lane}: product red (exit ${entry.code}) -> ${entry.log}`, ...lib.tail(entry.log, 5)] };
-  }
+  if (entry.state === 'product-red') return productRed(tree, selected, config, entry);
   if (entry.state === 'moved') return { verdict: 'red', out: [`RED lane ${entry.lane}: the code changed while the lane ran. Re-run the gate.`] };
   if (entry.state === 'died') return { verdict: 'red', out: [`lane ${entry.lane} process ${entry.pid} ended without a result -> ${entry.log}`, ...lib.tail(entry.log, 5)] };
   const accepted = readAccepted(tree, entry.lane, laneProof(tree, selected, laneOf(config, entry.lane, selected), config));
@@ -255,8 +288,18 @@ function acceptCheck(tree, lane, last, proof) {
   throw new RunError(`refused: the ${lane.name} lane's accept_check exited ${run.code}: ${said}\nlog ${log}`, 'ACCEPT_REFUSED');
 }
 
+/** `run.cjs <lane> --accept-intermittent`: the lane's own inputs for its intermittent accept. */
+function acceptIntermittent(name, options) {
+  intermittent.usage(name, options);
+  const tree = options.tree || lib.repoRoot(options.cwd);
+  const config = lib.readConfig(tree, options.config);
+  const lane = laneOf(config, name, options.config);
+  return intermittent.accept(tree, config, lane, laneProof(tree, options.config, lane, config), options);
+}
+
 /** `run.cjs <lane> --accept --harness-fix <sha>`: bound that lane's instrument red on this tree, and no other lane's. */
 function accept(name, options) {
+  if (options.accept_intermittent) return acceptIntermittent(name, options);
   if (!options.accept || !options.harness_fix) {
     throw new RunError(`usage: node run.cjs ${name} --accept --harness-fix <sha> [--tree <dir>] [--config <file>]`, 'BAD_ARGS', 1);
   }
@@ -298,6 +341,8 @@ function smokeOwed(tree, config, selected, changed) {
   if (proofs.readProof(proof)) return { owed: [], out: [] };
   const accepted = readAccepted(tree, 'smoke', proof);
   if (accepted) return { owed: [], out: [`ACCEPTED smoke instrument red, harness fix ${accepted.harness_fix.slice(0, 7)}`] };
+  const flaky = intermittent.readAccepted(tree, 'smoke', proof);
+  if (flaky) return { owed: [], out: flaky.tests.map((test) => `ACCEPTED smoke intermittent: ${test}`) };
   return {
     owed: ['smoke'],
     out: [`smoke owed: no green or accepted instrument-red smoke run for this tree; run ${gateStartCall(tree)}, ` +
@@ -305,4 +350,4 @@ function smokeOwed(tree, config, selected, changed) {
   };
 }
 
-module.exports = { accept, laneNow, laneProof, smokeOwed, startLanes, waitAll };
+module.exports = { accept, intermittentHeld, laneNow, laneOf, laneProof, smokeOwed, startLane, startLanes, waitAll };
