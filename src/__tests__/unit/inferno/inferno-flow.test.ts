@@ -163,6 +163,34 @@ describe('inferno flow', () => {
     expect(nested(blocks[1], 'mutants')).toEqual(item.MUTANT_KEYS);
   });
 
+  // The item review's dispatch names under `proof` what verify-item ran (run-review.cjs). The
+  // reviewer reads it and never reruns the item's checks, a test the proof lists as changed
+  // needs a criterion, and what is no coverage is Turbo's list. On Codex the skill reads the
+  // same body, and its own rule says the same.
+  it.each(['agents/reviewer/agent.md', 'commands/inferno-reviewer.md'])('%s reads the proof and never reruns the item checks', (rel) => {
+    const text = readFileSync(path.join(INFERNO, rel), 'utf8');
+    for (const sentence of [
+      "Read the `proof` of the item's checks and never rerun them; on one doubt, run one narrow test.",
+      '`passed: false` is a `blocker`.',
+      'Without a `proof`, run each test narrowly: one file or test name.',
+      'A criterion is unproven without a test, or when its test does not assert what the criterion says, asserts only the fixture it built, ' +
+        'is skipped or `todo`, asserts nothing, promises in its name more than its body checks, computes its expected value the way the code ' +
+        "does, or mocks the unit under test or an earlier item's code.",
+      "7. **Changed tests.** A test the proof's `tests_changed` lists as `modified` or `deleted` needs a criterion that changes the behaviour " +
+        'it checked, or it is `major`: a test bent to fit the code.',
+    ]) expect(text).toContain(sentence);
+    expect(text).not.toMatch(/run the thing|find the test that proves it and run it/);
+    const review = readFileSync(path.join(INFERNO, 'agents/orchestrator/skills/orchestrate/scripts/run-review.cjs'), 'utf8');
+    expect(review).toContain('`  proof ${named}`');
+  });
+
+  it('the Codex reviewer skill never reruns the proof checks', () => {
+    const skill = readFileSync(path.join(INFERNO, 'codex/skills/specsmd-inferno-reviewer/SKILL.md'), 'utf8');
+    expect(skill).toContain("Never rerun the proof's checks or break a line yourself");
+    expect(skill).not.toContain('Run every test narrowly');
+    expect(skill).toContain('Read `.specsmd/inferno/agents/reviewer/agent.md` completely and follow it verbatim');
+  });
+
   // The oracle exists to end postponement: it returns one decision, never a menu,
   // and only one of the four verdicts.
   it('the oracle result contract names exactly the four verdicts', () => {
