@@ -21,6 +21,7 @@ const { reviewerId } = require('./run-review-file.cjs');
 const owed = require('./run-intent-owed.cjs');
 const { gateStartCall, intentRecordCall, intentReviewCall, itemReviewCall, scanCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
+const { intentMutants } = require('./run-review-mutants.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const slot = require('./run-slot.cjs');
 
@@ -115,9 +116,11 @@ function verdict(tree, context, review, head) {
   };
 }
 
-function record(tree, context, commit, restored) {
+async function record(tree, context, commit, restored) {
   const { intent, rel } = context;
   const reviewer = reviewerId(context.reviewer, intentRecordCall(tree));
+  // The runner runs the mutants owed here and writes what they said into the file (run-review-mutants.cjs).
+  const ran = await intentMutants(tree, context);
   const review = owed.parseFor(tree, rel, intent, false);
   const abs = path.join(tree, rel);
   const text = fs.readFileSync(abs, 'utf8');
@@ -127,7 +130,7 @@ function record(tree, context, commit, restored) {
   lib.git(tree, ['add', '--', rel]);
   lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent}): intent review ${review.verdict}`, '--', rel]);
   const result = verdict(tree, context, review, `intent review ${review.verdict}, recorded at ${short(tree, commit)}`);
-  return { ...result, out: [...restored, ...result.out] };
+  return { ...result, out: [...restored, ...ran, ...result.out] };
 }
 
 function reviewIntent(options) {
@@ -137,7 +140,7 @@ function reviewIntent(options) {
   // Every review call is activity of the tree's merge slot ticket.
   if (mergeSlot(config)) slot.renew(tree);
   const rel = owed.intentReviewPath(tree, intent);
-  const context = { intent, config, rel, reviewer: options.reviewer };
+  const context = { intent, config, rel, reviewer: options.reviewer, configFile: options.config };
 
   const pending = fs.existsSync(path.join(tree, rel)) && lib.gitLines(tree, ['status', '--porcelain', '--', rel]).length > 0;
   if (pending) {

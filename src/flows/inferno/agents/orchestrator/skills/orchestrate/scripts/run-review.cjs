@@ -6,7 +6,7 @@
  *
  * The order per item: the builder returns, the orchestrator commits the item, this step
  * prints the reviewer dispatch line, the reviewer writes its file, and the same step
- * validates, records and commits that file. A clean review lets `integrate --item` land the
+ * validates it, runs its mutants (run-review-mutants.cjs), records and commits that file. A clean review lets `integrate --item` land the
  * item. A fix review goes back to the builder the ladder names, and the next review reads
  * only what changed since.
  *
@@ -25,6 +25,7 @@ const { REINSTALL, completedBeforeReviewRule, reviewRuleSince } = require('./sta
 const { integrateCall, itemRecordCall, itemReviewCall, realAppCall } = require('./run-call.cjs');
 const { realAppPaths } = require('./run-real-app.cjs');
 const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
+const { itemMutants } = require('./run-review-mutants.cjs');
 
 const { RunError } = lib;
 
@@ -180,7 +181,7 @@ function owed(tree, context, reason, from, paths, reviewer = null) {
         `  brief ${brief}`,
         `  write ${rel}`,
       ]),
-      `then ${itemRecordCall(tree, item.id)} records it`,
+      `then ${itemRecordCall(tree, item.id)} records it; it runs the review's mutants first, so give it the time those tests take`,
     ],
   };
 }
@@ -195,7 +196,9 @@ function verdictResult(tree, context, review, head) {
   for (const finding of review.findings) {
     out.push(`FINDING ${finding.criterion} ${finding.file}:${finding.line}: ${finding.evidence}. fix: ${finding.fix}`);
   }
-  for (const mutant of review.survivors) out.push(`MUTANT ${mutant.criterion} survived: ${mutant.test}`);
+  // A survivor the runner ran is told once, as its finding; a released flow's survivor has none.
+  const told = (mutant) => review.findings.some((finding) => finding.mutant === mutant.criterion);
+  for (const mutant of review.survivors.filter((one) => !told(one))) out.push(`MUTANT ${mutant.criterion} survived: ${mutant.test}`);
   const next = nextActor(item, config);
   out.push(nextLine(item.id, item, config));
   return {
@@ -205,13 +208,16 @@ function verdictResult(tree, context, review, head) {
   };
 }
 
-function record(tree, context, ledger) {
+async function record(tree, context, ledger) {
   const { intent, item, rel } = context;
   const reviewer = reviewerId(context.reviewer, itemRecordCall(tree, item.id));
-  const review = parseItemReview(tree, rel, item.id, { recorded: false });
-  if (!item.review && review.findings.some((finding) => finding.repeat === 'true')) {
+  const written = parseItemReview(tree, rel, item.id, { recorded: false });
+  if (!item.review && written.findings.some((finding) => finding.repeat === 'true')) {
     throw bad(rel, 'repeat: true marks a kind an earlier round of this item reported, and this is its first review, so drop repeat: true');
   }
+  // The runner runs the review's mutants and writes what they said into the file (run-review-mutants.cjs).
+  const ran = await itemMutants(tree, context);
+  const review = parseItemReview(tree, rel, item.id, { recorded: false });
   const commit = lib.git(tree, ['rev-parse', 'HEAD']);
   const hash = filesHash(tree, review.files);
   const result = writer.reviewItem({
@@ -227,7 +233,8 @@ function record(tree, context, ledger) {
   const updated = itemOf(lib.readLedger(tree), item.id, { intent: intent.id }).item;
   const head = `review ${item.id} ${review.verdict}, recorded at ${short(tree, commit)} ` +
     `(${result.tier}, ${result.rejections} rejection(s))`;
-  return verdictResult(tree, { ...context, item: updated }, review, head);
+  const verdict = verdictResult(tree, { ...context, item: updated }, review, head);
+  return { ...verdict, out: [...ran, ...verdict.out] };
 }
 
 /** The files a pending review lists. A review that does not parse lists none here; its record reports why. */
@@ -250,7 +257,7 @@ function review(options) {
   const { intent, item } = itemOf(ledger, options.item, options);
   const rel = reviewPath(intent.id, item.id);
   const config = lib.readConfig(tree, options.config);
-  const context = { intent, item, config, rel, reviewer: options.reviewer };
+  const context = { intent, item, config, rel, reviewer: options.reviewer, configFile: options.config };
   const manifest = lib.readItemSpec(tree, intent.id, item.id).manifest || {};
   const editable = (manifest.ownership && manifest.ownership.editable) || [];
 
@@ -272,7 +279,8 @@ function review(options) {
   }
 
   const result = step(tree, context, { ledger, editable, exists, pending, current });
-  return { ...result, out: [...restored, ...result.out] };
+  const done = (value) => ({ ...value, out: [...restored, ...value.out] });
+  return result && typeof result.then === 'function' ? result.then(done) : done(result);
 }
 
 /** Dispatch line when no review exists, record when one is written, the verdict when current. */

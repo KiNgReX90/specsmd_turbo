@@ -17,7 +17,7 @@ The dispatch names the worktree, the intent, the mode (item or intent), the comm
 Read the brief and the spec first, then `git diff <range>`, then the full code each criterion rests on. A builder's report and a commit message are claims; run the thing.
 
 1. **Every criterion is proven.** For each acceptance criterion of the item (intent mode: each success criterion of the brief), find the test that proves it and run it narrowly: one test file or one test name, never a whole suite or a whole crate. A criterion without a test, or with a test that does not assert what the criterion says, is a finding.
-2. **The test catches the break.** For each criterion with a test, break the line the criterion rests on. Put every mistake of the review in one `run.cjs mutate --tree <tree> --batch <file>` call, a JSON list of `{criterion, file, line, find, replace, test}`. That call builds the Rust ones once, and it shares that build best when each `find` is a whole expression or statement. It refuses a dirty tree and restores every file whatever happens. It prints `caught yes`, `caught no` or `no verdict` per entry, then the lines to paste under `mutants`. `caught: no` is a finding too. A `no verdict` entry never counts: after `killed`, run it again once; otherwise break that criterion another way. Other builders may edit the same worktree, so in item mode a mutant runs only while the tree is clean; leave it out otherwise and the intent review runs it. Every criterion with a test needs a caught mutant, in its item review or the intent review. A mutant names its criterion by text or by number; in the intent review a number carries its item, as `<item>:<n>`.
+2. **The test catches the break.** In a first review, propose one mutant under `mutants` for each acceptance criterion a test covers: a small change to a line that criterion rests on, such as a flipped comparison or a dropped call, that still builds. `criterion` is that criterion's number in the spec, 1 for the first. `find` occurs exactly once on `line` of `file`, and `replace` is its broken version, both on one line; a whole expression or statement lets the Rust ones share one build. `test` runs narrowly only the tests that should notice, and passes on the code as it stands. Never two on one criterion, never a test file, and never run one yourself: the runner runs them when it records your file, writes `caught`, and makes each mutant whose test stays green a `major` finding. On a tree another builder has dirtied it records them unrun, and the intent review runs them. Every criterion with a test needs a caught mutant, in its item review or the intent review.
 3. **Test doubles.** A test double may only fake the outside world: network, clock, keys, outages. Everything else runs the real code. A new fake of the product's own behaviour (a hand-written answer for one of its commands, a stub that mints what its code mints, a bridge that answers for its backend) is a finding. When the host config sets `doubles:`, run `run.cjs doubles --tree <tree>`; exit 2 means the count of files matching its pattern rose against the merge base, and that is a finding.
 4. **Wiring.** Every command, table or event the diff adds has a consumer, and every one it consumes has a producer, in this intent or in the registry the host config names under `wiring:`. A command or event that crosses a process or language bridge has a seam test: one side writes the shape and the other reads the same fixture. When the diff replaces a reader, grep every caller of the old one and check that each moved along. Run the dispatch's `real-app` call; each `stale` line it prints is a finding, and each `drives` file it prints is read against the diff's new behaviour, where a helper or case text that no longer matches what the screen now does is a finding.
 5. **Re-read.** A screen that shows data the diff changes re-reads it after a save, a context switch and a decision.
@@ -29,11 +29,11 @@ Every finding carries a `severity`. `blocker`: the change breaks a criterion or 
 
 ## Delta review
 
-With an earlier review, the range starts at the commit it recorded. Read only that range, re-check every earlier finding, and apply the six checks to whatever the fix touched. A finding of a kind an earlier round of this item already reported carries `repeat: true`. Write the whole file again; `run.cjs` replaces the old one.
+With an earlier review, the range starts at the commit it recorded. Read only that range, re-check every earlier finding, and apply the six checks to whatever the fix touched. A finding of a kind an earlier round of this item already reported carries `repeat: true`. In item mode propose no mutant and leave `mutants` out: the runner carries the last review's over and reruns its survivors, and a finding that carries `mutant` is the runner's, written again while that mutant survives. Write the whole file again; `run.cjs` replaces the old one.
 
 ## Intent mode
 
-The range runs from the merge base, or from the last intent review's commit, to HEAD. Answer every line of the scan file under `scanner`: `confirmed` makes it a finding as well, `struck` needs a one-line reason. Run the mutants the item reviews left out, in one batch. Map every success criterion of the brief under `criteria`: `proof: test` with the command in `where`, `proof: code` with `file:line` when no test can reach it, or `proof: external` when only a person or another machine can prove it. An external criterion names the evidence path the merge waits for; put it under `.specs-inferno/intents/<intent>/evidence/`, so adding it later leaves the reviewed tree as it is. Every finding names under `owner` the work item that owns its fix.
+The range runs from the merge base, or from the last intent review's commit, to HEAD. Answer every line of the scan file under `scanner`: `confirmed` makes it a finding as well, `struck` needs a one-line reason. Propose a mutant as in item mode, its criterion written `<item>:<n>`, only for an item criterion with a test that neither its item review nor the last intent review holds a mutant for, or whose mutant reads `caught: none`; the runner runs those, and every proposal an item review left without `caught`, when it records your file. Map every success criterion of the brief under `criteria`: `proof: test` with the command in `where`, `proof: code` with `file:line` when no test can reach it, or `proof: external` when only a person or another machine can prove it. An external criterion names the evidence path the merge waits for; put it under `.specs-inferno/intents/<intent>/evidence/`, so adding it later leaves the reviewed tree as it is. Every finding names under `owner` the work item that owns its fix.
 
 ## Review file
 
@@ -52,9 +52,12 @@ findings:
     severity: blocker | major | minor
     repeat: true, only on a kind an earlier round reported
 mutants:
-  - criterion: <criterion>
-    test: <the command you ran>
-    caught: yes | no
+  - criterion: <the criterion's number, 1 for the first>
+    file: <path>
+    line: <n>
+    find: <text that occurs once on that line>
+    replace: <its broken version>
+    test: <the narrow command that should go red>
 ```
 
 Intent mode writes `.specs-inferno/intents/<intent>/review.yaml`:
@@ -79,12 +82,15 @@ scanner:
     answer: confirmed | struck
     reason: <one line>
 mutants:
-  - criterion: <criterion>
-    test: <the command you ran>
-    caught: yes | no
+  - criterion: <item>:<n>
+    file: <path>
+    line: <n>
+    find: <text that occurs once on that line>
+    replace: <its broken version>
+    test: <the narrow command that should go red>
 ```
 
-`verdict: clean` only with zero findings and every mutant caught. Only these keys: a key the schema does not hold is refused, and so is `tree:` or `commit:`, which `run.cjs` adds when it records. An empty list may be left out. No prose outside the file's fields.
+`verdict: clean` only with zero findings; a mutant that survives turns it to fix when the runner records the file. Only these keys: a key the schema does not hold is refused, and so is `tree:` or `commit:`, which `run.cjs` adds when it records. An empty list may be left out. No prose outside the file's fields.
 
 ## Return
 

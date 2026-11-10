@@ -46,7 +46,7 @@ test("an item's first review dispatches a cold reviewer, and its record call nam
   assert.equal(first.code, 3, shown(first));
   assert.match(first.out, /^dispatch specsmd-inferno-reviewer model model-review item a-one$/m);
   assert.doesNotMatch(first.out, /^resume /m);
-  assert.match(first.out, new RegExp(`^then run\\.cjs review --item a-one --reviewer <agent-id> --tree ${fixture.root} records it$`, "m"));
+  assert.match(first.out, new RegExp(`^then run\\.cjs review --item a-one --reviewer <agent-id> --tree ${fixture.root} records it; it runs the review's mutants first`, "m"));
 });
 
 test("the record writes the reviewer's id beside the tree and the commit", () => {
