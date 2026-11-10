@@ -126,16 +126,19 @@ test("an unscoped check reads every path outside .specs-inferno", () => {
   assert.deepEqual(uncommitted(fixture), [PENDING]);
 });
 
+// The selection reads committed paths only: a sibling's edit to a tracked file in the skipped
+// check's scope shows in a diff against the working tree, and must not select that check.
 test("a file outside a skipped check's scope is tolerated", () => {
   const fixture = landed(TWO);
   write(fixture.root, "docs/sibling.md", "a sibling's draft\n");
+  write(fixture.root, "docs/b.md", "a sibling's edit\n");
 
   const result = land(fixture);
 
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /SKIP echo docs \(no path in scope changed\)/);
   assert.match(result.out, /PASS \d+s echo scoped/);
-  assert.deepEqual(uncommitted(fixture), ["docs/sibling.md"]);
+  assert.deepEqual(uncommitted(fixture), ["docs/b.md", "docs/sibling.md"]);
 });
 
 test("a live mutate on a sibling file outside every integrate scope does not hold the landing", async () => {
@@ -205,6 +208,30 @@ test("a write outside the running scopes leaves the landing standing, and one in
   assert.ok(!proved(inside));
 });
 
+// The browser step reads the whole tree whenever it runs, as a check with no scope entry does.
+// a-one owns a spec, so the step runs at its landing, while every integrate check is scoped to src/.
+const BROWSER = SCOPED.replace("    - echo scoped\n", "    - echo scoped\n    - touch docs/late.md\n")
+  .replace("  finalize_scopes:\n", "  integrate_e2e:\n    command: echo ran\n  finalize_scopes:\n")
+  .replace('"echo scoped": ["src/**"]', '"echo scoped": ["src/**"]\n    "touch docs/late.md": ["src/a.ts"]');
+const OWNS_SPEC = { editable: ["src/a.ts", "e2e/a.spec.ts"] };
+
+test("a browser step that runs reads the whole tree: a sibling file outside every scoped check is refused, and a write there reds the landing", () => {
+  const beside = landed(BROWSER, OWNS_SPEC);
+  write(beside.root, "docs/sibling.md", "a sibling's draft\n");
+  const refused = land(beside);
+  assert.equal(refused.code, 2, refused.out + refused.err);
+  assert.match(refused.err, /ERROR \[DIRTY\] .*a check this landing runs reads: docs\/sibling\.md\./);
+  assert.ok(!proved(beside));
+
+  const fixture = landed(BROWSER, OWNS_SPEC);
+  const moved = land(fixture);
+  assert.match(moved.out, /PASS \d+s touch docs\/late\.md/);
+  assert.match(moved.out, /PASS \d+s echo ran e2e\/a\.spec\.ts/);
+  assert.equal(moved.code, 2, moved.out + moved.err);
+  assert.match(moved.out, /the code changed while integrate ran/);
+  assert.ok(!proved(fixture));
+});
+
 for (const [name, dirt, said] of [
   ["a check's scope", "src/b2.ts", /a check this landing runs/],
   ["the landing's ledger", LEDGER, /this landing owns or commits/],
@@ -234,13 +261,21 @@ test("a fold the sibling's file blocks names that file", () => {
   origin.git(other, ["add", "-A"]);
   origin.git(other, ["commit", "-qm", "origin moved the docs"]);
   origin.git(other, ["push", "-q", "origin", "main"]);
+  // Only HEAD's side changed docs/local.md since the merge base, and no side changed src/b.ts:
+  // both are uncommitted, and neither stops the merge, so neither is named.
+  origin.write(fixture.root, "docs/local.md", "committed here, never pushed\n");
+  origin.git(fixture.root, ["add", "-A"]);
+  origin.git(fixture.root, ["commit", "-qm", "a local commit origin lacks"]);
+  origin.write(fixture.root, "docs/local.md", "a sibling's edit on top\n");
+  origin.write(fixture.root, "src/b.ts", "export const b = 7;\n");
   origin.write(fixture.root, "docs/b.md", "a sibling's edit\n");
   origin.write(fixture.root, "docs/new.md", "a sibling's new file\n");
 
   const result = origin.run(fixture, ["integrate", "--tree", fixture.root]);
 
   assert.equal(result.code, 2, result.out + result.err);
-  assert.match(result.err, /ERROR \[DIRTY\] refusing to fold origin\/main into main over .*: docs\/b\.md, docs\/new\.md\./);
+  assert.match(result.err, /ERROR \[DIRTY\] refusing to fold origin\/main into main over .*: docs\/b\.md, docs\/new\.md\. /);
+  assert.doesNotMatch(result.err, /docs\/local\.md|src\/b\.ts/);
   assert.doesNotMatch(result.out + result.err, /conflict folding/);
 });
 
