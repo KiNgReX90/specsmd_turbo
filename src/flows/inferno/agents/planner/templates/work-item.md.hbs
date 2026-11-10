@@ -7,6 +7,7 @@ complexity: {{complexity}}
 mode: autopilot
 status: {{status}}
 depends_on: [{{#each depends_on}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}]
+delivers: [{{#each delivers}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}]
 created: {{created}}
 ---
 
@@ -21,6 +22,58 @@ created: {{created}}
 {{#each acceptance_criteria}}
 - [ ] {{this}}
 {{/each}}
+
+## Edge Cases
+
+{{#if edge_cases}}
+| Case | Expected behaviour | Test |
+| --- | --- | --- |
+{{#each edge_cases}}
+| {{this.case}} | {{this.expected}} | {{this.test}} |
+{{/each}}
+{{else}}
+None.
+{{/if}}
+
+## Out of Scope
+
+{{#if out_of_scope}}
+{{#each out_of_scope}}
+- {{this}}
+{{/each}}
+{{else}}
+None.
+{{/if}}
+
+## Test Plan
+
+{{#each test_plan.adds}}
+- Adds: {{this}}
+{{/each}}
+{{#each test_plan.integration}}
+- Integration with {{this.item}}: {{this.test}}
+{{/each}}
+{{#unless test_plan.integration}}
+- Integration: none
+{{/unless}}
+{{#each test_plan.breaks}}
+- Breaks: {{this}}
+{{/each}}
+{{#unless test_plan.breaks}}
+- Breaks: none
+{{/unless}}
+
+## Reuse
+
+{{#if reuse}}
+| Structure | Decision | Evidence |
+| --- | --- | --- |
+{{#each reuse}}
+| {{this.structure}} | {{this.decision}} | {{this.evidence}} |
+{{/each}}
+{{else}}
+None.
+{{/if}}
 
 ## Execution Manifest
 
