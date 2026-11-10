@@ -66,7 +66,7 @@ Turbo paths are under `src/flows/aidlc-turbo/`, INFERNO paths under `src/flows/i
 - **A recorded review stays readable.** Every new rule applies to a review file that is being recorded. A file recorded under 0.1.81 parses after the upgrade as before.
 - **Both hosts move together.** A change to an INFERNO agent text is ported to its Codex twin under `src/flows/inferno/codex/` in the same package.
 - **Agent text stays inside its budget.** A package that adds a sentence to an agent text removes one of equal weight when the role is near its ceiling.
-- **Turbo has its own maintainer.** T1 and T2 are proposals to that line. Agree them there before an implementer starts.
+- **Turbo changes with it.** T1 and T2 are decided by the owner of both flows, like every INFERNO package here. They ship in the same release.
 
 ## 4. Who runs it
 
@@ -281,7 +281,7 @@ Every brief carries all of this:
 3. **The release.** Validate, pack, install eval, e2e smoke, version, changelog, merge.
 4. **P5** as its own follow-up when its measurement says so. **P8** on the owner's go.
 
-Expectation for steps 1 to 3: about two working days of agent and machine time. It depends on where the tests may run and on the agreement with Turbo's maintainer.
+Expectation for steps 1 to 3: about two working days of agent and machine time. It depends on where the tests may run.
 
 ## 7. Rollout to a host
 
