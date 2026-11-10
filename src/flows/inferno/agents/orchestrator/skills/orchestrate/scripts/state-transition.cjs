@@ -25,6 +25,8 @@
  *   block-intent   --intent <id> --reason <w> park a pending intent outside the queue
  *   unblock-intent --intent <id>              return a parked intent to the queue
  *   review-item    --intent <id> --item <id>  record an item review verdict (state-review.cjs)
+ *   defer-item     --intent <id> --item <id>  take one item out of its intent for a later plan
+ *                  --reason <why> [--rewire <item>=<new-dep>]... (state-defer.cjs)
  *   check [--intent <id>]                     report ledger drift; exit 1 if any found
  *
  * `check` itself lives in state-check.cjs, the reader beside this writer, and is re-exported
@@ -35,7 +37,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   TransitionError, unquote, findKeyLine, loadState, locateIntents, locateWorkItems,
-  getIntent, statusOf, isComplete, setField, removeField, nowIso, writeState,
+  getIntent, statusOf, isComplete, isDeferred, isClosed, setField, removeField, nowIso, writeState,
 } = require('./state-ledger.cjs');
 const { listValues } = require('./state-lists.cjs');
 const archive = require('./state-archive.cjs');
@@ -43,7 +45,8 @@ const { archivePaths, archivedIds } = archive;
 const { check } = require('./state-check.cjs');
 const block = require('./state-block.cjs');
 const review = require('./state-review.cjs');
-const { integrateCall } = require('./run-call.cjs');
+const { deferItem } = require('./state-defer.cjs');
+const { blockIntentCall, integrateCall, unclaimIntentCall } = require('./run-call.cjs');
 const { withStateLock, atomicWrite } = require('./state-store.cjs');
 const { main: runCli } = require('./state-cli.cjs');
 
@@ -120,6 +123,12 @@ function completeItem(options) {
       'ITEM_NOT_FOUND'
     );
   }
+  if (isDeferred(statusOf(lines, item))) {
+    throw new TransitionError(
+      `refusing to complete ${options.item}: it is deferred out of ${options.intent} for a later plan, so nothing lands for it.`,
+      'ITEM_DEFERRED'
+    );
+  }
 
   const proof = options.proof ? String(options.proof).trim() : '';
   if (!proof) {
@@ -166,10 +175,10 @@ function closeIntent(options) {
   const intent = getIntent(lines, options.intent);
   const items = locateWorkItems(lines, intent);
 
-  // The guard that makes "intent completed over pending items" unrepresentable.
-  const outstanding = items
-    .map((item) => ({ id: item.id, status: statusOf(lines, item) }))
-    .filter((item) => !isComplete(item.status));
+  // The guard that makes "intent completed over pending items" unrepresentable. A deferred item
+  // is closed for this intent (state-defer.cjs), and the next plan reads it from the archive.
+  const statuses = items.map((item) => ({ id: item.id, status: statusOf(lines, item) }));
+  const outstanding = statuses.filter((item) => !isClosed(item.status));
 
   if (outstanding.length > 0) {
     const detail = outstanding.map((item) => `${item.id} (${item.status || 'no status'})`).join(', ');
@@ -177,6 +186,14 @@ function closeIntent(options) {
       `refusing to close ${options.intent}: ${outstanding.length} work item(s) not completed: ${detail}. ` +
         `Land each with ${integrateCall(options.tree || '<worktree>', '<id>', options.intent)}`,
       'ITEMS_OUTSTANDING'
+    );
+  }
+  const deferred = statuses.filter((item) => isDeferred(item.status)).map((item) => item.id);
+  if (items.length > 0 && deferred.length === items.length) {
+    throw new TransitionError(
+      `refusing to close ${options.intent}: every work item is deferred, so it built nothing. Leave the whole intent ` +
+        `for later: ${unclaimIntentCall(options.intent)}, then ${blockIntentCall(options.intent)}.`,
+      'NOTHING_BUILT'
     );
   }
 
@@ -191,7 +208,7 @@ function closeIntent(options) {
   removeField(lines, intent, 'claimed_by');
   writeState(file, lines);
 
-  return { changed: true, intent: options.intent, status: 'completed', previous, completed_at: completedAt, items: items.length };
+  return { changed: true, intent: options.intent, status: 'completed', previous, completed_at: completedAt, items: items.length, deferred };
 }
 
 /** Read either supported sequence form through the shared parser. */
@@ -328,6 +345,7 @@ const blockIntent = locked(block.blockIntent);
 const unblockIntent = locked(block.unblockIntent);
 const lockedCommands = {
   completeItem: locked(completeItem),
+  deferItem: locked(deferItem),
   closeIntent: locked(closeIntent),
   claimIntent: locked(claimIntent),
   unclaimIntent: locked(unclaimIntent),
@@ -369,6 +387,8 @@ module.exports = {
   statusOf,
   dependsOnIntents,
   isComplete,
+  isDeferred,
+  isClosed,
   unquote,
   findKeyLine,
 };

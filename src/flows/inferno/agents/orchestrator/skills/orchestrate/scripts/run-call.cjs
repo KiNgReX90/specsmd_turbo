@@ -120,7 +120,11 @@ const blockIntentCall = (intent) => writerCall('block-intent', intent, ['--reaso
 /** Give back a claim nothing was built on. */
 const unclaimIntentCall = (intent) => writerCall('unclaim-intent', intent);
 
+/** Defer an item out of its intent, with a new edge to name for each dependent it leaves. */
+const deferItemCall = (intent, item, dependents = []) => writerCall('defer-item', intent,
+  ['--item', item, '--reason', '"<why it waits for a later plan>"', ...dependents.map((id) => `--rewire ${id}=<new-dep>`)]);
+
 module.exports = {
-  RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
+  RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
   intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
 };
