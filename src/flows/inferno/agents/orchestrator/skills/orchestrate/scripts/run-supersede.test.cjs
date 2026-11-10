@@ -132,7 +132,33 @@ test("the fixture's cleanup ends every job a test detached before it removes the
   assert.equal(fs.existsSync(path.dirname(f.tree)), false, 'the fixture dir is gone');
 });
 
-test('a running lane with no stop is refused before any signal',{ skip: !LINUX }, (t) => {
+/**
+ * A process of the test's own whose lane job file sits in the fixture's cache, and the fixture's
+ * cleanup run; returns whether the process outlived it. The test ends the process by its pid.
+ */
+function outlivesCleanup(t, options) {
+  const cleanups = [];
+  const f = fixture({ after: (fn) => cleanups.push(fn) });
+  const stranger = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'run.cjs'], {
+    cwd: options.cwd(f), detached: options.detached, stdio: 'ignore',
+  });
+  t.after(() => stranger.kill('SIGKILL'));
+  until(() => jobs.alive({ pid: stranger.pid }), 'the stranger runs');
+  fs.mkdirSync(cacheOf(f), { recursive: true });
+  writeFile(path.join(cacheOf(f), 'lane-smoke-job.json'), JSON.stringify({ pid: stranger.pid, lane: 'smoke' }));
+  for (const cleanup of cleanups) cleanup();
+  return jobs.alive({ pid: stranger.pid });
+}
+
+test("the fixture's cleanup leaves a process that does not lead its own group", { skip: !LINUX }, (t) => {
+  assert.ok(outlivesCleanup(t, { cwd: (f) => f.tree, detached: false }), 'a process in the test runner\'s group is never signalled');
+});
+
+test("the fixture's cleanup leaves a group leader that runs outside the fixture's tree", { skip: !LINUX }, (t) => {
+  assert.ok(outlivesCleanup(t, { cwd: () => __dirname, detached: true }), 'a group of another tree is never signalled');
+});
+
+test('a running lane with no stop is refused before any signal', { skip: !LINUX }, (t) => {
   const { f, lane } = walking(t, config({ smoke: 'wait' }));
   touch(f);
   const result = run(f, 'gate', '--detach', '--supersede');
