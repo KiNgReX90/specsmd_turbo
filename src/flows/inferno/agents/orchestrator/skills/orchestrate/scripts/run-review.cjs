@@ -99,21 +99,16 @@ function hostActor(actor, config = {}) {
   return { agent: `specsmd-inferno-${key}`, model: pinned || roleModel };
 }
 
-/** The host's tool that resumes an agent it spawned. */
-const RESUME = { claude: 'SendMessage', codex: 'followup_task' };
-
 /**
  * The lines that reach the reviewer of a review owed, `subject` naming the item or the intent.
- * `reviewer` is the agent id the last recorded review of that same subject names: it already
- * holds what it read, so it is resumed on the delta, with a fresh dispatch as the fallback. A
- * first review, and one whose record names no reviewer, is a fresh dispatch.
+ * Every review is a fresh dispatch: a resumed reviewer carries the context of every round before
+ * into the next, and a delta review reads the fix and nothing else. `previous` is the review file
+ * a delta review answers, the one at `write`, named so the reviewer reads its findings first; a
+ * first review has none.
  */
-function reviewerLines(config, subject, reviewer, body) {
+function reviewerLines(config, subject, previous, body) {
   const { agent, model } = hostActor('reviewer', config);
-  const named = `${agent}${model ? ` model ${model}` : ''}`;
-  if (!reviewer) return [`dispatch ${named} ${subject}`, ...body];
-  return [`resume ${reviewer} ${subject} with ${RESUME[config.host === 'codex' ? 'codex' : 'claude']}`, ...body,
-    `  if it does not answer, dispatch a fresh ${named} with these lines`];
+  return [`dispatch ${agent}${model ? ` model ${model}` : ''} ${subject}`, ...(previous ? [`  previous ${previous}`] : []), ...body];
 }
 
 /** The actor with the model the host names for it, as frontier and review print it. */
@@ -164,18 +159,23 @@ function realAppLine(tree, config, range, id = null) {
   return realAppPaths(config, path.join(lib.SPECS_DIR, 'config.yaml')).length > 0 ? [`  real-app ${realAppCall(tree, range, id)}`] : [];
 }
 
-function owed(tree, context, reason, from, paths, reviewer = null) {
+/**
+ * The review owed, from `from` to HEAD. After a recorded review `from` is the commit it read, so
+ * the range is the fix, and the dispatch names that review as the previous one.
+ */
+function owed(tree, context, reason, from, paths) {
   const { intent, item, config, rel } = context;
   const { agent, model } = hostActor('reviewer', config);
   const range = `${short(tree, from)}..${short(tree, 'HEAD')}`;
   const spec = path.relative(tree, lib.readItemSpec(tree, intent.id, item.id).file);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
+  const previous = item.review && fs.existsSync(path.join(tree, rel)) ? rel : null;
   return {
     exit: 3,
-    payload: { ok: false, item: item.id, owed: reason, agent, model, range, paths, spec, brief, write: rel },
+    payload: { ok: false, item: item.id, owed: reason, agent, model, range, previous, paths, spec, brief, write: rel },
     out: [
       `review owed for ${item.id}: ${reason}`,
-      ...reviewerLines(config, `item ${item.id}`, reviewer, [
+      ...reviewerLines(config, `item ${item.id}`, previous, [
         `  range ${range} paths ${paths.join(' ') || '(the whole range)'}`,
         ...realAppLine(tree, config, range, item.id),
         `  spec ${spec}`,
