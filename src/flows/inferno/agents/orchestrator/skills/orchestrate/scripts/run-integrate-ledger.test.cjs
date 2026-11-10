@@ -33,6 +33,9 @@ const STAGES_NOTE = `fs.mkdirSync(${JSON.stringify(path.dirname(HALT))}, { recur
 fs.writeFileSync(${JSON.stringify(HALT)}, "halted\\n");
 cp.execFileSync("git", ["add", ${JSON.stringify(HALT)}]);`;
 
+// Staged only when the command is run as `beside.cjs again`: a command's green proof is keyed on its string, so the second run needs another string to run it at all.
+const STAGES_NOTE_ON_RERUN = `if (process.argv[2] === "again") {\n${STAGES_NOTE}\n}`;
+
 const integrate = (fixture) => run(fixture, ["integrate", "--tree", fixture.root, "--item", "a-one"]);
 const committed = (fixture) => git(fixture.root, ["show", "--name-only", "--format=", "HEAD"]).split("\n").sort();
 
@@ -54,10 +57,11 @@ test("its review step then records it", () => {
 
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /review a-two clean, recorded/);
-  const text = fs.readFileSync(path.join(fixture.root, REVIEW), "utf8").trimEnd().split("\n");
+  const text = git(fixture.root, ["show", `HEAD:${REVIEW}`]).trimEnd().split("\n");
   assert.match(text[text.length - 3], /^tree: /);
   assert.match(text[text.length - 2], /^commit: /);
   assert.equal(text[text.length - 1], "reviewer: rev-2");
+  assert.equal(git(fixture.root, ["status", "--porcelain", "--", REVIEW]), "");
 });
 
 test("a file staged beside an integrate is not swept into the ledger commit", () => {
@@ -68,4 +72,18 @@ test("a file staged beside an integrate is not swept into the ledger commit", ()
   assert.equal(result.code, 0, result.out + result.err);
   assert.ok(git(fixture.root, ["diff", "--cached", "--name-only"]).split("\n").includes(HALT));
   assert.ok(!committed(fixture).includes(HALT));
+});
+
+test("integrating a completed item again writes nothing and leaves a file staged beside it staged", () => {
+  const fixture = landing(STAGES_NOTE_ON_RERUN);
+  assert.equal(integrate(fixture).code, 0);
+  write(fixture.root, ".specs-inferno/config.yaml", fixture.config.replace(/(node \S+beside\.cjs)/, "$1 again"));
+  git(fixture.root, ["commit", "-qam", "the command now stages a note"]);
+  const head = git(fixture.root, ["rev-parse", "HEAD"]);
+
+  const result = integrate(fixture);
+
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.equal(git(fixture.root, ["rev-parse", "HEAD"]), head, "no ledger commit for a completion that wrote nothing");
+  assert.ok(git(fixture.root, ["diff", "--cached", "--name-only"]).split("\n").includes(HALT));
 });
