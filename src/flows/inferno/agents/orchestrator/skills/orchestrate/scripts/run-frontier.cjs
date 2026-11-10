@@ -26,6 +26,7 @@ const { actorLabel, hostActor, nextActor, nextLine, tierOf } = require('./run-re
 const { integrateCall, itemReviewCall } = require('./run-call.cjs');
 const { waitFloorRefusal } = require('./run-codex-wait.cjs');
 const { RunError } = require('./run-error.cjs');
+const { reviewPath } = require('./run-review-file.cjs');
 
 /**
  * The hour the proof rule landed. Every ledger written before it carries completed items and
@@ -117,6 +118,27 @@ function completedManifests(tree, intent) {
   });
 }
 
+/**
+ * The items a builder already took: logged by dispatch-log, or reviewed, recorded or only
+ * written. Their diagnosis probe measured the tree before their own fix, so it is stale by
+ * design. A tree outside git keeps no dispatch log, so there only the review counts.
+ */
+function startedItems(tree, intentId, items) {
+  let logged = [];
+  try {
+    const log = path.join(lib.cacheDir(tree), 'dispatch', `${intentId}.log`);
+    if (fs.existsSync(log)) {
+      logged = fs.readFileSync(log, 'utf8').split('\n').map((line) => line.split('\t'))
+        .filter((fields) => fields[1] === intentId).map((fields) => fields[2]);
+    }
+  } catch (error) {
+    if (error.code !== 'NO_REPO') throw error;
+  }
+  const started = (item) => Boolean(item.review) || logged.includes(item.id) ||
+    fs.existsSync(path.join(tree, reviewPath(intentId, item.id)));
+  return new Set(items.filter(started).map((item) => item.id));
+}
+
 /** The contract check, plus the one team-scheduler cannot make: the paths have to exist. */
 function contractErrors(tree, items) {
   const errors = [];
@@ -164,17 +186,25 @@ function frontier(intentId, options) {
   // itself deleted. Without a proof it holds its successors instead, until an integration
   // proves the tree it landed on (2026-09-09).
   const held = intent.items.filter((item) => isComplete(item.status) && !integrated(item));
-  const ready = items.filter((item) => item.depends_on.every((id) => completedIds.has(id)));
+  const unblocked = items.filter((item) => item.depends_on.every((id) => completedIds.has(id)));
 
   // The evidence a corrective item was planned on, replayed on the tree it is about to be
   // built in. Stale evidence is a cause nobody measured here, and dispatching on it is how a
-  // plan asserted a pixel cause it had never seen (2026-09-09).
-  const stale = probes.replayErrors(tree, ready);
-  if (stale.length > 0) {
+  // plan asserted a pixel cause it had never seen (2026-09-09). Only an item nobody dispatched
+  // or reviewed is about to be built on it. A stale probe holds its own item: on 2026-11-10 the
+  // stale probes of three built items stopped the whole frontier and hid the two truly ready.
+  const started = startedItems(tree, intent.id, unblocked);
+  const stale = [];
+  const ready = unblocked.filter((item) => {
+    const errors = started.has(item.id) ? [] : probes.replayErrors(tree, [item]);
+    stale.push(...errors);
+    return errors.length === 0;
+  });
+  if (stale.length > 0 && ready.length === 0) {
     return { exit: 2, payload: { ok: false, errors: stale }, out: stale.map((error) => `INVALID ${error}`) };
   }
 
-  const waiting = items.filter((item) => !ready.includes(item));
+  const waiting = items.filter((item) => !unblocked.includes(item));
   const owns = (item) => item.ownership.editable || [];
   const shares = (entry, other) => owns(other).some((owned) => lib.overlaps(entry, owned, tree));
 
@@ -221,6 +251,7 @@ function frontier(intentId, options) {
   // The ownership the planner missed: a file outside the item that names what the item owns.
   const closure = ownership.candidates(tree, ready, items);
   out.push(...ownership.candidateLines(closure));
+  out.push(...stale.map((error) => `INVALID ${error}`));
   if (out.length === 0) out.push('no item left in this intent');
   return {
     exit: held.length > 0 ? 3 : 0,
@@ -233,6 +264,7 @@ function frontier(intentId, options) {
       batch,
       candidates: closure.found,
       skipped: closure.skipped,
+      invalid: stale,
     },
     out,
   };

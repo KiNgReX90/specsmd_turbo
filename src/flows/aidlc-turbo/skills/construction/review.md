@@ -57,7 +57,7 @@ Walk only your own lens: the other lenses look at the same change at the same ti
 8. **Changed tests**: every existing test the proof's `tests_changed` lists as `modified` or `deleted` needs a reason in the story: a criterion or an edge-case row that changes the behaviour it checks. Without one it is `major`: a test bent to fit the code.
 9. **The story itself**: a criterion, an edge-case row or a `D-n` it names that the brief, another criterion or the code it builds on contradicts, so no code can meet both: a finding with `mismatch: true`, both sides quoted and named, never a defect of the builder.
 
-Then, in `mode: full`, propose **mutants**, at most 3: each one small change to a production line this story added or changed, a line that a criterion or an edge-case row says must matter. Flip a comparison, a condition or a constant, or drop a call, so that the code still compiles. `from` is the text exactly as it stands on that line, `to` what replaces it. `test` runs only this story's tests that cover that line, with the runner the brief's `## Verification` uses, and passes on the code as it is: the script runs it once unchanged first, and a `test` that fails there or runs no test makes the mutant invalid. It may start with `cd {dir} &&` and a folder inside the code root, as a verification command may; beyond that, no shell operator (`&&`, `|`, `;`, `>`). `criterion` says what the line guards, in the story's own words. Never a test file. Return `mutants: []` when nothing is worth breaking. Never run a mutant yourself: you are read-only, and the other lenses read the same worktree. A script runs them after the reviews, and a mutant whose test stays green is a `major` finding.
+Then, in `mode: full`, propose **mutants**, one per acceptance criterion that a test covers: each one small change to a production line this story added or changed, a line that criterion says must matter. Flip a comparison, a condition or a constant, or drop a call, so that the code still compiles. `from` is the text exactly as it stands on that line, `to` what replaces it. `test` runs only this story's tests that cover that line, with the runner the brief's `## Verification` uses, and passes on the code as it is: the script runs it once unchanged first, and a `test` that fails there or runs no test makes the mutant invalid. It may start with `cd {dir} &&` and a folder inside the code root, as a verification command may; beyond that, no shell operator (`&&`, `|`, `;`, `>`). `criterion` starts with the criterion's number in the story's list, 1 for the first, then what the line guards, in the story's own words. Never two mutants on one criterion, never a test file. A criterion no real test covers gets no mutant: its number goes in `untested`, besides its finding under item 1. Return `mutants: []` when no criterion has a test. Never run a mutant yourself: you are read-only, and the other lenses read the same worktree. A script runs them after the reviews; a mutant whose test stays green, and a criterion with a test and no killed mutant, are `major` findings.
 
 `lens: quality`, is it well written and safe, whatever the project's own rules say:
 
@@ -98,7 +98,7 @@ You get your previous verdict and the fix diff, nothing to review again from scr
 - A new finding only where the fix diff changed something: a `blocker` or `major` the fix broke. Never a new `minor` on a line the fix did not change.
 - Never re-review the rest of the change.
 - `lens: story` and `scope: intent`: a fix that changes a test's assertion where the finding did not say the test was wrong is `major`. A fix that switches a test off (`skip`, `only`, `todo`, `xit`, `@Disabled`, `@Ignore`) is a `blocker`. This holds at finish too, where `story-verify.cjs` does not look for it.
-- No mutants in delta mode. An `M` finding is judged by the script that reran its mutant, not by you: leave it out of your verdict, unless your assignment hands it to you with the script's `INVALID` reason or the builder's dispute. Then judge from the fix diff whether a test now turns red on that change.
+- No mutants in delta mode, but one: a `C` finding (a criterion with a test whose mutant was invalid, or that had none) handed to you with the script's reason gets one new mutant for that criterion, with the id your assignment gives; the script decides it. An `M` finding is judged by the script that reran its mutant, not by you: leave it out of your verdict, unless your assignment hands it to you with the script's `INVALID` reason or the builder's dispute. Then judge from the fix diff whether a test now turns red on that change. A `C` finding whose one new mutant is spent you judge the same way, from the code.
 
 ### 5. Grade every finding
 
@@ -135,11 +135,12 @@ mutants:
     from: "daysLeft < 0"
     to: "daysLeft <= 0"
     test: "npx vitest run src/auth/__tests__/login.test.ts"
-    criterion: "a password that expires today still logs in"
+    criterion: "1: a password that expires today still logs in"
+untested: []
 ```
 
 - `lens`: yours; `scope: intent` has none. `proof` only from `lens: story` and `scope: intent`.
-- `mutants` only from `lens: story` in `mode: full`, ids `M1`, `M2`, `M3`; `mutants: []` when none.
+- `mutants` and `untested` only from `lens: story`. In `mode: full` one mutant per criterion with a test, ids `M1`, `M2`, ... in criterion order, and in `untested` the numbers of the criteria no real test covers, for example `untested: [3]`. In `mode: delta` only the new mutant a `C` finding asks for. `[]` when none.
 - Finding ids run `F1`, `F2`, ... for `lens: story` and `scope: intent`, `Q1`, `Q2`, ... for `lens: quality`, and `D{batch}-1`, `D{batch}-2`, ... for `lens: docs`; a delta verdict keeps the old ids and numbers new findings on from the highest.
 - `lens: docs`: every finding also has `rule`, for example `rule: "conventions/database-standards.md, Column names"`, and `story_demands: true` when step 3 says so.
 - `mismatch: true` on a finding that shows the story, the brief or a page is wrong, not the code, from any lens or scope: its `issue` quotes both sides and names where each stands, and its `fix` proposes which side gives way. The construction agent asks the human; the builder never gets it as a fix.
