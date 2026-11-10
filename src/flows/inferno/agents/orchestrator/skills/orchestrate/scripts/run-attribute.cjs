@@ -12,6 +12,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const dispatch = require('./run-dispatch.cjs');
+const { grantedPaths } = require('./run-grant.cjs');
 const { ownershipOverlaps, unexplainedChanges } = require('./run-peers.cjs');
 
 const { RunError } = lib;
@@ -78,10 +79,12 @@ function newlyHidden(tree, before, now) {
  * as `outside` otherwise; `unclaimed` lists those changes alone. A path the fold of `options.base`
  * brought in is the base's. Any other commit since the baseline, a sibling's landing or a
  * builder's own, counts like an uncommitted change. `options.open` are the records still running
- * beside the item, each claiming what its frozen ownership covers.
+ * beside the item, each claiming what its frozen ownership covers. A path the orchestrator
+ * granted the dispatch (run-grant.cjs) is the item's as if its spec listed it.
  */
-function verifyDispatch(tree, record, editable, options = {}) {
+function verifyDispatch(tree, record, specEditable, options = {}) {
   dispatch.validateDispatch(tree, record);
+  const editable = [...specEditable, ...grantedPaths(record)];
   const own = dispatch.effective(tree, record);
   for (const entry of own.members.filter((member) => member.phase === 'accepted')) {
     const patch = dispatch.snapshotDelta(entry.beforeSnapshot, entry.acceptedSnapshot);
@@ -212,7 +215,7 @@ function attribute(tree, items, options) {
     if (open.length > 0 && result.unclaimed.some((file) => !ledger(file))) throw stillOpen(open[0]);
     for (const file of result.outside) if (!ledger(file)) outside.add(file);
     for (const file of result.unreported) if (!ledger(file)) unreported.add(file);
-    attributed.push({ items: ids, dispatch_id: result.dispatch_id, since: result.since, changed: result.changed });
+    attributed.push({ items: ids, dispatch_id: result.dispatch_id, since: result.since, changed: result.changed, granted: grantedPaths(record) });
   }
   return { since: attributed[0].since, outside: [...outside].sort(), unreported: [...unreported].sort(), attributed };
 }
