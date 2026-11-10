@@ -114,7 +114,7 @@ sandbox:                    # sandbox only; production always makes both
   code_scaffold: true       # the Code Scaffold, saved as code-scaffold.html
   scaffold_after_build: true  # the Code Scaffold updated as built, saved as code-scaffold-built.html
 construction:
-  mutants: 3                # lines a script breaks per story to prove its tests can fail; 0 = off
+  mutants: all              # one line broken per tested criterion to prove its test can fail; a number caps them, 0 = off
 sync:
   docs: none                # confluence | none, optional
   issues: none              # jira | none, optional
