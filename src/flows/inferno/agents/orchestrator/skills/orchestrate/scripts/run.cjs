@@ -145,7 +145,7 @@ const COMMANDS = {
   frontier: (args, options) => intents.frontier(required(args[0], 'frontier <intent-id>'), options),
   probes: (args, options) => probes(required(args[0], 'probes <item-id>'), options),
   'verify-item': (args, options) =>
-    gate.verifyItem(required(args[0] || options.items, 'verify-item <item-id> | verify-item --items <a,b>'), options),
+    require('./run-item-proof.cjs').verifyItem(required(args[0] || options.items, 'verify-item <item-id> | verify-item --items <a,b>'), options),
   integrate: (args, options) => integrate(options),
   doubles: (args, options) => checkDoubles(options),
   'real-app': (args, options) => realApp(options),
