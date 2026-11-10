@@ -54,6 +54,9 @@ function itemOf(ledger, id, options) {
     : ledger.intents.find((entry) => entry.items.some((item) => item.id === id));
   const item = intent && intent.items.find((entry) => entry.id === id);
   if (!item) throw new RunError(`work item not found in the live ledger: ${id}`, 'ITEM_NOT_FOUND');
+  if (writer.isDeferred(item.status)) {
+    throw new RunError(`${id} is deferred out of ${intent.id}: it owes no review and no integrate, and nothing lands for it`, 'ITEM_DEFERRED');
+  }
   return { intent, item };
 }
 

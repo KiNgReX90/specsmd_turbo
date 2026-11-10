@@ -26,6 +26,7 @@ const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { intentMutants } = require('./run-review-mutants.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const slot = require('./run-slot.cjs');
+const { deferredItems } = require('./state-defer.cjs');
 
 const { RunError } = lib;
 
@@ -66,6 +67,9 @@ function dispatch(tree, context, reasons, from, folded, previous = null) {
   const brief = path.join(dir, 'brief.md');
   const items = owed.intentItems(tree, intent);
   const specs = path.join(dir, 'work-items');
+  // A deferred item's criteria are out of this intent, and the brief still numbers them.
+  const deferred = [...deferredItems(lib.statePath(tree), intent)]
+    .map(([id, why]) => `  deferred ${id}: ${why}. It is out of this intent, so judge no criterion it alone delivers`);
   const scan = owed.scanPath(tree, intent);
   const scanned = fs.existsSync(path.join(tree, scan));
   // The corrections of minor findings no item review re-read, which this reviewer reads closely.
@@ -87,6 +91,7 @@ function dispatch(tree, context, reasons, from, folded, previous = null) {
         ...realAppLine(tree, config, range),
         `  brief ${brief}`,
         `  specs ${specs}: ${items.map((id) => `${id}.md`).join(' ') || '(none)'}`,
+        ...deferred,
         ...(scanned ? [`  scan ${scan}`] : []),
         ...settled.map((entry) => `  settled ${entry.item} ${entry.range}`),
         `  write ${rel}`,
