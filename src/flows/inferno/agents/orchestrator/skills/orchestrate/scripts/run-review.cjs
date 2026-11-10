@@ -26,6 +26,7 @@ const { integrateCall, itemRecordCall, itemReviewCall, realAppCall } = require('
 const { realAppPaths } = require('./run-real-app.cjs');
 const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
 const { itemMutants } = require('./run-review-mutants.cjs');
+const { dirtyFiles } = require('./run-dirt.cjs');
 
 const { RunError } = lib;
 
@@ -271,7 +272,7 @@ function review(options) {
   const listed = pending ? pendingFiles(tree, rel, item.id) : current ? current.files : [];
   const mine = (file) => lib.ownedBy(file, editable) || listed.includes(file);
   const restored = recoverInterrupted(tree, { keepLive: (file) => !mine(file) });
-  const dirty = lib.dirtyPaths(tree).filter(mine);
+  const dirty = dirtyFiles(tree).filter(mine);
   if (dirty.length > 0) {
     throw new RunError(afterRecovery(restored,
       `refusing to review ${item.id} over uncommitted work in ${dirty.slice(0, 5).join(', ')}: ` +

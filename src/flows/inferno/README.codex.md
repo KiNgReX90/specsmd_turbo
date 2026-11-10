@@ -10,6 +10,8 @@ instructions.
 - `$specsmd-inferno`: select, execute, or resume one planned intent.
 - `$specsmd-inferno-planner`: capture or repair an intent and its work items.
 - `$specsmd-inferno-config`: create, review, or update Codex execution settings.
+- `$specsmd-inferno-standards`: draft the project's rule files under
+  `.specs-inferno/standards/` for the owner to approve.
 - `$specsmd-inferno-builder`: the internal worker procedure; the orchestrator
   dispatches it with a complete assignment.
 
@@ -72,6 +74,7 @@ The source defaults of each role. A `roles:` entry in
 | Strong builder | `gpt-6.1-sol` | `xhigh` |
 | Escalate builder | `gpt-6.1-sol` | `xhigh` |
 | Reviewer | `gpt-6.1-sol` | `xhigh` |
+| Quality reviewer | `gpt-6.1-sol` | `high` |
 | Oracle | `gpt-6-astra` | `xhigh` |
 | Config helper | `gpt-5.6-terra` | `high` |
 | Cheap builder | `gpt-5.6-terra` | `high` |

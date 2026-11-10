@@ -16,6 +16,7 @@ INFERNO is a standalone specsmd flow, chosen at install time *instead of* FIRE. 
 | `/specsmd-inferno-builder` | Subagent dispatched by the orchestrator for exactly one work item |
 | `/specsmd-inferno-oracle` | Decision subagent spawned by the orchestrator (or any session) for a judgment call the asker could not decide itself; decides from the artifact, on the frontier tier, and a builder builds it |
 | `/specsmd-inferno-config` | Wizard for the optional `.specs-inferno/config.yaml` |
+| `/specsmd-inferno-standards` | Drafts the project's rule files under `.specs-inferno/standards/` from its instruction files, for the owner to approve |
 
 ## What's different from FIRE
 

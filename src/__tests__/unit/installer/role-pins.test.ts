@@ -28,6 +28,11 @@ const CLAUDE_ROLE_FILES: Record<string, string[]> = {
     '.claude/agents/specsmd-inferno-reviewer.md',
     '.specsmd/inferno/agents/reviewer/agent.md',
   ],
+  'reviewer-quality': [
+    '.claude/commands/specsmd-inferno-reviewer-quality.md',
+    '.claude/agents/specsmd-inferno-reviewer-quality.md',
+    '.specsmd/inferno/agents/reviewer-quality/agent.md',
+  ],
   scanner: [
     '.claude/commands/specsmd-inferno-scanner.md',
     '.claude/agents/specsmd-inferno-scanner.md',
@@ -40,8 +45,8 @@ function pins(rel: string) {
   return [fm.match(/^model:\s*(\S+)\s*$/m)?.[1], fm.match(/^effort:\s*(\S+)\s*$/m)?.[1]];
 }
 
-// Subagents write the 5 minute cache by default. The three roles that wait on a warm resume ask for 1 hour.
-const CACHE_1H_ROLES = ['builder', 'builder-escalate', 'reviewer'];
+// Subagents write the 5 minute cache by default. The roles that wait on a warm resume ask for 1 hour.
+const CACHE_1H_ROLES = ['builder', 'builder-escalate', 'reviewer', 'reviewer-quality'];
 const CACHE_5M_ROLES = ['builder-cheap', 'config', 'oracle', 'planner', 'scanner'];
 
 function cacheTtl(rel: string) {
@@ -80,6 +85,7 @@ describe.sequential('role pins from host config', { timeout: 30_000 }, () => {
       oracle: ['claude-opus-5-5', 'xhigh'],
       planner: ['claude-opus-5-5', 'xhigh'],
       reviewer: ['claude-opus-5-5', 'xhigh'],
+      'reviewer-quality': ['claude-opus-5-5', 'high'],
       scanner: ['claude-opus-5-5', 'high'],
     };
     for (const [role, files] of Object.entries(CLAUDE_ROLE_FILES)) {
@@ -87,7 +93,7 @@ describe.sequential('role pins from host config', { timeout: 30_000 }, () => {
     }
   });
 
-  it('asks for the 1 hour cache on the builder, builder-escalate and reviewer agents only', async () => {
+  it('asks for the 1 hour cache on the builder, builder-escalate and both reviewer agents only', async () => {
     await installFlow('inferno', ['claude']);
     for (const role of CACHE_1H_ROLES) for (const rel of installed(role)) expect(cacheTtl(rel), rel).toBe('1h');
     for (const role of CACHE_5M_ROLES) {
@@ -115,6 +121,18 @@ describe.sequential('role pins from host config', { timeout: 30_000 }, () => {
     for (const rel of CLAUDE_ROLE_FILES.oracle) expect(pins(rel), rel).toEqual(['claude-opus-5-5', 'xhigh']);
     const lock = readLock();
     for (const rel of CLAUDE_ROLE_FILES.builder) expect(lock.files[rel].sha256).toBe(sha256(readFileSync(rel)));
+  });
+
+  // The quality lens is a role of its own, so a host pins it apart from the contract reviewer.
+  it('renders the reviewer-quality role on both hosts and leaves the contract reviewer at its default', async () => {
+    write('.specs-inferno/config.yaml', 'roles:\n  reviewer-quality: {model: claude-test-model, effort: low}\n');
+    write('.specs-inferno/config.codex.yaml', 'roles:\n  reviewer_quality:\n    agent: specsmd_inferno_reviewer_quality\n    model: gpt-test-quality\n');
+    await installFlow('inferno', ['claude', 'codex']);
+
+    for (const rel of CLAUDE_ROLE_FILES['reviewer-quality']) expect(pins(rel), rel).toEqual(['claude-test-model', 'low']);
+    for (const rel of CLAUDE_ROLE_FILES.reviewer) expect(pins(rel), rel).toEqual(['claude-opus-5-5', 'xhigh']);
+    expect(tomlPins('.codex/agents/specsmd_inferno_reviewer_quality.toml')).toEqual(['gpt-test-quality', 'high']);
+    expect(tomlPins('.codex/agents/specsmd_inferno_reviewer.toml')).toEqual(['gpt-6.1-sol', 'xhigh']);
   });
 
   it('renders only the key a role entry names and never pins the orchestrator', async () => {

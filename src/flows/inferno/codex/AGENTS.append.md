@@ -9,6 +9,8 @@
 - Use `$specsmd-inferno` to select, execute, or resume a planned intent. Intent
   selection stays in the parent conversation before orchestrator delegation.
 - Use `$specsmd-inferno-intents` to list current intents without selecting, claiming, or starting one.
+- Use `$specsmd-inferno-standards` to draft the project's rule files under
+  `.specs-inferno/standards/`; the owner's approval stays in the parent conversation.
 - Treat legacy slash-command wording as intent to invoke the matching Codex
   skill, never as a reason to read or execute another host's command file.
 - The orchestrator alone dispatches `specsmd_inferno_builder_strong`,
