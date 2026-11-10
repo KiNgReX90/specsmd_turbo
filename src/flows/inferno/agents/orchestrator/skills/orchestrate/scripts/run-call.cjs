@@ -79,6 +79,9 @@ const itemReviewCall = (tree, id, intent = null) => runCall('review', tree, inte
  */
 const itemRecordCall = (tree, id, intent = null) => runCall('review', tree, intent, ['--item', id, '--reviewer', '<agent-id>']);
 
+/** The check and the proof of one item, or of the batch `ids` names, as verify-item checks it. */
+const verifyItemCall = (tree, ids) => runCall('verify-item', tree, null, ids.length > 1 ? ['--items', ids.join(',')] : [ids[0]]);
+
 /** Land one item: fold, the cheap checks, then its completion; of `intent` when it is not the caller's. */
 const integrateCall = (tree, id, intent = null) => runCall('integrate', tree, intent, ['--item', id]);
 
@@ -90,10 +93,26 @@ const intentRecordCall = (tree) => runCall('review', tree, null, ['--reviewer', 
 
 /**
  * The scan before the intent review, or its collect. Given the plan's intent it is the
- * plan-time scan, which asks the wiring question alone.
+ * plan-time cross-check.
  */
 function scanCall(tree, plan = null, collect = false) {
-  return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), ...(plan ? ['--only', 'wiring', '--plan', plan] : [])]);
+  return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), ...(plan ? ['--plan', plan] : [])]);
+}
+
+/** The slice check of one item just before its dispatch, or its collect. */
+function itemScanCall(tree, id, collect = false) {
+  return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), '--item', id]);
+}
+
+/**
+ * The oracle ask of a cross-check finding still open after both fix rounds: complexity high
+ * earlier by the rubric, the impact the asker grades. The plan's intent is the positional one,
+ * so the call carries no other.
+ */
+function planOracleCall(tree, plan) {
+  const complexity = '"high earlier: <GAP id> stayed open through both fix rounds of the cross-check"';
+  return `${RUNNER} dispatch-log ${plan} --tier oracle --impact "<grade>: <line>" --complexity ${complexity} --tree ${tree}` +
+    flag('config', called.config);
 }
 
 /** The real-app check over a review's range, read from the item's own paths when one is named. */
@@ -126,5 +145,6 @@ const deferItemCall = (intent, item, dependents = []) => writerCall('defer-item'
 
 module.exports = {
   RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
-  intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
+  intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
+  verifyItemCall,
 };

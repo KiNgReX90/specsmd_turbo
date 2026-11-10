@@ -12,6 +12,11 @@
  * flow's `{criterion, test, caught}` entry is carried while caught; one that survived names no line
  * to break again, so it is dropped and its criterion is the intent review's.
  *
+ * Pins. A criterion whose test pins reader-facing copy verbatim may be held by a pin instead,
+ * under `pins`, which the record checks and never runs (run-review-pins.cjs): a first item review
+ * and every intent review write their own, a delta item review carries the last review's and
+ * drops one that no longer stands. A pin that does not stand is refused before anything runs.
+ *
  * Intent review. Its record runs, in one batch, every proposal an item review left without
  * `caught`, the survivors of the last intent review, and the intent reviewer's own proposals,
  * named `<item>:<n>` and only for a criterion that has no mutant yet. Each lands in review.yaml
@@ -28,13 +33,17 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const {
-  ITEM_KEYS, isMap, itemCriterion, proposalsOf, readDoc, refuseNew, sameMutant, bad,
+  ITEM_KEYS, isMap, itemCriterion, pinsOf, proposalsOf, readDoc, refuseNew, sameMutant, samePin, bad,
 } = require('./run-review-file.cjs');
+const { checkPins, pinProblem, previousPins, testPaths } = require('./run-review-pins.cjs');
 const { INTENT_KEYS, parseIntentReview } = require('./run-intent-review-file.cjs');
 const { acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals } = require('./run-mutant-coverage.cjs');
 const { checkTargets, dump, kept, ownFindings, previousEntries, ranLines, runEntries, survivorFinding } = require('./run-mutant-runs.cjs');
 
 const { RunError } = lib;
+
+/** A pin as a review file keeps it, in the schema's key order. */
+const keptPin = (pin) => ({ criterion: pin.criterion, file: pin.file, test: pin.test, text: pin.text });
 
 /** An entry still to run: a proposal that never ran, or one whose test stayed green. */
 const due = (entry) => entry.find !== undefined && (entry.caught === undefined || entry.caught === 'no');
@@ -45,35 +54,63 @@ function rewrite(abs, doc, order, changes) {
   fs.writeFileSync(abs, dump(Object.fromEntries(order.filter((key) => next[key] !== undefined).map((key) => [key, next[key]]))));
 }
 
-/** The item review's mutants, run and written into its pending file. Returns the lines to print. */
+/**
+ * A delta item review's pins: the last review's, carried, each one that no longer stands dropped
+ * with a line. The reviewer writes none of its own.
+ */
+function carriedPins(tree, rel, doc, owner, out) {
+  const previous = previousPins(tree, rel);
+  pinsOf(rel, doc).forEach((pin, index) => {
+    if (previous.some((one) => samePin(one, pin))) return;
+    throw bad(rel, `pins entry ${index + 1} is new: a delta review writes no pin. Leave pins out: the runner carries the last ` +
+      'review\'s over and checks them again');
+  });
+  return previous.filter((pin) => {
+    const problem = pinProblem(tree, pin, owner);
+    if (problem) {
+      out.push(`PIN ${pin.criterion} no longer holds: ${problem}, so the intent review owes criterion ${pin.criterion} ` +
+        'a caught mutant or a checked pin');
+    }
+    return !problem;
+  });
+}
+
+/** The item review's mutants, run and written into its pending file, and its pins checked. Returns the lines to print. */
 async function itemMutants(tree, context) {
   const { intent, item, rel, configFile } = context;
   const doc = readDoc(tree, rel);
   const own = ownFindings(doc);
   const out = [];
+  const spec = lib.readItemSpec(tree, intent.id, item.id);
+  const owner = { item: item.id, tests: testPaths(spec) };
   let entries;
+  let pins;
   if (item.review) {
     const previous = previousEntries(tree, rel);
     refuseNew(rel, doc, previous);
     entries = previous.filter((entry) => entry.find !== undefined || entry.caught === 'yes');
     for (const entry of previous.filter((one) => !entries.includes(one))) {
-      out.push(`MUTANT ${entry.criterion} names no line to break, so the intent review owes its criterion a caught mutant`);
+      out.push(`MUTANT ${entry.criterion} names no line to break, so the intent review owes its criterion a caught mutant or a checked pin`);
     }
+    pins = carriedPins(tree, rel, doc, owner, out);
   } else {
-    const spec = lib.readItemSpec(tree, intent.id, item.id).file;
-    entries = proposalsOf(rel, doc, itemCriterion(item.id, acceptanceCriteria(fs.readFileSync(spec, 'utf8')).length));
+    const named = itemCriterion(item.id, acceptanceCriteria(fs.readFileSync(spec.file, 'utf8')).length);
+    entries = proposalsOf(rel, doc, named);
     checkTargets(tree, rel, entries);
+    pins = pinsOf(rel, doc, named);
+    checkPins(tree, rel, pins, () => owner);
   }
   const written = Array.isArray(doc.findings) ? doc.findings.length : 0;
-  if (entries.length === 0 && own.length === written) return out;
+  if (entries.length === 0 && pins.length === 0 && own.length === written) return out;
 
   const result = await runEntries(tree, entries.filter(due), { configFile, rel });
-  const owes = (entry) => `the intent review owes criterion ${entry.criterion} a caught mutant`;
+  const owes = (entry) => `the intent review owes criterion ${entry.criterion} a caught mutant or a checked pin`;
   const survivors = entries.filter((entry) => entry.caught === 'no');
   rewrite(path.join(tree, rel), doc, ITEM_KEYS, {
     verdict: own.length > 0 || survivors.length > 0 ? 'fix' : 'clean',
     findings: [...own, ...survivors.map((entry) => survivorFinding(entry))],
     mutants: entries.map(kept),
+    pins: pins.length > 0 ? pins.map(keptPin) : undefined,
   });
   return [...out, ...ranLines(result, entries, owes)];
 }
@@ -132,23 +169,33 @@ async function intentMutants(tree, context) {
   const proposals = proposalsOf(rel, doc, intentCriterion(proofs), (entry) => [...carried, ...fromItems].some((one) => sameMutant(one, entry)));
   refuseSecond(rel, proofs, proposals, [...carried.filter((entry) => entry.caught !== 'none'), ...fromItems]);
   const entries = [...carried, ...fromItems, ...proposals];
-  const gaps = (counted) => (doc.verdict === 'clean' ? mutantGaps(proofs, counted) : []);
+  // The intent reviewer's own pins, checked against the item each names; the last intent review's are carried while they stand.
+  const ownerOf = (pin) => {
+    const { item } = namedBy(proofs, pin);
+    return { item: item.id, tests: item.tests };
+  };
+  const written = pinsOf(rel, doc, intentCriterion(proofs));
+  checkPins(tree, rel, written, ownerOf);
+  const pins = [...written, ...previousPins(tree, rel).filter((pin) => !written.some((one) => samePin(one, pin)))
+    .filter((pin) => pinProblem(tree, pin, ownerOf(pin)) === null)];
+  const gaps = (counted) => (doc.verdict === 'clean' ? mutantGaps(proofs, counted, pins) : []);
   const before = gaps(entries.filter((entry) => entry.caught === 'yes' || due(entry)).map((entry) => ({ ...entry, caught: 'yes' })));
   if (before.length > 0) throw bad(rel, gapRefusal(before));
   checkTargets(tree, rel, proposals);
-  if (entries.length === 0 && own.length === (Array.isArray(doc.findings) ? doc.findings.length : 0)) return [];
+  if (entries.length === 0 && pins.length === 0 && own.length === (Array.isArray(doc.findings) ? doc.findings.length : 0)) return [];
 
   const result = await runEntries(tree, entries.filter(due), { configFile: context.configFile, rel });
   if (result.busy) throw new RunError(`no mutant could run: ${result.busy}. Nothing is recorded: run the same command again`, 'DIRTY');
   const survivors = entries.filter((entry) => entry.caught === 'no');
-  const ownerOf = (entry) => ({ owner: entry.criterion.split(':')[0] });
+  const ownedBy = (entry) => ({ owner: entry.criterion.split(':')[0] });
   const verdict = own.length > 0 || survivors.length > 0 ? 'fix' : 'clean';
   rewrite(abs, doc, INTENT_KEYS, {
     verdict,
-    findings: [...own, ...survivors.map((entry) => survivorFinding(entry, ownerOf(entry)))],
+    findings: [...own, ...survivors.map((entry) => survivorFinding(entry, ownedBy(entry)))],
     mutants: entries.map(kept),
+    pins: pins.length > 0 ? pins.map(keptPin) : undefined,
   });
-  const after = verdict === 'clean' ? mutantGaps(proofs, entries) : [];
+  const after = verdict === 'clean' ? mutantGaps(proofs, entries, pins) : [];
   if (after.length > 0) {
     fs.writeFileSync(abs, text);
     throw bad(rel, gapRefusal(after));

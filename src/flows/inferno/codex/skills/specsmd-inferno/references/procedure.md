@@ -71,7 +71,7 @@ Repeat until all items are completed or the run blocks or halts.
    - every `standards` line `dispatch-log` prints, verbatim: the rule files under `.specs-inferno/standards/` that apply to the item's `ownership.editable`. A rule the item's own criterion asks to break is no fault of the builder: it goes to the oracle;
    - firewall files by name with the sanctioned alternative for each;
    - already-landed dependency outputs, semantics that must survive, deferred items and known hazards;
-   - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold.
+   - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold, and every `SLICE` line from `run.cjs scan --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` and the collect it prints, run once per item, a `conflict` line sent to the planner once instead.
    Pass pointers, not file bodies or broad search instructions. Never ask for residual risks: that slot is how a builder parks a defect it could have fixed.
 7. Use `wait_agent` until every dispatched builder returns, tracking each outstanding worker by id.
 
