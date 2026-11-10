@@ -1,0 +1,4 @@
+interface:
+  display_name: "Specsmd Inferno Quality Reviewer"
+  short_description: "Review one INFERNO work item cold through the quality lens"
+  default_prompt: "Use $specsmd-inferno-reviewer-quality to review the dispatched INFERNO work item through the quality lens."

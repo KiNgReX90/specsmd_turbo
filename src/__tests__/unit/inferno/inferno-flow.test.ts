@@ -67,6 +67,8 @@ describe('inferno flow', () => {
     ['commands/inferno-oracle.md', 'specsmd-inferno-oracle'],
     ['commands/inferno-reviewer.md', 'specsmd-inferno-reviewer'],
     ['agents/reviewer/agent.md', 'inferno-reviewer-agent'],
+    ['commands/inferno-reviewer-quality.md', 'specsmd-inferno-reviewer-quality'],
+    ['agents/reviewer-quality/agent.md', 'inferno-reviewer-quality-agent'],
     ['commands/inferno-scanner.md', 'specsmd-inferno-scanner'],
     ['agents/scanner/agent.md', 'inferno-scanner-agent'],
     ['agents/planner/agent.md', 'inferno-planner-agent'],
@@ -195,6 +197,8 @@ describe('inferno flow', () => {
     ['agents/oracle/agent.md', 'claude-opus-5-5', 'xhigh'],
     ['commands/inferno-reviewer.md', 'claude-opus-5-5', 'xhigh'],
     ['agents/reviewer/agent.md', 'claude-opus-5-5', 'xhigh'],
+    ['commands/inferno-reviewer-quality.md', 'claude-opus-5-5', 'high'],
+    ['agents/reviewer-quality/agent.md', 'claude-opus-5-5', 'high'],
     ['commands/inferno-scanner.md', 'claude-opus-5-5', 'high'],
     ['agents/scanner/agent.md', 'claude-opus-5-5', 'high'],
   ])('%s pins model %s at effort %s', (rel, model, level) => {

@@ -74,6 +74,7 @@ The source defaults of each role. A `roles:` entry in
 | Strong builder | `gpt-6.1-sol` | `xhigh` |
 | Escalate builder | `gpt-6.1-sol` | `xhigh` |
 | Reviewer | `gpt-6.1-sol` | `xhigh` |
+| Quality reviewer | `gpt-6.1-sol` | `high` |
 | Oracle | `gpt-6-astra` | `xhigh` |
 | Config helper | `gpt-5.6-terra` | `high` |
 | Cheap builder | `gpt-5.6-terra` | `high` |

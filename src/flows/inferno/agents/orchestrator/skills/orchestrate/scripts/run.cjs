@@ -83,6 +83,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs register-process <pid> --tree <dir> --run-id <id> let teardown stop a process the run launched in the tree
   node run.cjs dispatch-log <intent-id> --item <id> | --items <a,b> --tier <tier> --agent <name> [--tree <dir>] record the builder's baseline, print its dispatch id
   node run.cjs accept-dispatch <dispatch-id> --changed-paths <json-array> [--tree <dir>] freeze the result it reported
+  node run.cjs grant <dispatch-id> --path <file> [--tree <dir>] add one file to a running dispatch's ownership, signed by the orchestrator
 
 Options
   --json            machine-readable output
@@ -144,7 +145,7 @@ const COMMANDS = {
   frontier: (args, options) => intents.frontier(required(args[0], 'frontier <intent-id>'), options),
   probes: (args, options) => probes(required(args[0], 'probes <item-id>'), options),
   'verify-item': (args, options) =>
-    gate.verifyItem(required(args[0] || options.items, 'verify-item <item-id> | verify-item --items <a,b>'), options),
+    require('./run-item-proof.cjs').verifyItem(required(args[0] || options.items, 'verify-item <item-id> | verify-item --items <a,b>'), options),
   integrate: (args, options) => integrate(options),
   doubles: (args, options) => checkDoubles(options),
   'real-app': (args, options) => realApp(options),
@@ -163,6 +164,7 @@ const COMMANDS = {
     intents.dispatchLog(required(args[0], 'dispatch-log <intent-id> --item <id> --tier <tier> --agent <name>'), options),
   'accept-dispatch': (args, options) =>
     intents.acceptDispatch(required(args[0], 'accept-dispatch <dispatch-id> --changed-paths <json-array>'), options),
+  grant: (args, options) => require('./run-grant.cjs').grant(args[0], options),
   // One accept per lane, so the `<lane> --accept` line gate --wait prints always names a real command.
   ...Object.fromEntries(LANES.map((lane) => [lane, (args, options) => accept(lane, options)])),
 };

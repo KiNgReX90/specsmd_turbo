@@ -12,7 +12,9 @@
  * nobody mutated. A file that already holds its original is left as it is. Any other file, an
  * edit since, a missing file or a journal short of a field, is refused with the journal kept,
  * since a leftover never clears by waiting. Both shapes may carry the paths a reseal changed
- * (run-mutate-seal.cjs), which recovery puts back by the same rule.
+ * (run-mutate-seal.cjs), which recovery puts back by the same rule. A reseal may rewrite a mutated
+ * file itself, so the mutant's hash is the one the reseal left, and when putting the original
+ * lines back does not give the original's hash, HEAD's copy is written only if it does.
  */
 
 const crypto = require('crypto');
@@ -20,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
-const { putBackSeal, sealPaths, unseal } = require('./run-mutate-seal.cjs');
+const { committed, putBackSeal, sealPaths, unseal } = require('./run-mutate-seal.cjs');
 
 const { RunError } = lib;
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
@@ -68,6 +70,17 @@ function owner() {
   return { pid: process.pid, start: self && self.start };
 }
 
+/**
+ * The original of a file a dead mutate left, or null: `rebuilt` (the mutant with its original
+ * lines back) when it hashes to `before`, else HEAD's copy when that does, which is the case once a
+ * reseal rewrote more of the file than the mutant's lines.
+ */
+function originalOf(tree, rel, rebuilt, before) {
+  if (sha(rebuilt) === before) return rebuilt;
+  const head = committed(tree, rel);
+  return head !== null && sha(head) === before ? head : null;
+}
+
 /** Put back the one line a dead single mutate wrote, and say what happened. */
 function putBack(tree, entry, journal) {
   const abs = path.join(tree, entry.file);
@@ -80,8 +93,11 @@ function putBack(tree, entry, journal) {
   if (complete && now !== null && sha(now) === entry.mutant) {
     const lines = now.toString('utf8').split('\n');
     lines.splice(entry.line - 1, entry.replace.split('\n').length, entry.original);
-    fs.writeFileSync(abs, lines.join('\n'));
-    return `restored ${entry.file} from an interrupted mutate`;
+    const back = originalOf(tree, entry.file, Buffer.from(lines.join('\n'), 'utf8'), entry.before);
+    if (back) {
+      fs.writeFileSync(abs, back);
+      return `restored ${entry.file} from an interrupted mutate`;
+    }
   }
   const why = !complete ? 'its journal lacks what a restore needs' : now === null ? 'the file is gone' : 'the file changed since';
   const wrote = Number.isInteger(entry.line) ? ` line ${entry.line} of` : '';
@@ -107,8 +123,8 @@ function putBackFile(tree, record) {
   if (sha(now) === record.mutant) {
     const text = now.toString('utf8').split('\n');
     for (const { line, original } of lines) text[line - 1] = original;
-    const back = Buffer.from(text.join('\n'), 'utf8');
-    if (sha(back) === record.before) {
+    const back = originalOf(tree, record.file, Buffer.from(text.join('\n'), 'utf8'), record.before);
+    if (back) {
       fs.writeFileSync(abs, back);
       return { ok: true, line: `restored ${record.file} from an interrupted mutate` };
     }
@@ -181,7 +197,7 @@ function recoverInterrupted(tree, options = {}) {
       ...(seal.running ? [`an interrupted mutate was killed while its reseal (${seal.running}) ran, so the paths it changed are unknown`] : []),
     ];
     throw new RunError(afterRecovery(lines, `${why.join('; ')}. Put back from HEAD what the reseal changed, ` +
-      `keep every other change, then delete ${journal}`), 'MUTATE_LEFTOVER');
+      `run the reseal again on the clean tree for a seal git ignores, keep every other change, then delete ${journal}`), 'MUTATE_LEFTOVER');
   }
   fs.rmSync(journal, { force: true });
   return lines;
@@ -233,8 +249,8 @@ function holdSignals() {
  * The files one batch mutates, with the journal that covers all of them. `write` records a
  * file's new lines in the journal before it writes them; `putBack` writes the original back;
  * `received` names a signal held since the start; `close` restores every file it touched, drops
- * the journal when all are whole, and releases the signals. `seal` and `save` let the reseal
- * record what it changed (run-mutate-seal.cjs).
+ * the journal when all are whole, and releases the signals. `seal`, `save` and `rehash` let the
+ * reseal record what it changed (run-mutate-seal.cjs).
  */
 function openSession(tree) {
   const journal = journalPath(tree);
@@ -277,6 +293,10 @@ function openSession(tree) {
       file.record = { ...record, mutant: sha(mutant) };
       save();
       fs.writeFileSync(file.abs, mutant);
+    },
+    /** Record `hash`, what a reseal left in the mutated file `rel`, as its mutant. */
+    rehash(rel, hash) {
+      files.get(rel).record.mutant = hash;
     },
     putBack(rel) {
       const file = files.get(rel);
