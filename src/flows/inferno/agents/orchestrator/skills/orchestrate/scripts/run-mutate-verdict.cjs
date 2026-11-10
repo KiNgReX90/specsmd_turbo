@@ -5,7 +5,14 @@ const fs = require('fs');
 /**
  * Whether a red run caught the mistake. A mistake is caught only when its test ran and noticed it.
  * A build that failed, a file that does not parse and a run something killed never got that far,
- * so each reads no verdict, with the reason.
+ * so each reads no verdict, with the reason. Past those, a red run is caught only when it printed
+ * a test summary that reports a failure: a run that never reached a test (remote-run refusing, a
+ * disk-ceiling stop, a missing binary, a wrapper error) prints none, and a summary of `fail 0`
+ * under a non-zero exit names no failing test, so both read no verdict too.
+ *
+ * The summaries read are node --test's `ℹ fail N` (node 24) or `# fail N` (TAP, older node), cargo's
+ * `test result: FAILED`, vitest's `Tests  N failed` or `Test Files  N failed`, Playwright's
+ * `N failed` and Jest's `Tests: N failed`, each with N at least 1.
  *
  * Cargo marks a failed build with `error: could not compile` or a rustc `error[E....]`, and a test
  * binary something killed with `(signal: 9, SIGKILL`. Node marks a file it could not parse with the
@@ -21,6 +28,15 @@ const fs = require('fs');
 const KILLED = new Set([130, 137, 143]);
 const KILL_SIGNALS = new Set(['SIGINT', 'SIGKILL', 'SIGTERM']);
 const ANSI = /\x1b\[[0-9;]*m/g;
+
+// A summary line that reports at least one failure, per runner, on the ANSI-stripped log.
+const FAILED_SUMMARY = [
+  /^(?:#|ℹ) fail [1-9]\d*\b/m,
+  /^test result: FAILED\b/m,
+  /^[ \t]*(?:Test Files|Tests)[ \t]+[1-9]\d* failed\b/m,
+  /^[ \t]*[1-9]\d* failed\b/m,
+  /^Tests:[ \t]+[1-9]\d* failed\b/m,
+];
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -69,6 +85,9 @@ function verdictOf(run, text, abs) {
   if (rustBuildFailed(clean)) return { caught: null, why: 'did not build' };
   const lines = clean.split('\n');
   if (abs && (nodeParseFailed(lines, abs) || vitestParseFailed(lines, abs))) return { caught: null, why: 'did not parse' };
+  if (!FAILED_SUMMARY.some((summary) => summary.test(clean))) {
+    return { caught: null, why: `no test summary reports a failure (exit ${run.code})` };
+  }
   return { caught: true };
 }
 

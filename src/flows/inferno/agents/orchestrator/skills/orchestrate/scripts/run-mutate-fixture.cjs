@@ -2,7 +2,8 @@
 // A committed tree and a fake Rust toolchain for the batch mutate tests.
 // The fake reads every source under src/ as a build would. It counts a build whenever the sources
 // changed since the last one, refuses a line the way a compiler refuses it, and answers a test from
-// the line its function sits on, with only the switch INFERNO_MUTANT names turned on. Its hold
+// the line its function sits on, with only the switch INFERNO_MUTANT names turned on. A red test
+// prints cargo's failing summary, since a red run without one reads no verdict. Its hold
 // also ends once the state dir is gone, so it never outlives its test.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -65,6 +66,7 @@ if (effective.includes(expected) || expected === 'hold') {
   process.exit(0);
 }
 console.log('test ' + name + ' ... FAILED');
+console.log('test result: FAILED. 0 passed; 1 failed');
 process.exit(101);
 `;
 
