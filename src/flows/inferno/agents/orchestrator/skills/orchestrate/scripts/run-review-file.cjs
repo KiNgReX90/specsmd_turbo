@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { SAME_ITEM, deltaProblem } = require('./run-review-delta.cjs');
 
 const { RunError } = lib;
 
@@ -48,13 +49,13 @@ function reviewPath(intentId, itemId) {
 }
 
 /**
- * The agent id a review is recorded under, so the next review of the same item or intent
- * resumes that reviewer. `call` is the record call to run instead.
+ * The agent id a review is recorded under, the reviewer that wrote it. `call` is the record call
+ * to run instead.
  */
 function reviewerId(value, call) {
   if (typeof value === 'string' && AGENT_ID.test(value)) return value;
   throw new RunError(`refusing to record the review without the agent id of the reviewer that wrote it${value ? `, and ${value} is none` : ''}: ` +
-    `run ${call} with <agent-id> replaced by the id the host returned when it spawned the reviewer, or the id it resumed.`, 'NO_REVIEWER', 2);
+    `run ${call} with <agent-id> replaced by the id the host returned when it spawned the reviewer.`, 'NO_REVIEWER', 2);
 }
 
 /** The reviewer a recorded review names, or null for a record written before reviewers were. */
@@ -159,6 +160,9 @@ function parseItemReview(tree, rel, itemId, { recorded }) {
         'round of this item reported the same kind, or leave it out');
     }
   }
+  // A delta review being recorded reads the fix and nothing else (run-review-delta.cjs).
+  const delta = recorded ? null : deltaProblem(tree, rel, findings, SAME_ITEM);
+  if (delta) throw bad(rel, delta);
   return { item: itemId, verdict: doc.verdict, files, findings, mutants, survivors, reviewer: recorded ? recordedReviewer(doc) : null };
 }
 

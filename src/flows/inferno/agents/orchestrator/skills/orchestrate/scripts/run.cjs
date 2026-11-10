@@ -51,6 +51,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs unclaim <intent-id> [--config <file>]     give back a claim nothing was built on
   node run.cjs worktree <intent-id> [--path <dir>] [--config <file>] open the intent worktree and bootstrap it
   node run.cjs frontier <intent-id> [--tree <dir>] [--config <file>] validate the contracts, print the ready items and who builds each
+  node run.cjs plan-lint <intent-id> [--tree <dir>]     the plan's form, one finding per line: 0 clean or written before the lint, 2 findings
   node run.cjs probes <item-id> [--tree <dir>] [--intent <id>] rerun the item's measurements: 0 they hold, 2 drift
   node run.cjs verify-item <item-id> [--tree <dir>]      the item's own check plus its ownership
   node run.cjs verify-item --items <a,b> [--tree <dir>]  the same for a batch, each item against its dispatch
@@ -145,6 +146,7 @@ const COMMANDS = {
   unclaim: (args, options) => intents.unclaim(required(args[0], 'unclaim <intent-id>'), options),
   worktree: (args, options) => intents.worktree(required(args[0], 'worktree <intent-id>'), options),
   frontier: (args, options) => intents.frontier(required(args[0], 'frontier <intent-id>'), options),
+  'plan-lint': (args, options) => require('./run-plan-lint.cjs').planLint(required(args[0], 'plan-lint <intent-id>'), options),
   probes: (args, options) => probes(required(args[0], 'probes <item-id>'), options),
   'verify-item': (args, options) =>
     require('./run-item-proof.cjs').verifyItem(required(args[0] || options.items, 'verify-item <item-id> | verify-item --items <a,b>'), options),

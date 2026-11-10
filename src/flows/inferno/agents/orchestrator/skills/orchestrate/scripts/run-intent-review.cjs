@@ -55,7 +55,8 @@ function scanRefusal(tree, context, folded) {
   };
 }
 
-function dispatch(tree, context, reasons, from, folded, reviewer = null) {
+/** The review owed, from `from` to HEAD; a delta names the recorded review it answers as `previous`. */
+function dispatch(tree, context, reasons, from, folded, previous = null) {
   const { intent, config, rel } = context;
   const { agent, model } = hostActor('reviewer', config);
   const range = `${short(tree, from)}..${short(tree, 'HEAD')}`;
@@ -71,13 +72,13 @@ function dispatch(tree, context, reasons, from, folded, reviewer = null) {
   return {
     exit: 3,
     payload: {
-      ok: false, intent, owed: reasons, agent, model, range, brief,
+      ok: false, intent, owed: reasons, agent, model, range, previous, brief,
       specs: items.map((id) => path.join(specs, `${id}.md`)), scan: scanned ? scan : null, write: rel,
     },
     out: [
       ...folded,
       ...reasons.map((reason) => `intent review owed for ${intent}: ${reason}`),
-      ...reviewerLines(config, `intent ${intent}`, reviewer, [
+      ...reviewerLines(config, `intent ${intent}`, previous, [
         `  range ${range}`,
         ...realAppLine(tree, config, range),
         `  brief ${brief}`,
@@ -177,7 +178,7 @@ function reviewIntent(options) {
     return verdict(tree, context, state.review, `${folded.length ? `${folded[0]}; ` : ''}${head}`);
   }
   const from = state.review && state.review.commit ? state.review.commit : gate.mergeBase(tree, base);
-  return dispatch(tree, context, state.owed, from, folded, state.review && state.review.reviewer);
+  return dispatch(tree, context, state.owed, from, folded, state.review ? rel : null);
 }
 
 module.exports = { reviewIntent };
