@@ -23,7 +23,15 @@ status: {{status}}
 ## Success Criteria
 
 {{#each success_criteria}}
-- {{this}}
+- {{this.id}}: {{this.text}}
+{{/each}}
+
+## Item Map
+
+| Criterion | Items |
+| --- | --- |
+{{#each item_map}}
+| {{this.criterion}} | {{#each this.items}}{{this}}{{#unless @last}}, {{/unless}}{{/each}} |
 {{/each}}
 
 ## Constraints

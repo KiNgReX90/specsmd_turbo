@@ -46,6 +46,8 @@ Every API round re-sends your entire accumulated context, so the round count, ne
 
 The failing test is written and run before the change, on every item that carries one. Write the test that fails for the reason the item exists, run it, and watch it fail for that reason. Only then write the code that makes it pass, and run the test again. A test written after the code proves the code you wrote, never the behaviour the item asked for. When the host ships a TDD skill, invoke it once at the start of the item, before your first implementation-code edit.
 
+Build each Edge Cases row and each Test Plan line of the item as you build a criterion, test first.
+
 A `reads:` entry is a test before it is code. For each entry, the first failing test moves the source behind the surface and then asserts the surface followed. It fails first because the surface still shows the value the source moved past, which is the `stale` sentence the entry carries.
 
 The `tests` line of your result names that test and its result (`npm test -- foo.spec.ts pass`), so the orchestrator can rerun exactly what you ran. A `tests` line that names a suite instead of the item's own test comes back as a correction.
