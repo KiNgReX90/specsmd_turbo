@@ -2,7 +2,7 @@
 
 Written 2026-11-10. The work below was running in this repo and was stopped on the owner's order at about 07:25 local time. The session that ran it is closed. No more tokens go into it until a session picks it up.
 
-**Everything is on this one branch, `inferno-improvement`, which is pull request 5.** The three handoff documents and all of the stopped work are in it. Nothing has to be fetched from another branch or from the machine it ran on.
+**Everything is on this one branch, `inferno-improvement`, which is pull request 5.** The four handoff documents and all of the stopped work are in it. Nothing has to be fetched from another branch or from the machine it ran on.
 
 ## 1. What is on this branch
 
@@ -11,6 +11,7 @@ Written 2026-11-10. The work below was running in this repo and was stopped on t
 | The improvement plan | `inferno-improvement.md` | A plan. Nothing of it is built |
 | This handoff | `inferno-flow-fixes-handoff.md` | |
 | Three run defects another session met | `inferno-run-defects-2026-11-10-handoff.md` | One is fixed by this branch, two are open. See section 6 |
+| A fourth run defect, met by a third session | `inferno-verify-item-grant-handoff.md` | Open. See section 6 |
 | The stopped intent | Merged in at `4446e8b2` | Two of five items integrated, two built and in a fix review, one not built |
 | The base item's correction | Merged in at `d135d299` | Half done and unverified. Its new tests are red on purpose until it is finished |
 | Three finished direct builds | Merged in at `a1b2c08d` | Finished. Never proved together by one test run |
@@ -62,22 +63,23 @@ The first `validate:all` of `b5aea0b4` and `ecdbb0b3` was 2453 of 2454. Its one 
 3. **The config item.** One re-read of its correction.
 4. **The base item.** Finish the correction, tests green, one re-read.
 5. **The fifth item.** Build it and review it.
-6. **The two open defects of section 6.**
+6. **The three open defects of section 6.**
 7. **Close and archive the intent in the ledger.**
 8. **Then the improvement plan**, on this same branch. Package P1 edits `run-mutate-batch.cjs`, which the mutate seal also edits, so step 2 comes before it.
 9. **One merge of this branch into `main`**, when everything on it is green.
 
 Hold each re-read to the delta rule of package P2: a new finding only as a blocker or a major on a line the correction changed, no new mutants, and only the survivors run again. Without that the old loop can run on, which is what the improvement plan exists to end.
 
-## 6. The run defects handoff
+## 6. The run defects
 
-`inferno-run-defects-2026-11-10-handoff.md`, beside this file, holds three defects another session met while it ran an intent, each with its evidence and a way to fix it.
+`inferno-run-defects-2026-11-10-handoff.md` and `inferno-verify-item-grant-handoff.md`, beside this file, hold four defects that two other sessions met while they ran intents, each with its evidence and a way to fix it.
 
 | Defect | State |
 | --- | --- |
 | The completion's ledger commit sweeps up an unrecorded review file | Fixed on this branch by the first item of section 3 |
 | One stale diagnosis probe stops the whole frontier (`run-frontier.cjs:172`) | Open. Nobody has built it |
 | A fold of the base re-owes the review of every item that lists a shared registry file (`run-review.cjs:290`) | Open. Nobody has built it. Package P3 of the improvement plan changes the same reader, so build this one first or inside P3 |
+| `verify-item` ignores an ownership grant the orchestrator makes after dispatch (`verifyItem` in `run-gate.cjs`) | Open. Nobody has built it. Package P5 of the improvement plan decides when a grant is allowed at all, so build the two together |
 
 ## 7. What waits on this
 
