@@ -46,7 +46,7 @@ function single(options) {
     throw new RunError(USAGE, 'BAD_ARGS', 1);
   }
   const tree = options.tree || lib.repoRoot(options.cwd);
-  const sealed = seals.sealedOf(lib.readConfig(tree, options.config));
+  const sealed = seals.sealOf(lib.readConfig(tree, options.config));
   const out = recoverInterrupted(tree);
   const dirty = lib.dirtyPaths(tree);
   if (dirty.length > 0) {
@@ -64,6 +64,10 @@ function single(options) {
     seal: entry.seal,
     save: () => fs.writeFileSync(journal, `${JSON.stringify(entry)}\n`),
     log: (label) => path.join(path.dirname(journal), `${logs}-${label}.log`),
+    // A reseal that rewrote the mutant itself leaves other bytes, which recovery must know as the mutant.
+    rehash: (_rel, hash) => {
+      entry.mutant = hash;
+    },
   };
   ctx.save();
   const release = journals.holdSignals();
@@ -80,11 +84,11 @@ function single(options) {
     release();
   }
   const at = `${rel}:${n}`;
-  if (failed.length > 0) return { exit: 2, payload: { restored: false, file: rel, line: n }, out: [...out, ...failed] };
+  if (failed.length > 0) return { exit: 2, payload: { restored: false, file: rel, line: n, failed }, out: [...out, ...failed] };
   if (unsealed) {
     return {
-      // A reseal a signal ended is this machine's failure; one that refused the mutant is the mutant's.
-      exit: /^reseal ended on/.test(unsealed.why) ? 2 : 0,
+      // A reseal a signal or the timeout ended is this machine's failure; one that refused the mutant is the mutant's.
+      exit: unsealed.signal ? 2 : 0,
       payload: { caught: null, why: unsealed.why, file: rel, line: n, test: options.test, code: unsealed.code, log: unsealed.log },
       out: [...out, `no verdict: ${unsealed.why}`, `  mutant ${at}`, `  reseal exit ${unsealed.code} -> ${unsealed.log}`],
     };

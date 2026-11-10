@@ -37,12 +37,18 @@ roles:
     agent: specsmd_inferno_oracle
     model: <pin>
     reasoning_effort: <pin>
+  reviewer_quality:
+    agent: specsmd_inferno_reviewer_quality
+    model: <pin>
+    reasoning_effort: <pin>
 
 verification:
   finalize:
     - <ordered shell command>
   finalize_scopes:
     "<one finalize command>": ["<path glob>"]
+  lint:
+    - <lint or analysis command>
 
 worktree:
   bootstrap:
@@ -74,6 +80,7 @@ Allowed values:
 - `delivery.mode`: `auto-close` or `merge-request`.
 - `verification.finalize`: ordered non-empty command strings when present.
 - `verification.finalize_scopes`: a map from one of those commands to the path globs that make it worth running. An unlisted command always runs.
+- `verification.lint`: ordered lint and analysis commands the quality reviewer runs once per item review, in the worktree. It takes over only what they report on lines the item added.
 - `worktree.bootstrap`: ordered commands run inside a fresh intent worktree before the first dispatch.
 - `dispatch.constraints`: machine rules pasted verbatim into every builder and tester dispatch.
 - `delivery.base_branch`: a real branch confirmed by the user.

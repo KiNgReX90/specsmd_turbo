@@ -24,13 +24,17 @@ const SKILLS = [
   'specsmd-inferno-intents',
   'specsmd-inferno-standards',
   'specsmd-inferno-reviewer',
+  'specsmd-inferno-reviewer-quality',
   'specsmd-inferno-scanner',
 ];
 // The intents skill is a one-screen listing and the standards skill one setup in the parent
-// conversation, so the SKILL.md is the whole body of each, and the reviewer and scanner skills
-// read their canonical bodies; none ships a procedure reference.
+// conversation, so the SKILL.md is the whole body of each, and the two reviewer skills and the
+// scanner skill read their canonical bodies; none ships a procedure reference.
 const PROCEDURE_SKILLS = SKILLS.filter(
-  (skill) => !['specsmd-inferno-intents', 'specsmd-inferno-standards', 'specsmd-inferno-reviewer', 'specsmd-inferno-scanner'].includes(skill)
+  (skill) => ![
+    'specsmd-inferno-intents', 'specsmd-inferno-standards', 'specsmd-inferno-reviewer', 'specsmd-inferno-reviewer-quality',
+    'specsmd-inferno-scanner',
+  ].includes(skill)
 );
 // The orchestrator is the session's main thread and has no custom agent of its own.
 const AGENTS: Record<string, [string, string]> = {
@@ -39,6 +43,7 @@ const AGENTS: Record<string, [string, string]> = {
   specsmd_inferno_builder_escalate: ['gpt-6.1-sol', 'xhigh'],
   specsmd_inferno_oracle: ['gpt-6-astra', 'xhigh'],
   specsmd_inferno_reviewer: ['gpt-6.1-sol', 'xhigh'],
+  specsmd_inferno_reviewer_quality: ['gpt-6.1-sol', 'high'],
   specsmd_inferno_scanner: ['gpt-6.1-sol', 'high'],
   specsmd_inferno_config: ['gpt-5.6-terra', 'high'],
   specsmd_inferno_builder_cheap: ['gpt-5.6-terra', 'high'],
