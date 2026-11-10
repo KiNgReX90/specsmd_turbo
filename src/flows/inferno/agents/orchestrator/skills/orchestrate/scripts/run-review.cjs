@@ -7,8 +7,10 @@
  * The order per item: the builder returns, the orchestrator commits the item, this step
  * prints the reviewer dispatch line, the reviewer writes its file, and the same step
  * validates it, runs its mutants (run-review-mutants.cjs), records and commits that file. A clean review lets `integrate --item` land the
- * item. A fix review goes back to the builder the ladder names, and the next review reads
- * only what changed since.
+ * item. A fix review goes back to the builder the ladder names (run-review-ladder.cjs), and the
+ * next review reads only what changed since. A fix review whose findings are all minor gets no
+ * second review: once the warm builder's correction stays inside the files it lists and
+ * verify-item proved it, this step records the item `settled` and integrate lands it.
  *
  * The review binds the files it lists, never the whole tree: items build in parallel in one
  * worktree, and another item's commit must not void this one's review.
@@ -21,84 +23,18 @@ const lib = require('./run-lib.cjs');
 const writer = require('./state-transition.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { bad, parseItemReview, reviewPath, reviewerId } = require('./run-review-file.cjs');
-const { REINSTALL, completedBeforeReviewRule, reviewRuleSince } = require('./state-review.cjs');
+const { REINSTALL, completedBeforeReviewRule, reviewLands, reviewRuleSince } = require('./state-review.cjs');
 const { integrateCall, itemRecordCall, itemReviewCall, realAppCall, verifyItemCall } = require('./run-call.cjs');
 const { realAppPaths } = require('./run-real-app.cjs');
 const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
 const { itemMutants } = require('./run-review-mutants.cjs');
 const { dirtyFiles } = require('./run-dirt.cjs');
-const { ladderGrades } = require('./run-oracle-route.cjs');
+const { previousReview } = require('./run-review-delta.cjs');
+const ladder = require('./run-review-ladder.cjs');
+
+const { builtBy, hostActor, nextActor, nextLine } = ladder;
 
 const { RunError } = lib;
-
-/**
- * The key of each actor's `roles` entry on each host: the one the installer renders that
- * role's pins from. The host dispatches the agent the key names, `specsmd-inferno-<key>` on
- * Claude and `specsmd_inferno_<key>` on Codex, the agents the flow's own files define. The
- * reviewer's and the scanner's agents arrive with their roles.
- */
-const ROLES = {
-  claude: {
-    cheap: 'builder-cheap', strong: 'builder', escalate: 'builder-escalate', oracle: 'oracle', reviewer: 'reviewer', scanner: 'scanner',
-  },
-  codex: {
-    cheap: 'builder_cheap', strong: 'builder_strong', escalate: 'builder_escalate', oracle: 'oracle', reviewer: 'reviewer', scanner: 'scanner',
-  },
-};
-
-/** The config key that pins an actor's model on Claude ahead of its role entry. */
-const PINS = { reviewer: (config) => config.review && config.review.model, scanner: (config) => config.scan && config.scan.model };
-
-/** The tier that builds an item first. Complexity alone decides it. */
-function tierOf(item) {
-  return item.complexity === 'low' ? 'cheap' : 'strong';
-}
-
-/**
- * Who acts on the item next. Cheap rejected once goes to a fresh strong builder, strong
- * rejected twice to a fresh escalate builder, and every two rejections on the escalate
- * builder go to the oracle, whose decision returns to that warm builder as a correction.
- * The count is per tier, recorded by state-review.cjs, and only a serious fix review adds
- * to it. The weight of the last fix review overrides the count: minor findings stay with
- * the warm builder of the same tier, and a repeated finding goes to the oracle at once,
- * since another round at any tier repeats a fix design that is wrong.
- */
-function nextActor(item, config = {}) {
-  const tier = item.review_tier || tierOf(item);
-  const rejections = Number(item.review_rejections) || 0;
-  let actor = tier;
-  let fresh = false;
-  if (item.review_weight === 'repeat') actor = 'oracle';
-  else if (item.review_weight === 'minor') actor = tier;
-  else if (tier === 'cheap' && rejections >= 1) [actor, fresh] = ['strong', true];
-  else if (tier === 'strong' && rejections >= 2) [actor, fresh] = ['escalate', true];
-  else if (tier === 'escalate' && rejections >= 2 && rejections % 2 === 0) actor = 'oracle';
-  return { actor, agent: hostActor(actor, config).agent, fresh, rejections };
-}
-
-/** The tier that built the version a review read: the oracle decides, the warm builder it answered builds. */
-function builtBy(item) {
-  const { actor } = nextActor(item);
-  return actor === 'oracle' ? item.review_tier || 'escalate' : actor;
-}
-
-/**
- * The agent and model this host dispatches for an actor. The agent is always the host's own
- * for that role, since the installer pins the role's model on exactly that agent. On Codex the
- * model is the role entry's alone, because the spawned agent's pin wins. On Claude it is
- * `models.<tier>`, `review.model` for the reviewer or `scan.model` for the scanner, before the
- * role entry's.
- */
-function hostActor(actor, config = {}) {
-  const host = config.host === 'codex' ? 'codex' : 'claude';
-  const key = ROLES[host][actor];
-  const roles = config.roles && typeof config.roles === 'object' ? config.roles : {};
-  const role = roles[key] && typeof roles[key] === 'object' ? roles[key] : {};
-  const roleModel = (typeof role.model === 'string' && role.model) || null;
-  if (host === 'codex') return { agent: `specsmd_inferno_${key}`, model: roleModel };
-  const pinned = PINS[actor] ? PINS[actor](config) : config.models && config.models[actor];
-  return { agent: `specsmd-inferno-${key}`, model: pinned || roleModel };
-}
 
 /**
  * The lines that reach the reviewer of a review owed, `subject` naming the item or the intent.
@@ -110,30 +46,6 @@ function hostActor(actor, config = {}) {
 function reviewerLines(config, subject, previous, body) {
   const { agent, model } = hostActor('reviewer', config);
   return [`dispatch ${agent}${model ? ` model ${model}` : ''} ${subject}`, ...(previous ? [`  previous ${previous}`] : []), ...body];
-}
-
-/** The actor with the model the host names for it, as frontier and review print it. */
-function actorLabel(item, config) {
-  const { actor } = nextActor(item);
-  const { model } = hostActor(actor, config);
-  return model ? `${actor} ${model}` : actor;
-}
-
-/** The one line frontier and review both print for a rejected item. */
-function nextLine(id, item, config) {
-  const next = nextActor(item, config);
-  const label = `${actorLabel(item, config)} ${next.agent}`;
-  const loop = 'then commit and run review again';
-  if (next.actor === 'oracle') {
-    const why = item.review_weight === 'repeat' ? 'a finding repeats an earlier round, so ' : '';
-    return `next ${label}: ${why}ask it about ${id} with every finding so far${ladderGrades(id, item)}; its decision goes to the warm ` +
-      `${item.review_tier || 'escalate'} builder as a correction, ${loop}`;
-  }
-  if (next.fresh) return `next ${label}: a fresh builder takes ${id} over with every finding so far, ${loop}`;
-  if (item.review_weight === 'minor') {
-    return `next ${label}: every finding is minor, so send them to the warm builder of ${id} as one correction, ${loop}`;
-  }
-  return `next ${label}: send every finding to the warm builder of ${id} as one correction, ${loop}`;
 }
 
 function itemOf(ledger, id, options) {
@@ -264,7 +176,7 @@ async function record(tree, context, ledger) {
   lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent.id}): review ${item.id} ${review.verdict}`, '--', ...paths]);
   const updated = itemOf(lib.readLedger(tree), item.id, { intent: intent.id }).item;
   const head = `review ${item.id} ${review.verdict}, recorded at ${short(tree, commit)} ` +
-    `(${result.tier}, ${result.rejections} rejection(s))`;
+    `(${result.tier}, ${result.misses} miss${result.misses === 1 ? '' : 'es'})`;
   const verdict = verdictResult(tree, { ...context, item: updated }, review, head);
   return { ...verdict, out: [...ran, ...verdict.out] };
 }
@@ -315,29 +227,98 @@ function review(options) {
   return result && typeof result.then === 'function' ? result.then(done) : done(result);
 }
 
-/** Dispatch line when no review exists, record when one is written, the verdict when current. */
+/**
+ * Dispatch line when no review exists, record when one is written, the verdict when current, and
+ * the settle of a minor-only fix whose correction stayed inside the files that review lists.
+ */
 function step(tree, context, { ledger, editable, exists, pending, current }) {
   const { intent, item, config } = context;
   if (!exists) return owed(tree, context, 'no review yet', forkPoint(tree, config, intent), editable);
   if (pending) return record(tree, context, ledger);
   // A fix review is owed again by any commit on the item's own paths, not only on the files
   // it listed: the usual answer to "this criterion has no test" is a new file.
-  const touched = item.review === 'fix' && item.review_commit
-    ? lib.gitLines(tree, ['diff', '--name-only', `${item.review_commit}..HEAD`], { tolerate: true })
-      .filter((file) => lib.ownedBy(file, editable) || current.files.includes(file))
-    : [];
-  if (item.review && itemReviewCurrent(tree, { intent, item, files: current.files, config }) && touched.length === 0) {
+  const since = (from) => lib.gitLines(tree, ['diff', '--name-only', `${from}..HEAD`], { tolerate: true })
+    .filter((file) => lib.ownedBy(file, editable) || current.files.includes(file));
+  const holds = Boolean(item.review) && itemReviewCurrent(tree, { intent, item, files: current.files, config });
+  if (item.review === 'settled') {
+    if (holds) return settledResult(tree, context, `review ${item.id} settled for the current files (settled at ${short(tree, item.review_commit)})`);
+    // The delta reads from the commit the settled review read, so the correction nobody re-read is in it.
+    const recorded = previousReview(tree, context.rel);
+    const from = recorded ? recorded.commit.trim() : item.review_commit;
+    return owed(tree, context, 'a file the settled review lists changed since it settled', from, [...new Set([...current.files, ...since(from)])]);
+  }
+  const touched = item.review === 'fix' && item.review_commit ? since(item.review_commit) : [];
+  if (holds && touched.length === 0) {
     const head = `review ${item.id} ${current.verdict} for the current files (read at ${short(tree, item.review_commit)})`;
     return verdictResult(tree, context, current, head);
   }
   const paths = [...new Set([...current.files, ...touched])];
-  return owed(tree, context, 'the item changed since the last review', item.review_commit || forkPoint(tree, config, intent), paths,
-    current.reviewer);
+  const from = item.review_commit || forkPoint(tree, config, intent);
+  if (item.review === 'fix' && item.review_weight === 'minor' && touched.length > 0) {
+    const unlisted = touched.filter((file) => !current.files.includes(file));
+    if (unlisted.length === 0) return settle(tree, context, ledger, current, touched);
+    return owed(tree, context, `the correction of the minor findings touches ${unlisted.join(', ')}, which the review does not list`, from, paths);
+  }
+  return owed(tree, context, 'the item changed since the last review', from, paths);
+}
+
+function settledResult(tree, context, head) {
+  const { item } = context;
+  return { exit: 0, payload: { ok: true, item: item.id, verdict: 'settled' }, out: [head, `then ${integrateCall(tree, item.id)}`] };
 }
 
 /**
- * The items of one landing whose review is not clean for their files as they stand. integrate
- * checks every id with this before it folds or writes anything.
+ * Why the item's verify-item proof does not prove its corrected state, or null when it does: it
+ * passed, it was written on a commit after the one the fix review read, and proofAtHead finds it
+ * taken over the item's paths as HEAD holds them.
+ */
+function proofProblem(tree, intentId, item) {
+  // Required here, not at the top: run-item-proof loads run-intents, which loads run-frontier, which loads this file.
+  const { proofAtHead, readItemProof } = require('./run-item-proof.cjs');
+  const proof = readItemProof(tree, intentId, item.id);
+  if (!proof) return 'no verify-item proof of the correction is on record';
+  const head = typeof proof.head === 'string' ? proof.head : '';
+  const after = head !== '' && head !== item.review_commit &&
+    lib.git(tree, ['merge-base', '--is-ancestor', item.review_commit, head], { tolerate: true }) !== null;
+  if (!after) return 'its verify-item proof predates the fix review';
+  if (proof.passed !== true) return 'its verify-item proof failed';
+  if (proofAtHead(tree, intentId, item.id).state === 'stale') return 'the item changed since its verify-item proof';
+  return null;
+}
+
+/**
+ * Settle a minor-only fix: the correction stayed inside the files the review lists, so no second
+ * review reads it. It needs verify-item's proof of the corrected state. The ledger records
+ * `settled` at HEAD under the hash of those files, and the intent review is told the range.
+ */
+function settle(tree, context, ledger, current, touched) {
+  const { intent, item } = context;
+  const problem = proofProblem(tree, intent.id, item);
+  if (problem) {
+    return {
+      exit: 3,
+      payload: { ok: false, item: item.id, owed: 'proof', problem },
+      out: [
+        `settle owed for ${item.id}: every finding was minor and the correction stays inside the files the review lists, but ${problem}`,
+        `run ${verifyItemCall(tree, [item.id])}, then ${itemReviewCall(tree, item.id)} again`,
+      ],
+    };
+  }
+  const commit = lib.git(tree, ['rev-parse', 'HEAD']);
+  writer.reviewItem({
+    file: ledger.file, intent: intent.id, item: item.id, verdict: 'settled', files_hash: filesHash(tree, current.files), tier: builtBy(item), commit,
+  });
+  const state = path.join(lib.SPECS_DIR, 'state.yaml');
+  lib.git(tree, ['add', '--', state]);
+  lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent.id}): review ${item.id} settled`, '--', state]);
+  const head = `review ${item.id} settled at ${short(tree, commit)}: the warm builder corrected every minor finding inside ` +
+    `${touched.join(', ')}, the files the review lists, so no second review reads it`;
+  return settledResult(tree, context, head);
+}
+
+/**
+ * The items of one landing whose review is neither clean nor settled for their files as they
+ * stand. integrate checks every id with this before it folds or writes anything.
  */
 function owedReviews(tree, ledger, ids, options) {
   const lines = [];
@@ -347,7 +328,7 @@ function owedReviews(tree, ledger, ids, options) {
     const complete = writer.isComplete(item.status);
     if (complete && completedBeforeReviewRule(item.completed_at, since)) continue;
     const command = `${itemReviewCall(tree, id)}${complete && since === null ? `. ${REINSTALL}` : ''}`;
-    if (item.review !== 'clean') {
+    if (!reviewLands(item.review)) {
       lines.push(`${id} ${item.review === 'fix' ? 'has a fix review' : 'has no clean review'}, run ${command}`);
       continue;
     }
@@ -365,4 +346,4 @@ function owedReviews(tree, ledger, ids, options) {
   return lines;
 }
 
-module.exports = { actorLabel, hostActor, nextActor, nextLine, owedReviews, realAppLine, review, reviewerLines, tierOf };
+module.exports = { ...ladder, owedReviews, realAppLine, review, reviewerLines };

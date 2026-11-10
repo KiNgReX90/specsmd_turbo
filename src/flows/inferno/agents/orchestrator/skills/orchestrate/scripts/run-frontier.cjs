@@ -19,10 +19,10 @@ const ownership = require('./run-ownership.cjs');
 const probes = require('./run-probes.cjs');
 const { wiringErrors } = require('./run-wiring.cjs');
 const { isComplete, isDeferred } = require('./state-transition.cjs');
-const { REINSTALL, completedBeforeReviewRule, reviewRuleSince } = require('./state-review.cjs');
+const { REINSTALL, completedBeforeReviewRule, reviewLands, reviewRuleSince } = require('./state-review.cjs');
 // The tier and the ladder live with the review that moves an item up it, so frontier and
 // `run.cjs review --item` print the same actor.
-const { actorLabel, hostActor, nextActor, nextLine, tierOf } = require('./run-review.cjs');
+const { LAST_MISS, actorLabel, hostActor, isBlocked, nextActor, nextLine, tierOf } = require('./run-review.cjs');
 const { integrateCall, itemReviewCall } = require('./run-call.cjs');
 const { waitFloorRefusal } = require('./run-codex-wait.cjs');
 const { RunError } = require('./run-error.cjs');
@@ -49,9 +49,9 @@ function itemProved(item) {
   return Number.isNaN(completed) || completed < PROOF_RULE_LANDED;
 }
 
-/** The same for the item review: owed by every item completed after this host's cutover. */
+/** The same for the item review, clean or settled: owed by every item completed after this host's cutover. */
 function itemReviewed(item, since) {
-  return item.review === 'clean' || completedBeforeReviewRule(item.completed_at, since);
+  return reviewLands(item.review) || completedBeforeReviewRule(item.completed_at, since);
 }
 
 function itemIntegrated(item, since) {
@@ -91,6 +91,7 @@ function loadItems(tree, intent) {
         depends_on: item.depends_on,
         review: item.review,
         review_tier: item.review_tier,
+        review_misses: item.review_misses,
         review_rejections: item.review_rejections,
         review_weight: item.review_weight,
         context: manifest.context || {},
@@ -193,15 +194,19 @@ function frontier(intentId, options) {
   // proves the tree it landed on (2026-09-09).
   const held = intent.items.filter((item) => isComplete(item.status) && !integrated(item));
   const unblocked = items.filter((item) => item.depends_on.every((id) => completedIds.has(id)));
+  // An item whose review ladder ended waits for the user, and only it: every item that does not
+  // depend on it is given out, and one that does waits, since it never completes meanwhile.
+  const blocked = unblocked.filter(isBlocked);
+  const open = unblocked.filter((item) => !blocked.includes(item));
 
   // The evidence a corrective item was planned on, replayed on the tree it is about to be
   // built in. Stale evidence is a cause nobody measured here, and dispatching on it is how a
   // plan asserted a pixel cause it had never seen (2026-09-09). Only an item nobody dispatched
   // or reviewed is about to be built on it. A stale probe holds its own item: on 2026-11-10 the
   // stale probes of three built items stopped the whole frontier and hid the two truly ready.
-  const started = startedItems(tree, intent.id, unblocked);
+  const started = startedItems(tree, intent.id, open);
   const stale = [];
-  const ready = unblocked.filter((item) => {
+  const ready = open.filter((item) => {
     const errors = started.has(item.id) ? [] : probes.replayErrors(tree, [item]);
     stale.push(...errors);
     return errors.length === 0;
@@ -247,6 +252,10 @@ function frontier(intentId, options) {
     return { id: item.id, complexity: item.complexity, kind: item.kind, tier: actor, model: hostActor(actor, config).model };
   };
   const out = held.map((item) => heldLine(item, tree, since, intent.id));
+  for (const item of blocked) {
+    out.push(`blocked ${item.id}: the ladder ended at miss ${LAST_MISS}, so no builder takes it until the user answers`);
+    out.push(nextLine(item.id, item, config));
+  }
   for (const item of ready) {
     out.push(`ready ${item.id} ${item.complexity} ${item.kind || 'unset'} ${actorLabel(item, config)}`);
     if (item.review === 'fix') out.push(nextLine(item.id, item, config));
@@ -268,6 +277,7 @@ function frontier(intentId, options) {
       ready: ready.map(shape),
       waiting: waiting.map(shape),
       held: held.map((item) => item.id),
+      blocked: blocked.map((item) => item.id),
       deferred: deferred.map((item) => ({ id: item.id, reason: item.deferred_reason })),
       serialize,
       dispatch,

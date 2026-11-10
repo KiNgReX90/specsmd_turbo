@@ -3,56 +3,10 @@ const test = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const { nextActor, tierOf } = require("./run-review.cjs");
 const { CONFIG, STATE, git, repo, run, worktree, write } = require("./review-fixture.cjs");
 const { writeFile } = require("./test-write.cjs");
 
-// --- the ladder ------------------------------------------------------------
-// Complexity alone decides who builds first. Rejections then move the item up: cheap after
-// one, strong after two, the escalate builder after two more, and the oracle after every
-// further two rejections on the escalate builder.
-
-test("tierOf decides by complexity only", () => {
-  assert.equal(tierOf({ complexity: "low", kind: "behavior" }), "cheap");
-  assert.equal(tierOf({ complexity: "medium", kind: "docs-only" }), "strong");
-  assert.equal(tierOf({ complexity: "high", kind: "test" }), "strong");
-  assert.equal(tierOf({ complexity: "low", kind: "config" }), "cheap");
-});
-
-test("an item nobody rejected stays with the tier its complexity names", () => {
-  assert.deepEqual(nextActor({ complexity: "low" }), {
-    actor: "cheap", agent: "specsmd-inferno-builder-cheap", fresh: false, rejections: 0,
-  });
-  assert.equal(nextActor({ complexity: "medium" }).actor, "strong");
-});
-
-test("one rejection on the cheap tier hands the item to a fresh strong builder", () => {
-  const next = nextActor({ complexity: "low", review_tier: "cheap", review_rejections: "1" });
-  assert.equal(next.actor, "strong");
-  assert.equal(next.agent, "specsmd-inferno-builder");
-  assert.equal(next.fresh, true);
-});
-
-test("the strong tier fixes one rejection itself and hands over after the second", () => {
-  const once = nextActor({ complexity: "medium", review_tier: "strong", review_rejections: 1 });
-  assert.equal(once.actor, "strong");
-  assert.equal(once.fresh, false);
-  const twice = nextActor({ complexity: "medium", review_tier: "strong", review_rejections: 2 });
-  assert.equal(twice.actor, "escalate");
-  assert.equal(twice.agent, "specsmd-inferno-builder-escalate");
-  assert.equal(twice.fresh, true);
-});
-
-test("two rejections on the escalate builder go to the oracle, and every two after that", () => {
-  const item = (n) => nextActor({ complexity: "high", review_tier: "escalate", review_rejections: n });
-  assert.equal(item(1).actor, "escalate");
-  assert.equal(item(2).actor, "oracle");
-  assert.equal(item(2).agent, "specsmd-inferno-oracle");
-  // The oracle's decision goes to the warm escalate builder, and the count starts over.
-  assert.equal(item(3).actor, "escalate");
-  assert.equal(item(3).fresh, false);
-  assert.equal(item(4).actor, "oracle");
-});
+// The ladder itself, from the first rung to its end, is held in run-review-ladder.test.cjs.
 
 // --- the review step ---------------------------------------------------------
 
@@ -110,7 +64,7 @@ test("a clean review is validated, recorded on the ledger and committed", () => 
   assert.match(state, /review_hash: [0-9a-f]{64}/);
   assert.match(state, new RegExp(`review_commit: ${head}`));
   assert.match(state, /review_tier: cheap/);
-  assert.match(state, /review_rejections: 0/);
+  assert.match(state, /review_misses: 0/);
   assert.equal(git(fixture.root, ["status", "--porcelain"]), "", "the review and the ledger are committed");
   const recorded = fs.readFileSync(path.join(fixture.root, REVIEW), "utf8");
   assert.match(recorded, /^tree: [0-9a-f]{64}$/m);
@@ -131,10 +85,10 @@ test("a fix review prints every finding and the next actor on the ladder, exit 2
   assert.equal(result.code, 2, result.out + result.err);
   assert.match(result.out, /FINDING AC1 the value reads two src\/a\.ts:1/);
   assert.match(result.out, /export 2/);
-  // a-one is low, so one rejection hands it to a fresh strong builder.
+  // a-one is low, so its first miss hands it to a fresh strong builder.
   assert.match(result.out, /next strong model-strong specsmd-inferno-builder/);
   assert.match(ledger(fixture), /review: fix/);
-  assert.match(ledger(fixture), /review_rejections: 1/);
+  assert.match(ledger(fixture), /review_misses: 1/);
 });
 
 test("a listed file that changes after the review voids it and asks for a delta review", () => {
@@ -152,7 +106,7 @@ test("a listed file that changes after the review voids it and asks for a delta 
   assert.match(result.out, /paths src\/a\.ts/);
 });
 
-test("the second review of a fix counts on the tier that built it", () => {
+test("the second review of a fix records the tier that built it, and the count goes on", () => {
   const fixture = repo();
   write(fixture.root, REVIEW, FIX);
   review(fixture);
@@ -163,9 +117,9 @@ test("the second review of a fix counts on the tier that built it", () => {
   const result = review(fixture);
 
   assert.equal(result.code, 0, result.out + result.err);
-  // The fix came from the strong builder the ladder named, so the count starts over there.
+  // The fix came from the strong builder the ladder named; a clean review adds no miss.
   assert.match(ledger(fixture), /review_tier: strong/);
-  assert.match(ledger(fixture), /review_rejections: 0/);
+  assert.match(ledger(fixture), /review_misses: 1/);
 });
 
 test("a review file with a key outside the schema is refused and nothing is recorded", () => {
@@ -324,10 +278,10 @@ test("a fix review is owed again once a later commit touches the item's own path
   assert.match(result.out, /paths src\/a\.ts src\/a2\.test\.ts/);
 });
 
-test("after the oracle decides, the fix review counts on the warm escalate builder", () => {
+test("after the oracle decides at miss 3, the fix review counts on the warm escalate builder and ends the ladder", () => {
   const state = STATE.replace(
     /(- id: a-one[\s\S]*?status: pending)/,
-    "$1\n        review: fix\n        review_tier: escalate\n        review_rejections: 2",
+    "$1\n        review: fix\n        review_tier: escalate\n        review_misses: 3",
   );
   const fixture = repo({ state });
   write(fixture.root, REVIEW, FIX);
@@ -336,8 +290,8 @@ test("after the oracle decides, the fix review counts on the warm escalate build
 
   assert.equal(result.code, 2, result.out + result.err);
   assert.match(ledger(fixture), /review_tier: escalate/);
-  assert.match(ledger(fixture), /review_rejections: 3/);
-  assert.match(result.out, /next escalate model-escalate specsmd-inferno-builder-escalate: send every finding to the warm builder/);
+  assert.match(ledger(fixture), /review_misses: 4/);
+  assert.match(result.out, /^next user: a-one missed 4 reviews/m);
 });
 
 test("the warm fix line carries the loop: commit and run review again", () => {
@@ -371,9 +325,9 @@ delivery:
   const frontier = run(fixture, ["frontier", "alpha", ...args]).out;
   assert.match(frontier, /^ready a-one low behavior strong codex-strong$/m);
 
-  const state = ledger(fixture).replace("review_tier: cheap", "review_tier: strong").replace("review_rejections: 1", "review_rejections: 2");
+  const state = ledger(fixture).replace("review_tier: cheap", "review_tier: strong").replace("review_misses: 1", "review_misses: 2");
   writeFile(path.join(fixture.root, ".specs-inferno/state.yaml"), state);
-  git(fixture.root, ["commit", "-qam", "two strong rejections"]);
+  git(fixture.root, ["commit", "-qam", "two misses"]);
   assert.match(review(fixture, args).out, /next escalate codex-strong specsmd_inferno_builder_escalate: a fresh builder/);
 });
 
@@ -393,12 +347,12 @@ delivery:
 const CODEX_ARGS = ["--config", ".specs-inferno/config.codex.yaml"];
 
 /** Put the ladder of a-one at a rung by hand and commit it in the tree. */
-const atRung = (tree, tier, rejections) => {
+const atRung = (tree, tier, misses) => {
   const file = path.join(tree, ".specs-inferno/state.yaml");
   writeFile(file, fs.readFileSync(file, "utf8")
     .replace(/review_tier: \w+/, `review_tier: ${tier}`)
-    .replace(/review_rejections: \d+/, `review_rejections: ${rejections}`));
-  git(tree, ["commit", "-qam", `${tier} rejected ${rejections} time(s)`]);
+    .replace(/review_misses: \d+/, `review_misses: ${misses}`));
+  git(tree, ["commit", "-qam", `${tier} at miss ${misses}`]);
 };
 
 test("a Codex config with no host key names the Codex agents on every rung, in a worktree", () => {
@@ -409,8 +363,8 @@ test("a Codex config with no host key names the Codex agents on every rung, in a
   assert.match(reviewTree().out, /^dispatch specsmd_inferno_reviewer item a-one$/m);
   write(tree, REVIEW, FIX);
   reviewTree();
-  const rung = (tier, rejections) => {
-    atRung(tree, tier, rejections);
+  const rung = (tier, misses) => {
+    atRung(tree, tier, misses);
     const out = reviewTree().out + inTree(["frontier", "alpha"]).out;
     assert.doesNotMatch(out, /specsmd-inferno-/);
     return { out, agent: JSON.parse(reviewTree(["--json"]).out).next.agent };
@@ -419,8 +373,8 @@ test("a Codex config with no host key names the Codex agents on every rung, in a
   const escalate = rung("strong", 2);
   assert.match(escalate.out, /^next escalate specsmd_inferno_builder_escalate: a fresh builder takes a-one over/m);
   assert.equal(escalate.agent, "specsmd_inferno_builder_escalate");
-  const oracle = rung("escalate", 2);
-  assert.match(oracle.out, /^next oracle specsmd_inferno_oracle: ask it about a-one/m);
+  const oracle = rung("escalate", 3);
+  assert.match(oracle.out, /^next oracle specsmd_inferno_oracle: a-one missed 3 reviews, so ask it about a-one/m);
   assert.equal(oracle.agent, "specsmd_inferno_oracle");
 });
 
