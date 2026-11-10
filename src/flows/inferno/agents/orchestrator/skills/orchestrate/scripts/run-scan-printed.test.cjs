@@ -18,7 +18,7 @@ const HOST = {
     "delivery:\n  base_branch: main\n",
 };
 const LINE = '\n  - file: src/a.ts\n    line: 1\n    claim: a reads no producer\n    proof: "rg -n producer src"\n';
-const PLAN_LINE = LINE.replace("    claim:", "    kind: LEGAL\n    claim:");
+const PLAN_LINE = LINE.replace("    claim:", "    kind: wrong_assumption\n    claim:");
 
 /** A worktree with one commit of work, on a host with a Codex config and the given role files. */
 function started(name = INTENT_TREE, files = HOST) {
@@ -51,9 +51,9 @@ function answer(results, lines = {}) {
   }
 }
 
-test("on Codex the plan-time refusal prints the caller's call with wiring, and run as printed it scans on Codex", () => {
+test("on Codex the refusal of --only prints the caller's cross-check call, and run as printed it dispatches on Codex", () => {
   const fixture = repo({ files: HOST });
-  const plan = ["--only", "contract", "--plan", "alpha", "--config", CODEX];
+  const plan = ["--only", "wiring", "--plan", "alpha", "--config", CODEX];
   const refused = run(fixture, ["scan", ...plan]);
   assert.equal(refused.code, 1, refused.out + refused.err);
   const [sent] = asPrinted(fixture, refused.err, "scan");
@@ -113,14 +113,16 @@ test("on a tree on no intent branch, every scan, collect and review call the sca
   reviewed(asPrinted(fixture, collected.out, "review")[0]);
 });
 
-test("on Codex the plan-time scan's collect and its hand-off to the planner run as printed on Codex", () => {
+test("on Codex the cross-check's collect and its hand-off to the planner run as printed on Codex", () => {
   const fixture = repo({ files: HOST });
-  const sent = run(fixture, ["scan", "--only", "wiring", "--plan", "alpha", "--config", CODEX]);
-  answer(scanned(sent, 1), { wiring: PLAN_LINE });
+  const sent = run(fixture, ["scan", "--plan", "alpha", "--config", CODEX]);
+  answer(scanned(sent, 1), { "cross-check": PLAN_LINE });
   const [gaps] = asPrinted(fixture, sent.out, "collect");
   assert.equal(gaps.code, 2, gaps.out + gaps.err);
-  assert.match(gaps.out, /GAP wiring-1/);
-  scanned(asPrinted(fixture, gaps.out, "scan")[0], 1);
+  assert.match(gaps.out, /GAP r1-1 wrong_assumption/);
+  const [fixRound] = asPrinted(fixture, gaps.out, "scan");
+  scanned(fixRound, 1);
+  assert.match(fixRound.out, /fix round 1 of 2/);
 });
 
 /** The scan collected with no line and the intent review dispatched, on the caller's flags. */

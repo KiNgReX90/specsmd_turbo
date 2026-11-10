@@ -22,7 +22,7 @@ const writer = require('./state-transition.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { bad, parseItemReview, reviewPath, reviewerId } = require('./run-review-file.cjs');
 const { REINSTALL, completedBeforeReviewRule, reviewRuleSince } = require('./state-review.cjs');
-const { integrateCall, itemRecordCall, itemReviewCall, realAppCall } = require('./run-call.cjs');
+const { integrateCall, itemRecordCall, itemReviewCall, realAppCall, verifyItemCall } = require('./run-call.cjs');
 const { realAppPaths } = require('./run-real-app.cjs');
 const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
 const { itemMutants } = require('./run-review-mutants.cjs');
@@ -163,27 +163,54 @@ function realAppLine(tree, config, range, id = null) {
 /**
  * The review owed, from `from` to HEAD. After a recorded review `from` is the commit it read, so
  * the range is the fix, and the dispatch names that review as the previous one.
+ *
+ * The dispatch names the proof verify-item wrote only when it was taken over the item as HEAD
+ * holds it (run-item-proof.cjs), and a first review then reads the range and paths of the proof's
+ * own diff. A proof of an older state is never named: the review waits on the verify-item call
+ * that writes a current one. With no proof, as on a tree the released flow verified, the
+ * dispatch goes out without the line and its reviewer runs the item's tests itself.
  */
 function owed(tree, context, reason, from, paths) {
   const { intent, item, config, rel } = context;
   const { agent, model } = hostActor('reviewer', config);
-  const range = `${short(tree, from)}..${short(tree, 'HEAD')}`;
+  // Required here, not at the top: run-item-proof loads run-intents, which loads this file.
+  const { proofAtHead } = require('./run-item-proof.cjs');
+  const proof = proofAtHead(tree, intent.id, item.id);
+  const verify = verifyItemCall(tree, proof.items);
+  if (proof.state === 'stale') {
+    return {
+      exit: 3,
+      payload: { ok: false, item: item.id, owed: 'verify-item', proof: null, stale: proof.file, verify },
+      out: [
+        `verify-item owed for ${item.id} before its review: its proof ${proof.file} was taken over an older state of its paths, ` +
+          'so no reviewer may read it',
+        `then ${verify}, then ${itemReviewCall(tree, item.id)}`,
+      ],
+    };
+  }
+  const named = proof.state === 'current' ? proof.file : null;
+  const previous = item.review && fs.existsSync(path.join(tree, rel)) ? rel : null;
+  const own = named && !previous && proof.paths.length > 0;
+  const start = own ? proof.from : from;
+  const read = own ? proof.paths : paths;
+  const range = `${short(tree, start)}..${short(tree, 'HEAD')}`;
   const spec = path.relative(tree, lib.readItemSpec(tree, intent.id, item.id).file);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
-  const previous = item.review && fs.existsSync(path.join(tree, rel)) ? rel : null;
   return {
     exit: 3,
-    payload: { ok: false, item: item.id, owed: reason, agent, model, range, previous, paths, spec, brief, write: rel },
+    payload: { ok: false, item: item.id, owed: reason, agent, model, range, previous, paths: read, proof: named, spec, brief, write: rel },
     out: [
       `review owed for ${item.id}: ${reason}`,
       ...reviewerLines(config, `item ${item.id}`, previous, [
-        `  range ${range} paths ${paths.join(' ') || '(the whole range)'}`,
+        `  range ${range} paths ${read.join(' ') || '(the whole range)'}`,
+        ...(named ? [`  proof ${named}`] : []),
         ...realAppLine(tree, config, range, item.id),
         `  spec ${spec}`,
         `  brief ${brief}`,
         `  write ${rel}`,
       ]),
       `then ${itemRecordCall(tree, item.id)} records it; it runs the review's mutants first, so give it the time those tests take`,
+      ...(named ? [] : [`no proof for ${item.id}, so its reviewer runs the item's tests itself: ${verify} writes one, and review again names it`]),
     ],
   };
 }

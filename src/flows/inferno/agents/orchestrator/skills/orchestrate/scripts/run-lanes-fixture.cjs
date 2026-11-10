@@ -22,6 +22,7 @@ const RUN = path.join(__dirname, 'run.cjs');
 const { tempDir } = require('./test-temp.cjs');
 const { writeFile } = require('./test-write.cjs');
 const { reviewBefore } = require('./review-fixture.cjs');
+const jobs = require('./run-jobs.cjs');
 
 const BRANCH = 'inferno-intent/demo-00000000T000000Z';
 const DEFAULT = '.specs-inferno/config.yaml';
@@ -53,10 +54,69 @@ function config(lanes = { smoke: '0' }, finalize = [whole], scope = ['src/**'], 
   return `delivery:\n  base_branch: main\nverification:\n  finalize:\n${finalize.map((c) => `    - ${c}\n`).join('')}${blocks}`;
 }
 
+/** Every job file under a fixture's cache, whatever branch dir it sits in. */
+function jobFiles(cache) {
+  if (!fs.existsSync(cache)) return [];
+  return fs.readdirSync(cache, { recursive: true, encoding: 'utf8' })
+    .filter((rel) => rel.endsWith('-job.json'))
+    .map((rel) => path.join(cache, rel));
+}
+
+/** Has every process of the group ended, or is it a zombie no signal reaches. */
+function groupGone(pid) {
+  try {
+    process.kill(-pid, 0);
+    return false;
+  } catch (error) {
+    return error.code === 'ESRCH';
+  }
+}
+
+/**
+ * A job run.cjs detached in this fixture's tree: it leads its own process group and runs in the
+ * tree. A job file a test wrote by hand for a process of its own names neither, and is left alone.
+ */
+function detachedHere(job, tree) {
+  if (!jobs.alive(job)) return false;
+  try {
+    const stat = fs.readFileSync(`/proc/${job.pid}/stat`, 'utf8');
+    const group = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
+    return group === job.pid && fs.readlinkSync(`/proc/${job.pid}/cwd`) === fs.realpathSync(tree);
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Stop every gate and lane job a test detached in this fixture, by the pid its job file records,
+ * and wait until its whole process group is gone. A job outlives the run.cjs call that detached
+ * it: the gate job folds the base and runs its finalize commands in the tree, which append to
+ * `.runs`, and a lane job reads the tree with git once its command ends. A cleanup that removes
+ * the dir while one still runs fails with ENOTEMPTY. The pass repeats until no job is alive.
+ */
+function stopJobs(cache, tree) {
+  for (let pass = 0; pass < 10; pass += 1) {
+    const running = jobFiles(cache).map(jobs.readJson).filter((job) => detachedHere(job, tree));
+    if (running.length === 0) return;
+    for (const job of running) {
+      try {
+        // The lane command and its children share the job's group, so they die with it.
+        process.kill(-job.pid, 'SIGKILL');
+      } catch (error) {
+        if (error.code !== 'ESRCH') throw error;
+      }
+    }
+    for (const job of running) {
+      for (let i = 0; i < 100 && !groupGone(job.pid); i += 1) jobs.sleepSync(50);
+    }
+  }
+}
+
 function fixture(t, source = config()) {
   const dir = tempDir('inferno-lanes-');
   t.after(() => {
     writeFile(path.join(dir, 'release'), '');
+    stopJobs(path.join(dir, 'cache'), path.join(dir, 'app'));
     fs.rmSync(dir, { recursive: true, force: true });
   });
   const tree = path.join(dir, 'app');

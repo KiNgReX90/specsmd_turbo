@@ -210,13 +210,25 @@ test("each call builder prints its exact line from its own flags, the site's dec
       [["/w", "a-one"], `run.cjs review --item a-one --reviewer <agent-id> --tree /w${tail}`],
       [["/w", "a-one", "beta"], `run.cjs review --item a-one --reviewer <agent-id> --tree /w --intent beta --config ${CODEX}`],
     ],
+    verifyItemCall: [
+      [["/w", ["a-one"]], `run.cjs verify-item a-one --tree /w${tail}`],
+      [["/w", ["a-one", "a-two"]], `run.cjs verify-item --items a-one,a-two --tree /w${tail}`],
+    ],
     intentReviewCall: [[["/w"], `run.cjs review --tree /w${tail}`]],
     intentRecordCall: [[["/w"], `run.cjs review --reviewer <agent-id> --tree /w${tail}`]],
     scanCall: [
       [["/w"], `run.cjs scan --tree /w${tail}`],
       [["/w", null, true], `run.cjs scan --collect --tree /w${tail}`],
-      [["/w", "plan-x"], `run.cjs scan --only wiring --plan plan-x --tree /w${tail}`],
-      [["/w", "plan-x", true], `run.cjs scan --collect --only wiring --plan plan-x --tree /w${tail}`],
+      [["/w", "plan-x"], `run.cjs scan --plan plan-x --tree /w${tail}`],
+      [["/w", "plan-x", true], `run.cjs scan --collect --plan plan-x --tree /w${tail}`],
+    ],
+    itemScanCall: [
+      [["/w", "a-one"], `run.cjs scan --item a-one --tree /w${tail}`],
+      [["/w", "a-one", true], `run.cjs scan --collect --item a-one --tree /w${tail}`],
+    ],
+    planOracleCall: [
+      [["/w", "plan-x"], 'run.cjs dispatch-log plan-x --tier oracle --impact "<grade>: <line>" --complexity ' +
+        `"high earlier: <GAP id> stayed open through both fix rounds of the cross-check" --tree /w --config ${CODEX}`],
     ],
     teardownCall: [[["/w"], `run.cjs teardown --tree /w${tail}`]],
     realAppCall: [
