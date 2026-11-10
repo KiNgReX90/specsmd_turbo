@@ -1,0 +1,958 @@
+{
+  "language": "English",
+  "md": {
+    "product": "For the product team",
+    "asA": "As",
+    "iWant": "I want",
+    "soThat": "so that",
+    "why": "Why this story",
+    "criteria": "Acceptance criteria",
+    "given": "Given",
+    "when": "when",
+    "then": "then",
+    "outOfScope": "Out of scope",
+    "none": "None.",
+    "tester": "tester",
+    "via": {
+      "ui": "screen",
+      "api": "API",
+      "db": "database",
+      "log": "log",
+      "none": "none"
+    },
+    "coveredBy": "covered by S{id}"
+  },
+  "design": {
+    "tabs": {
+      "functional": "Functional",
+      "flow": "Code Scaffold",
+      "c4": "C4 model",
+      "review": "Review",
+      "built": "Code",
+      "aria": "View of the page",
+      "wait": "The review of the changes is not available here yet.",
+      "back": "Back to Review",
+      "backTo": "Back to {file} in Review"
+    },
+    "switches": {
+      "aria": "Explanations on the page",
+      "details": "Details",
+      "help": "Explanations",
+      "detailsOn": "Details: on. Hide the explanations in plain words of the intent and the stories",
+      "detailsOff": "Details: off. Show the explanations in plain words of the intent and the stories",
+      "helpOff": "Explanations: off. Turn on the explanations of every part",
+      "close": "Close the explanations",
+      "closeTitle": "Close the explanations (Esc)",
+      "title": "How to use {view}",
+      "foot": "*Details* turns the explanations in plain words of the intent and every story on or off. *?* turns these explanations on or off, with the explanations of the parts of the page.",
+      "text": {
+        "play": "Press *Play* and the steps run by themselves, or go on yourself with the arrows next to the step number. | With the keyboard: [Space], [←] and [→].",
+        "legend": "*Legend* says what the colours and marks mean. *Only new and changed* leaves out what existed, *Full screen* gives the drawing all the room.",
+        "func": {
+          "lead": "Under the title is what the intent will do; *Read more* shows the rest. Below it the lifecycle of what it builds, the vertical slices and the integration tests.",
+          "leadBuilt": "Under the title is what the intent built; *Read more* shows the rest. Below it the lifecycle of what it built, the vertical slices and the integration tests.",
+          "flow": "In the lifecycle the numbers are the stories that build a step. A vertical slice is one story, from where it starts down to the tables; a line between two columns is a seam, and an integration test sits there.",
+          "flowBuilt": "In the lifecycle the numbers are the stories that built a step. A vertical slice is one story, from where it starts down to the tables; a line between two columns is a seam, and an integration test sits there.",
+          "story": "Click a story, a story number or a column for its details: why it is there, its criteria, its code and what it builds on. | Rest the mouse on a story and what it builds lights up. [←] and [→] go to the story before or after it, [Esc] closes the details.",
+          "storyBuilt": "Click a story, a story number or a column for its details: why it is there, its criteria, its code and what it builds on. | Rest the mouse on a story and what it built lights up. [←] and [→] go to the story before or after it, [Esc] closes the details.",
+          "code": "What the code will look like is under {flow}.",
+          "codeBuilt": "How the code was built is under {flow}.",
+          "review": "Every file the build changed is under {review}.",
+          "c4": "Who and what the system touches is in the {c4}."
+        },
+        "flow": {
+          "lead": "The starting point of the code:",
+          "leadPlan": "The plan of the code, with the change that is open:",
+          "leadBuilt": "The code as it was built:",
+          "drawn": "every part in its layer, every arrow a call. A flow begins at *Start* with its number and follows the arrows, step by step.",
+          "story": "Choose a story at the top and what it builds lights up. Click a part for what it does and where it is in the code; the details are on the right.",
+          "marks": "A coloured edge and a mark on the corner say where the build deviated from the starting point. Click such a part for what was planned, what it became and why.",
+          "part": "Click a part for what it does, what changed and which stories worked on it; the details are on the right. *View the change* opens the file under {review}.",
+          "wrong": "Is the drawing wrong? At the approval choose *The Code Scaffold is wrong* and say what has to change."
+        },
+        "review": {
+          "list": "Every file the build changed, as in a merge request: the list on the left, on the right the chosen file with what it does, what changed and the change in the code.",
+          "find": "Search by name or path, choose an order or filter on the kind of change and the story. A deviation from the design is a card with the file: planned, built and why. | [/] searches a file, [j] and [k] go to the next and the previous one.",
+          "seen": "Tick *Viewed* and you go on to the next file you did not see yet. The link to the merge request opens the file there, once it exists.",
+          "flow": "*View in the flow* shows the file as a part of the drawing under {flow}."
+        },
+        "c4": {
+          "zoomCode": "You zoom in over four levels: system context, containers, components and code. The bar above the drawing shows where you are and takes you back.",
+          "zoom": "You zoom in over three levels: system context, containers and components. There is no code yet: it comes with the build. The bar above the drawing shows where you are and takes you back.",
+          "into": "Double-click a card to zoom into it, or choose it and click the magnifier on its corner. | [Esc] first lets go of what you chose, then goes a level back.",
+          "card": "Click a card for what it is, whom it talks to and which stories will work on it. A number on a card pins that story.",
+          "cardBuilt": "Click a card for what it is, whom it talks to and which stories worked on it. A number on a card pins that story.",
+          "drag": "Drag the drawing when it is larger than the window, or zoom with the buttons at the bottom right. | [+], [-] and [0] do that too."
+        }
+      }
+    },
+    "review": {
+      "aria": "Review of the changes",
+      "nothingBuilt": "This build changed no files.",
+      "nothingYet": "After the build the changed files are listed here.",
+      "files": "Files",
+      "fold": "Fold the list of files",
+      "unfold": "Unfold the list of files",
+      "listWidth": "Width of the list of files",
+      "listWidthTip": "Drag to make the list wider or narrower (left or right arrow). Double-click for the usual width.",
+      "oneLine": "1 line",
+      "nLines": "{n} lines",
+      "countTip": "{added} added, {removed} removed",
+      "seen": "Viewed",
+      "seenTip": "Mark this file as viewed",
+      "seenWord": "viewed",
+      "toFlow": "View in the flow",
+      "toFlowTip": "Show this part in the drawing, on the Flow tab",
+      "mrStory": "Open {name} in the merge request of story {n} in {host}",
+      "mrIntent": "Open {name} in the merge request of the intent in {host}",
+      "mrHost": "Merge request",
+      "story": "Story",
+      "stories": "Stories",
+      "storySay": "Story {n}: {title}",
+      "notBuilt": "No change in the code: this part was not built.",
+      "notUsed": "No change in the code: this part was not used.",
+      "noFile": "No change of this file on this page.",
+      "detailsOf": "Details of {name}",
+      "noDetails": "The design says nothing about this file.",
+      "perStory": "Change per story",
+      "all": "All",
+      "allTip": "The whole change of this file",
+      "onlyStory": "Only what story {n} did to this file",
+      "onlyStoryTitle": "Only what story {n}: {title} did to this file",
+      "split": "Divide the room between the details and the code",
+      "splitTip": "Drag to give the details or the code more room (left or right arrow). Double-click for the usual split.",
+      "splitText": "{a} percent details, {b} percent code",
+      "told": "{what}. File {i} of {n}.",
+      "file": { "new": "new", "changed": "changed", "removed": "removed" },
+      "orders": { "flow": "Order of the flow", "build": "Order of the build", "name": "Name (A-Z)", "tree": "Folders", "size": "Largest change" },
+      "chips": { "new": "New", "changed": "Changed", "removed": "Removed", "different": "Different", "added": "Added", "gone": "Not built/used" },
+      "loose": "Without a path",
+      "top": "Top folder",
+      "none": "No file fits this filter.",
+      "done": "All files are viewed.",
+      "linesIn": "{lines} added",
+      "linesOut": "{lines} removed",
+      "search": "Search, e.g. *Processor",
+      "searchLabel": "Search a file by name or path",
+      "searchTip": "Search by name or path; * stands for any text (key /)",
+      "order": "Order",
+      "orderTip": "Order of the list",
+      "hideSeen": "Hide viewed",
+      "kinds": "Change",
+      "clear": "Clear the filters",
+      "folder": "Folder {name}, {files}",
+      "oneFile": "1 file",
+      "nFiles": "{n} files",
+      "shown": "{shown} of {files}",
+      "progress": "{seen} of {n} viewed",
+      "filter": "Filter",
+      "filterOn": "Filter, {n} on",
+      "clearAll": "Clear all filters"
+    },
+    "stepbox": {
+      "label": "The step",
+      "headTip": "Drag the step wherever you like. A double-click puts it back.",
+      "step": "Step {n}",
+      "stepNone": "Step",
+      "fold": "Fold the step",
+      "unfold": "Unfold the step",
+      "storySay": "User story {n}: {title}",
+      "fromTo": "From {from} to {to}."
+    },
+    "zoom": {
+      "label": "Zoom",
+      "out": "Zoom out (-)",
+      "in": "Zoom in (+)",
+      "fit": "Fit",
+      "fitTip": "Show the whole drawing (0)",
+      "readTip": "Back to readable, on the step (0)",
+      "toStart": "To the start of the step",
+      "toEnd": "To the end of the step",
+      "startsHere": "The step starts here",
+      "endsHere": "The step ends here"
+    },
+    "float": {
+      "title": "Details",
+      "headTip": "Drag the details wherever you like. A double-click puts them back.",
+      "fold": "Fold the details",
+      "unfold": "Unfold the details"
+    },
+    "lanes": {
+      "screen": "Screen",
+      "server": "Server",
+      "database": "Database",
+      "external": "Outside the application"
+    },
+    "reasons": {
+      "open": "A choice is still open. You make it at the approval.",
+      "newFollows": "New, and it follows an example in the code.",
+      "newOwn": "New, with its own design: no example in the code does it the same way.",
+      "checked": "Its place in the code was found and checked.",
+      "unchecked": "Only the name is known. Its place in the code was not checked.",
+      "docs": "Known only from documentation, not from the code.",
+      "assumption": "Rests on an assumption: ",
+      "doubt": "But the agent has a doubt: "
+    },
+    "reasonsBuilt": {
+      "open": "At the design a choice was still open, to be made at the approval.",
+      "newFollows": "New, and it followed an example in the code.",
+      "newOwn": "New, with its own design: no example in the code did it the same way.",
+      "checked": "At the design its place in the code was found and checked.",
+      "unchecked": "At the design only the name was known. Its place in the code was not checked.",
+      "docs": "At the design it was known only from documentation, not from the code.",
+      "assumption": "Rested on an assumption: ",
+      "doubt": "But the agent had a doubt: "
+    },
+    "added": "Built: the builder names it in the build notes, with its place in the code.",
+    "buildLine": {
+      "asPlanned": "Code Scaffold: built as planned",
+      "changed": "Code Scaffold: {different} different from the design, {extra} added{gone}",
+      "gone": ", {n} not built or used"
+    },
+    "and": "and",
+    "about": {
+      "different": "Different from the design",
+      "added": "Added during the build",
+      "gone": "Not built",
+      "unused": "Not used",
+      "what": "What it does",
+      "changed": "What changed",
+      "inFlowOne": "In the flow: {text} (step {n}).",
+      "inFlow": "In the flow:",
+      "stepLine": "{text} (step {n}).",
+      "alsoInStep": "Also in step {list}.",
+      "alsoInSteps": "Also in steps {list}."
+    },
+    "built": {
+      "note": {
+        "plan": "This is the starting point of the code: roughly how it will be built. The build can differ in the details. You will see every difference on this drawing afterwards. A new permission, a new table or a new module is put to you first, before it is built.",
+        "built": "This is how it was built. Where a part differs from the approved starting point, a coloured border and a mark on its corner show it: blue is different from the design, green is added, grey is not built or not used. Click such a part for what was planned, what it became and why.",
+        "open": "A change is open. This drawing shows the plan, with that change in it, and not yet what was built. Review shows what is built already."
+      },
+      "noReason": "The build notes give no reason.",
+      "pills": {
+        "different": "different",
+        "added": "added",
+        "gone": "not built"
+      },
+      "unused": "not used",
+      "planned": "Planned",
+      "builtLabel": "Built",
+      "why": "Why",
+      "legend": {
+        "different": "Different from the design",
+        "added": "Added during the build",
+        "gone": "Not built or not used",
+        "module": "Module different from the design"
+      }
+    },
+    "browse": {
+      "partKeys": "previous or next element",
+      "nearKeys": "to the block in that direction",
+      "partWalk": "Previous or next element",
+      "goPart": {
+        "prev": "Go to the previous element: {name} (left arrow)",
+        "next": "Go to the next element: {name} (right arrow)"
+      },
+      "goPartNoKey": {
+        "prev": "Go to the previous element: {name}",
+        "next": "Go to the next element: {name}"
+      },
+      "nOfN": "{n} of {total}",
+      "elementNOfN": "Element {n} of {total}",
+      "stepWalk": "Previous or next step",
+      "goStep": {
+        "prev": "Go to the previous step: step {n} (left arrow)",
+        "next": "Go to the next step: step {n} (right arrow)"
+      },
+      "stepNOfN": "Step {n} of {total}"
+    },
+    "detail": {
+      "level": {
+        "green": "Green",
+        "orange": "Orange",
+        "red": "Red"
+      },
+      "lines": "lines {lines}",
+      "stillOpen": "Still open",
+      "certainty": "Certainty",
+      "extends": "Extends",
+      "implements": "Implements",
+      "deviates": "Differs from the example",
+      "where": "Where in the code",
+      "like": "Looks like",
+      "right": "Permission",
+      "builtIn": "Built in",
+      "registeredIn": "Registered in",
+      "step": "Step {n}",
+      "buildsOn": "Builds on",
+      "inCode": "In the code",
+      "review": "See the change",
+      "reviewTip": "Open the change of {name} in Review"
+    },
+    "diff": {
+      "oneLine": "1 line",
+      "nLines": "{n} lines",
+      "noEol": "No newline at the end of the file",
+      "change": "Change in the code",
+      "tooBig": "Too large to show here: see this change in git.",
+      "newFile": "New file",
+      "deleted": "File deleted",
+      "count": "{added} added, {removed} removed",
+      "body": "The change in {name}, line by line",
+      "cutOne": "Shortened: the last line of the change is not on this page.",
+      "cutMany": "Shortened: the last {n} lines of the change are not on this page."
+    },
+    "status": {
+      "plan": {
+        "new": "New",
+        "existing": "Exists, is used",
+        "changed": "Is changed"
+      },
+      "built": {
+        "new": "Built new",
+        "existing": "Existed, was used",
+        "changed": "Was changed"
+      },
+      "gone": {
+        "new": "New",
+        "existing": "Exists",
+        "changed": "Would be changed"
+      }
+    },
+    "moduleStatus": {
+      "plan": {
+        "new": "New module",
+        "existing": "Exists, is used",
+        "changed": "Exists, is changed"
+      },
+      "built": {
+        "new": "Built new",
+        "existing": "Existed, was used",
+        "changed": "Existed, was changed"
+      },
+      "gone": {
+        "new": "New module",
+        "existing": "Exists",
+        "changed": "Exists, would be changed"
+      }
+    },
+    "level": {
+      "green": "green",
+      "orange": "orange",
+      "red": "red"
+    },
+    "certainty": "certainty {level}",
+    "stillOpen": "Still open: {text}",
+    "right": "permission",
+    "buildsOn": "builds on",
+    "mark": {
+      "different": "Different from the design",
+      "added": "Added during the build",
+      "gone": "Not built",
+      "unused": "Not used"
+    },
+    "filter": {
+      "label": "Only new and changed",
+      "short": "Changes",
+      "title": "{label}: {state}. {action}",
+      "on": "on",
+      "off": "off",
+      "which": {
+        "one": "the part",
+        "many": "the {n} parts"
+      },
+      "are": {
+        "one": {
+          "plan": "that already exists and does not change",
+          "built": "that already existed and did not change"
+        },
+        "many": {
+          "plan": "that already exist and do not change",
+          "built": "that already existed and did not change"
+        }
+      },
+      "showAlso": "Also show {which} {are}",
+      "leaveOut": "Leave out {which} {are}"
+    },
+    "kinds": {
+      "table": "table",
+      "view": "view",
+      "JS module": "JS module",
+      "SQL script": "SQL script",
+      "queue": "queue",
+      "job": "job",
+      "file": "file",
+      "abstract class": "abstract class"
+    },
+    "differs": "differs",
+    "legend": {
+      "title": "Legend",
+      "certainty": "Certainty",
+      "green": "Checked or beyond doubt",
+      "orange": "Doubt, or only from docs",
+      "red": "Choice open",
+      "rulesClick": "Fixed rules, not the agent's feeling. Click a part for the reason.",
+      "rulesTap": "Fixed rules, not the agent's feeling. Tap a part for the reason.",
+      "afterBuild": "After the build",
+      "status": "Status",
+      "lines": "Lines",
+      "does": "Does something with",
+      "reads": "Reads or looks up",
+      "buildsOn": "Builds on",
+      "more": "Other",
+      "module": "Module: the coloured label at the bottom of a part",
+      "chosen": "In the chosen story",
+      "differs": "differs",
+      "differsLong": "Differs from the example in the code",
+      "asks": {
+        "title": "Is this wrong?",
+        "choose": "At the approval, choose",
+        "option": "The Code Scaffold is wrong",
+        "say": "Say what should change.",
+        "redraw": "The agent changes the plan and draws it again, before anything is built."
+      }
+    },
+    "more": "More",
+    "less": "Less",
+    "readWords": [
+      "reads",
+      "read",
+      "knows",
+      "names",
+      "looks",
+      "finds",
+      "searches",
+      "sorts",
+      "picks",
+      "chooses",
+      "gets",
+      "fetches",
+      "asks",
+      "counts",
+      "views",
+      "checks"
+    ],
+    "trigger": {
+      "job": "scheduled job",
+      "call": "call from outside",
+      "screen": "screen",
+      "queue": "message on the queue",
+      "install": "at install",
+      "start": "starts here"
+    },
+    "mode": {
+      "label": "Flow or review",
+      "flow": "Flow",
+      "review": "Review",
+      "flowTip": "Follow the flow: go a step back or forward (left or right arrow) or play the steps (space). On the right you see where each step goes. Stays on until you choose Review",
+      "reviewTip": "Look at the parts one by one (left or right arrow); with a block in focus the arrows go to the block in that direction. Space plays the steps. Stays on until you choose Flow"
+    },
+    "pane": {
+      "grip": "Drag to make the panel wider or narrower",
+      "gripTip": "Drag to make the panel wider or narrower (left or right arrow). Double-click for the usual width.",
+      "rail": "Details",
+      "unfold": "Unfold the details",
+      "unfoldName": "Unfold the details: {name}",
+      "fold": "Fold the details",
+      "width": "{w} pixels wide",
+      "emptySteps": "This story has no steps.",
+      "emptyBlocks": "This drawing has no blocks."
+    },
+    "panel": {
+      "choose": "Choose a story to see what it builds.",
+      "chooseBuilt": "Choose a story to see what it built.",
+      "actClick": "Click a part for its place in the code.",
+      "actTap": "Tap a part or an arrow for the details.",
+      "openClick": "Open the drawing and click a part for its place in the code.",
+      "openTap": "Open the drawing and tap a part or an arrow for the details.",
+      "tall": "Does not fit on one screen: open it full screen.",
+      "chips": "Choose a story",
+      "full": "Full screen",
+      "fullTip": "Open the drawing full screen",
+      "openDrawing": "Open the drawing",
+      "controls": "Controls of the drawing",
+      "allHead": "All: how it fits together",
+      "all": "All"
+    },
+    "pick": {
+      "part": "Choose another element (up or down arrow)",
+      "module": "Choose an element of this module (up or down arrow)",
+      "of": "Elements of {name}",
+      "list": "Elements"
+    },
+    "play": {
+      "play": "Play",
+      "pause": "Pause",
+      "playTip": "Play the steps, one by one (space)",
+      "pauseTip": "Pause playing (space)"
+    },
+    "steps": {
+      "legend": "Legend",
+      "openLegend": "Open the legend",
+      "foldLegend": "Fold the legend",
+      "prev": "Go to the previous step (left arrow)",
+      "next": "Go to the next step (right arrow)",
+      "space": "Space",
+      "playPause": "play or pause",
+      "left": "Left arrow",
+      "right": "Right arrow",
+      "up": "Up arrow",
+      "down": "Down arrow",
+      "prevNext": "previous or next step",
+      "stepOf": "Step {n} of {total}",
+      "oneStep": "1 step",
+      "nSteps": "{n} steps",
+      "noSteps": "No steps"
+    },
+    "stories": {
+      "choose": "Choose story {n} in the drawing",
+      "built": "Built",
+      "fold": "Fold story {n}",
+      "unfold": "Show the user story of story {n}",
+      "one": "Story",
+      "many": "Stories",
+      "region": "The stories of what you chose"
+    },
+    "view": {
+      "label": "{title} full screen",
+      "side": "Show or hide the legend and the explanation",
+      "zoomOut": "Zoom out (-)",
+      "zoomIn": "Zoom in (+)",
+      "zoomField": "Zoom in percent",
+      "zoomFieldTip": "Type a percentage and press Enter",
+      "fit": "Fit",
+      "fitTip": "Show the whole drawing (0)",
+      "close": "Close",
+      "closeTip": "Back to the page (Esc)",
+      "sideTitle": "Legend and explanation",
+      "closeLegend": "Close the legend",
+      "tip": "Drag to pan, scroll to zoom.",
+      "tipTouch": "Drag to pan, pinch to zoom."
+    }
+  },
+  "overview": {
+    "title": "Intent overview",
+    "more": "Read more",
+    "lifecycle": "Lifecycle",
+    "slices": "Vertical slices",
+    "design": "Code Scaffold",
+    "tests": "Integration tests",
+    "outOfScope": "Out of scope",
+    "updated": "Updated {at}",
+    "rootFolder": "top folder",
+    "status": "Status",
+    "other": "Other",
+    "tables": "Tables",
+    "code": "Code",
+    "theWork": "the work",
+    "lifecycleAria": "Lifecycle of {subject}, with the stories per step",
+    "lifecycleListAria": "Lifecycle of {subject}, top to bottom",
+    "after": "after",
+    "againAfter": "again after",
+    "stories": "Stories",
+    "count": [
+      "",
+      "one",
+      "two",
+      "three",
+      "four",
+      "five",
+      "six",
+      "seven",
+      "eight"
+    ],
+    "stage": "Build step {n}",
+    "stageTogether": "Build step {n}, {count} at once",
+    "seamTested": "an integration test sits there",
+    "seamOpen": "seam without a planned integration test",
+    "seamOpenBuilt": "seam without an integration test",
+    "buildsOn": "builds on story",
+    "from": "From where it starts",
+    "downTo": "down to the tables",
+    "startsAt": "Starts at",
+    "testWith": "tests with",
+    "feedsOne": "Built on by:",
+    "feedsMany": "Built on by:",
+    "noSeam": "No seam with another story.",
+    "toTests": "How these seams are tested is under Integration tests below",
+    "toTestsBuilt": "How these seams were tested is under Integration tests below",
+    "noTestYet": "no integration test yet",
+    "noTest": "without an integration test",
+    "views": "Functional or technical",
+    "functional": "Functional",
+    "technical": "Technical",
+    "testsAria": "Integration tests between the stories, per build step",
+    "testsKey": "Each arrow is one test, from the earlier story to the story that holds the test.",
+    "testsTogether": "tests together with",
+    "pair": "Story {later} tests together with story {earlier}",
+    "pairAria": "{id}: story {later} tests together with story {earlier}",
+    "openStory": "Open story {id}: {title}",
+    "runsAgainst": "Runs against",
+    "noClasses": "The test plan does not name the classes.",
+    "theReal": "the real",
+    "fromThisStory": "from this story",
+    "fromStory": "from story {id}",
+    "existing": "that already exists",
+    "fromDrawing": "taken from the drawing",
+    "andThen": ", and ",
+    "expected": "Expected",
+    "perPlan": "per the test plan:",
+    "noExpect": "Not listed apart in the test plan, see what the test does.",
+    "when": "When",
+    "whenAfter": "when story {later} is built, story {earlier} is already done",
+    "whenAfterBuilt": "when story {later} was built, story {earlier} was already done",
+    "whenWith": "when story {later} is built, together with story {earlier}",
+    "whenWithBuilt": "story {later} was built together with story {earlier}",
+    "outcomeWords": [
+      "sets",
+      "leaves",
+      "stays",
+      "remains",
+      "keeps",
+      "goes",
+      "gets",
+      "returns",
+      "shows",
+      "writes",
+      "fails",
+      "refuses",
+      "rejects",
+      "throws",
+      "marks",
+      "ends",
+      "is not",
+      "are not",
+      "does not"
+    ],
+    "testFile": "{n} test file",
+    "testFiles": "{n} test files",
+    "buildsOnHead": "Builds on",
+    "basisFor": "Basis for",
+    "integration": "Integration",
+    "testCases": "Test cases",
+    "prev": "Previous story",
+    "prevTitle": "Go to the previous story (left arrow)",
+    "next": "Next story",
+    "nextTitle": "Go to the next story (right arrow)",
+    "close": "Close",
+    "closeTitle": "Close the story (Esc)",
+    "labels": {
+      "phase": {
+        "inception": "Inception done",
+        "construction": "Intent built"
+      },
+      "explain": {
+        "flow": "The life of {subject}; the numbers are the stories that build a step.",
+        "slices": "A vertical slice is one story: one working piece, from where it starts (a screen or a scheduled job) down to the tables. Read a column top to bottom; the columns are in the order they are built in.",
+        "slicesLink": "A line between two columns is a seam: a later story uses or changes something an earlier story made or changed. That is exactly where an integration test sits, see Integration tests below.",
+        "slicesPhone": "A vertical slice is one story: one working piece, from where it starts (a screen or a scheduled job) down to the tables. Read each story top to bottom; the stories are in the order they are built in.",
+        "slicesLinkPhone": "A part marked \"builds on story\" is a seam: a later story uses or changes something an earlier story made or changed. That is exactly where an integration test sits, see Integration tests below.",
+        "tests": "An integration test sits in a later story and runs against the real code of an earlier story, never against a stub. That proves the two stories work together, not only each on its own."
+      },
+      "cell": {
+        "new": "new",
+        "changes": "changes",
+        "uses": "uses",
+        "newTip": "does not exist yet, the story creates it",
+        "changesTip": "exists, the story changes it",
+        "usesTip": "the story relies on it, but does not change it",
+        "seam": "seam with an earlier story"
+      },
+      "storyStatus": {
+        "todo": "To build",
+        "building": "Building",
+        "review": "In review",
+        "done": "Done",
+        "blocked": "Blocked"
+      },
+      "twinResult": {
+        "passed": "passed",
+        "failed": "failed",
+        "unreachable": "app unreachable",
+        "not_run": "not run"
+      }
+    },
+    "labelsBuilt": {
+      "explain": {
+        "flow": "The life of {subject}; the numbers are the stories that built a step.",
+        "slices": "A vertical slice is one story: one working piece, from where it starts (a screen or a scheduled job) down to the tables. Read a column top to bottom; the columns are in the order they were built in.",
+        "slicesPhone": "A vertical slice is one story: one working piece, from where it starts (a screen or a scheduled job) down to the tables. Read each story top to bottom; the stories are in the order they were built in.",
+        "tests": "An integration test sits in a later story and runs against the real code of an earlier story, never against a stub. That proved the two stories work together, not only each on its own."
+      },
+      "cell": {
+        "changes": "changed",
+        "newTip": "did not exist yet, the story created it",
+        "changesTip": "existed, the story changed it",
+        "usesTip": "the story relied on it, but did not change it"
+      }
+    }
+  },
+  "testCase": {
+    "prep": "Preparation",
+    "environment": "Environment",
+    "account": "Account",
+    "testData": "Test data",
+    "start": "Starting point",
+    "cleanup": "Clean up first",
+    "steps": "Steps",
+    "expected": "Expected result",
+    "stepCol": "Step",
+    "expectedCol": "Expected",
+    "end": "End",
+    "data": "Data",
+    "regression": "Regression check",
+    "agentNotes": "Notes for the agent",
+    "twin": "Twin",
+    "noTwin": "No twin",
+    "notCovered": "Not covered by the twin",
+    "open": "Open",
+    "nothing": "Nothing.",
+    "step": "Step",
+    "regressionStep": "Regression",
+    "regressionTitle": "regression"
+  },
+  "v5": {
+    "tab": "C4 model",
+    "title": "{title} · C4 model",
+    "theSystem": "the system",
+    "more": "and {n} more",
+    "months": [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec"
+    ],
+    "levels": {
+      "1": "System context",
+      "2": "Containers",
+      "3": "Components",
+      "4": "Code"
+    },
+    "views": {
+      "context": "System context",
+      "containers": "Containers",
+      "components": "Components of {name}"
+    },
+    "status": {
+      "built": {
+        "new": "New",
+        "changed": "Changed",
+        "existing": "Already existed"
+      },
+      "plan": {
+        "new": "Will be new",
+        "changed": "Will change",
+        "existing": "Exists"
+      },
+      "ext": "Outside {system}"
+    },
+    "kind": {
+      "person": "Person",
+      "system": "Software system",
+      "container": "Container",
+      "db": "Container: database",
+      "component": "Component",
+      "code": "Code",
+      "ref": "Component",
+      "ext": "External",
+      "element": "Element"
+    },
+    "partKind": {
+      "class": "Class",
+      "web component": "Screen",
+      "SQL script": "SQL script",
+      "table": "Table",
+      "job": "Scheduled task",
+      "endpoint": "Endpoint",
+      "view": "View"
+    },
+    "words": {
+      "element": {
+        "one": "element",
+        "many": "elements"
+      },
+      "commit": {
+        "one": "commit",
+        "many": "commits"
+      },
+      "file": {
+        "one": "file",
+        "many": "files"
+      },
+      "test": {
+        "one": "test",
+        "many": "tests"
+      }
+    },
+    "caption": {
+      "context": {
+        "built": "Who and what this intent touched: the people, the system and the systems around it, and how they talk to each other.",
+        "plan": "Who and what this intent will touch: the people, the system and the systems around it, and how they talk to each other."
+      },
+      "containers": "The containers of the system, and what hangs on it from outside.",
+      "components": {
+        "built": "The components in {name} that this intent built or touched, and who they talk to.",
+        "plan": "The components in {name} that this intent will build or touch, and who they talk to."
+      },
+      "code": "The classes and scripts in {name}, and who they talk to. Every line is a call that was checked in the code."
+    },
+    "card": {
+      "enterZooms": "Enter zooms in",
+      "zoomTip": "Zoom in (or double-click)",
+      "stories": "stories {list}",
+      "storyTip": {
+        "built": "Story {n}: show what it touched",
+        "plan": "Story {n}: show what it touches"
+      }
+    },
+    "copy": {
+      "done": "Copied",
+      "failed": "Could not copy"
+    },
+    "drawing": {
+      "wait": "The drawing is being laid out.",
+      "failed": "The drawing could not be laid out. Reload the page."
+    },
+    "path": {
+      "label": "Zoom level",
+      "componentsOf": "Components of",
+      "componentsOfName": "Components of {name}",
+      "pickFirst": "Pick a component first"
+    },
+    "tools": {
+      "label": "View of the drawing",
+      "smaller": "Smaller, 10 percent",
+      "smallerTip": "Smaller (-)",
+      "larger": "Larger, 10 percent",
+      "largerTip": "Larger (+)",
+      "fit": "Fit",
+      "fitTip": "Fit (0)",
+      "full": "Full screen",
+      "fullClose": "Close full screen"
+    },
+    "legend": {
+      "label": "Legend",
+      "cards": "Cards",
+      "lines": "Lines",
+      "build": "Build",
+      "intent": "Of this intent",
+      "ends": "Stops after the transition",
+      "story": {
+        "built": "Story that touched it",
+        "plan": "Story that touches it"
+      }
+    },
+    "build": {
+      "mark": {
+        "different": "Different from the design",
+        "added": "Added at the build",
+        "gone": "Not built",
+        "unused": "Not used"
+      },
+      "legend": {
+        "different": "Different from the design",
+        "added": "Added at the build",
+        "gone": "Not built or not used"
+      },
+      "card": {
+        "different": "Different from the design",
+        "added": "Added at the build",
+        "gone": "Not built",
+        "unused": "Not used"
+      },
+      "short": {
+        "different": "different from the design",
+        "added": "added",
+        "gone": "not built or not used"
+      },
+      "planned": "Planned",
+      "built": "Built",
+      "why": "Why",
+      "noReason": "The build notes give no reason.",
+      "note": "After the build, in this drawing: {counts}. A file that differs from the approved design has a coloured border and a sign on its corner: blue is different from the design, green is added, grey is not built or not used. Review lists every deviation, also of files outside the drawing.",
+      "planOpen": "A change is open. This drawing shows the plan with that change in it, not yet what was built."
+    },
+    "notice": {
+      "onlyTests": "Story {n} only wrote tests and touches nothing in the model.",
+      "nothingHere": "Story {n} touches nothing in this drawing.",
+      "allOne": "Story {n} touches {elements} here; it lies further {where}.",
+      "allMany": "Story {n} touches {elements} here; they lie further {where}.",
+      "someOne": "Story {n} touches {elements} here; {k} of them lies further {where}.",
+      "someMany": "Story {n} touches {elements} here; {k} of them lie further {where}.",
+      "dir": {
+        "down": "down",
+        "up": "up",
+        "right": "to the right",
+        "left": "to the left"
+      }
+    },
+    "say": {
+      "view": "{title}, level {level}",
+      "chosen": "{name} chosen"
+    },
+    "panel": {
+      "builtNew": "Built new",
+      "persons": "People",
+      "around": "Around it",
+      "count": "{elements} at level {level}, {name}.",
+      "clickOne": "Click one to look at it.",
+      "keys": "[Enter] or a double click zooms in, [Esc] goes back a level, [+] and [-] zoom the drawing. When the drawing is larger than the window, drag it.",
+      "source": "Made from the code of this intent. Every line between components and classes is summed from calls that were checked in the code.",
+      "zoom": {
+        "containers": "Zoom in on the containers",
+        "components": "Zoom in on the components",
+        "code": "Zoom in on the code",
+        "itsCode": "Zoom in on its code"
+      },
+      "to": "To {name}",
+      "from": "From {name}",
+      "relations": "Relations",
+      "story": "Story",
+      "stories": "Stories",
+      "storyN": "Story {n}",
+      "storyPlanned": "Story {n} · planned",
+      "showStory": {
+        "built": "Show what story {n} touched",
+        "plan": "Show what story {n} will touch"
+      },
+      "mrLabel": "Merge request {n}",
+      "mr": "Merge request !{n}",
+      "copyBranch": "Copy the branch name",
+      "close": "Close, back to the drawing",
+      "letGo": "Let the story go",
+      "classes": "Classes and scripts",
+      "storyList": "story {list}",
+      "file": "File",
+      "near": "Belongs with it",
+      "touches": "Touches",
+      "nothing": "Nothing in the model.",
+      "nothingTests": "Nothing in the model: this story only wrote tests, as proof that the chain works.",
+      "lit": {
+        "built": "The drawing lights up what this story touched. Click the story again to let it go.",
+        "plan": "The drawing lights up what this story will touch. Click the story again to let it go."
+      },
+      "ofTests": "of which {tests}",
+      "span": "{from} to {to}",
+      "branch": "Branch",
+      "mergedInto": "Merged into"
+    },
+    "side": {
+      "title": "Details",
+      "width": "Width of the details",
+      "wide": "{n} pixels wide",
+      "gripTip": "Drag to make the details wider or narrower; past the narrowest they fold; double-click for the usual width",
+      "fold": "Fold the details",
+      "open": "Unfold the details",
+      "openWith": "Unfold the details: {what}"
+    }
+  }
+}

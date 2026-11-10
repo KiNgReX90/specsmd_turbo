@@ -67,6 +67,7 @@ class ToolInstaller {
                     const targetPath = path.join(targetCommandsDir, targetFileName);
 
                     let content = await fs.readFile(sourcePath, 'utf8');
+                    if (!this.installsAsCommand(flowPath, content)) continue;
                     if (this.transformContent) {
                         content = this.transformContent(content);
                     }
@@ -80,6 +81,18 @@ class ToolInstaller {
 
         CLIUtils.displayStatus('', `Installed ${installedFiles.length} commands for ${this.name}`, 'success');
         return installedFiles;
+    }
+
+    /**
+     * Whether a file of the flow's commands folder becomes a command of this
+     * tool. Every file does, unless a tool sends some of them elsewhere.
+     *
+     * @param {string} flowPath - source folder of the flow being installed
+     * @param {string} content - the file's text
+     * @returns {boolean}
+     */
+    installsAsCommand(flowPath, content) {
+        return true;
     }
 }
 

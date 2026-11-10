@@ -1,0 +1,31 @@
+/* AI-DLC Turbo - Code Scaffold, the drawing on a desktop page at a readable size (design-zoom.js). Its box clips it;
+   the drawing lies in it at the zoom and the place chosen, glides to the step, and shows a grab hand where it is
+   larger than its box. The zoom (out, the percentage, in, "Fit") sits bottom right in the drawing's frame, as
+   the full-screen view has it (design.css, .td-zoom), lifted over the drawing as the walk at the top left is. Only
+   on a desktop page (td-pan, design-panel.js); the full-screen view and the preview size the drawing themselves.
+   A part of the step out of sight gets a marker at the edge where the step's line leaves the box, in the colour of
+   that line. After the steps and the box of the step. */
+
+.td-pz { display: none; }
+.td-pan .td-dzw > .td-dz { position: relative; overflow: clip; user-select: none; -webkit-user-select: none; }
+.td-pan .td-dz > svg.td-svg { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.td-dz.td-glide > svg.td-svg { transition: transform 320ms var(--td-ease); }
+.td-pan .td-dzw > .td-dz.td-grab { cursor: grab; }
+.td-pan .td-dzw > .td-dz.td-dragging, .td-pan .td-dzw > .td-dz.td-dragging * { cursor: grabbing !important; }
+@media (prefers-reduced-motion: reduce) { .td-dz.td-glide > svg.td-svg { transition: none; } }
+
+.td-src { display: none; }
+.td-pan .td-dz > .td-src:not([hidden]) { display: inline-flex; position: absolute; z-index: 5; align-items: center; max-width: 46%; min-height: 28px; padding: 0 11px; border: 2px solid var(--td-hot); border-radius: 999px; background: var(--td-frame-solid); color: var(--td-heading); font: 600 12.5px/1.2 var(--td-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; box-shadow: 0 6px 16px -8px var(--td-shadow); }
+.td-pan .td-dz > .td-src:hover { background: var(--td-sel); }
+.td-pan .td-dz > .td-src:focus-visible { outline: 2px solid var(--td-accent); outline-offset: 2px; }
+
+.td-pan .td-dzw > .td-pz { display: flex; position: absolute; right: 12px; bottom: 8px; z-index: 6; padding: 2px; border-radius: 999px; background: var(--td-frame-solid); box-shadow: 0 8px 22px -8px var(--td-shadow); }
+.td-pan .td-pz .td-btn { min-height: 32px; border-radius: 999px; }
+.td-pan .td-pz .td-zb:not(.td-fitb) { width: 32px; }
+.td-pan .td-pz .td-fitb { padding: 0 12px 0 9px; }
+.td-pan .td-pz .td-btn:disabled { opacity: .45; cursor: default; }
+.td-pan .td-pz .td-fitb[aria-pressed="true"]:not(:disabled) { border-color: var(--td-line-strong); background: var(--td-sel); color: var(--td-heading); }
+/* the line of keys at the bottom left reads over the drawing that passes under it */
+.td-pan .td-dzw > .td-steps-keys { padding: 0 8px; border-radius: 8px; background: color-mix(in srgb, var(--td-frame-solid) 86%, transparent); max-width: calc(100% - 300px); }
+/* a tight frame: the zoom keeps its buttons, "Fit" only its icon */
+@container td-draw (max-width: 620px) { .td-pan .td-pz .td-fitb { width: 32px; padding: 0; justify-content: center; } .td-pan .td-pz .td-fitb > span { display: none; } }

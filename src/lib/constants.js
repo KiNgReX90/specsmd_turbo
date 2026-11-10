@@ -22,6 +22,13 @@ const FLOWS = {
         description: 'Full methodology - Comprehensive traceability, DDD or Simple bolt types',
         path: 'aidlc'
     },
+    'aidlc-turbo': {
+        name: 'AI-DLC Turbo',
+        description: 'Slim AI-DLC - one brief plus stories, a Code Scaffold to approve, TDD builders with fresh-eyes review, no bolts or ceremony',
+        path: 'aidlc-turbo',
+        // The slash command a user runs first; the installer prints it in the next steps.
+        entryCommand: '/specsmd-aidlc-turbo'
+    },
     simple: {
         name: 'Simple',
         description: 'Spec generation only (Kiro style) - Creates requirement/design/task docs, no execution tracking',

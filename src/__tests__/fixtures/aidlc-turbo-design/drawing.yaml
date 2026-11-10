@@ -1,0 +1,409 @@
+# The Code Scaffold of the order status intent of Acme Shop, an invented
+# webshop, as plan writes it into record.yaml: technical_design.drawing plus
+# stories[].drawing, in English (intent.language: en). Tests merge it into a
+# full record when they need one; the paths are Acme Shop's, not files on disk.
+# Every call into an existing part carries its proof in the code, the one
+# into the changed table ORDER_STATUS_EVENTS says what the change adds.
+
+intent:
+  language: en
+
+technical_design:
+  drawing:
+    summary: >-
+      All five stories together. The screen talks only to Acme Shop. Acme Shop gets the live
+      state and the actions from the warehouse system, and the history from its own database. The three
+      new modules follow the layout of the returns: ui, core and adapters.
+    lanes:
+      screen: Screen in the browser
+      server: Acme Shop server
+      database: Acme Shop database
+      external: Warehouse system, another application
+    modules:
+      - id: shop
+        name: shop-server
+        status: changed
+        what: The Acme Shop server. Gets a page, a migration for the menu item, a route in admin-routes.yml and a settings provider.
+        path: shop-server
+      - id: ui
+        name: shop-orderstatus-ui
+        status: new
+        what: New module with the web components of the screen.
+        path: shop-orderstatus-ui
+        follows: { file: shop-returns-ui/pom.xml, note: "the same layout with components, services, locales and a bootstrap" }
+        registered_in:
+          - { file: shop-parent/pom.xml, lines: 100-135 }
+          - { file: shop-server/pom.xml, lines: 149-167 }
+      - id: wc
+        name: shop-web-components
+        status: existing
+        what: The existing component library. The screen uses three of its parts.
+        path: shop-web-components/src/main/resources/static/web-components
+      - id: setm
+        name: shop-settings
+        status: changed
+        what: The shared module with the interfaces for the settings. Gets a new interface, next to PaymentSettings.
+        path: shop-settings/src/main/java/com/acme/shop/settings
+      - id: ad
+        name: shop-orderstatus-adapters
+        status: new
+        what: New module with the adapters, the controller for the screen, the link to the warehouse system and the query on the order tables.
+        path: shop-orderstatus-adapters
+        follows: { file: shop-returns-adapters/pom.xml, note: "inbound/web for the controllers, outbound for the links, config for Spring" }
+        registered_in:
+          - { file: shop-parent/pom.xml, lines: 100-135 }
+          - { file: shop-server/pom.xml, lines: 499-502 }
+      - id: core
+        name: shop-orderstatus-core
+        status: new
+        what: New module with the use cases and the ports, without technology. The adapters hang on it.
+        path: shop-orderstatus-core
+        follows: { file: shop-returns-core/pom.xml, note: "model, ports/inbound/usecases and ports/outbound" }
+        registered_in:
+          - { file: shop-parent/pom.xml, lines: 100-135 }
+      - id: wh
+        name: warehouse-api
+        status: existing
+        repo: warehouse
+        what: The warehouse-api module of the warehouse system, another application. The screen uses two controllers.
+        path: warehouse-api/src/main/java/com/acme/warehouse/api
+    parts:
+      - id: menu
+        name: Order status menu item
+        module: shop
+        layer: screen
+        status: new
+        kind: migration
+        sub: new row in ADMIN_MENU
+        what: Opens the order status screen from the menu.
+        path: db/migrations/V2026_10_20_01__orderstatus_menu.sql
+        follows: { file: db/migrations/V2026_07_01_02__returns_menu.sql, lines: 8-33 }
+        right: { short: "view right, exists", status: existing, what: "The view right on orders. It is already on the Orders menu item. No new right comes." }
+      - id: host
+        name: OrderStatusHost.jsp
+        module: shop
+        layer: screen
+        status: new
+        kind: JSP
+        sub: loads the web components
+        what: A page of its own in the admin frame that loads the web components.
+        path: shop-server/src/main/webapp/admin/orderstatus/OrderStatusHost.jsp
+        follows: { file: shop-server/src/main/webapp/admin/menu/AdminMenu.jsp, lines: 89-116, note: "now the only page with the import map" }
+      - id: chart
+        name: shop-chart
+        module: ui
+        layer: screen
+        status: new
+        kind: web component
+        extends: BaseComponent
+        sub: shipped, lead time, errors
+        what: The charts, shipped orders per hour, lead time per hour and errors per reason.
+        path: shop-orderstatus-ui/src/main/resources/static/orderstatus/components/shop-chart/shop-chart.js
+        open: which library?
+        open_detail: Which chart library the chart uses. The code has none, the component library has no chart. Choose it at the approval.
+      - id: page
+        name: shop-orderstatus-page
+        module: ui
+        layer: screen
+        status: new
+        kind: web component
+        extends: BaseComponent
+        sub: header, warning, 4 tabs
+        what: The screen itself, the header with filter and refresh, the warning bar and the tabs Overview, Orders, Failed and held, and Admin.
+        path: shop-orderstatus-ui/src/main/resources/static/orderstatus/components/shop-orderstatus-page/shop-orderstatus-page.js
+        follows: { file: shop-returns-ui/src/main/resources/static/returns/returns-bootstrap.js, lines: 19-87 }
+      - id: kpi
+        name: shop-kpi-tile
+        module: ui
+        layer: screen
+        status: new
+        kind: web component
+        extends: BaseComponent
+        sub: key figure with comparison
+        what: A key figure, compared with the 7-day average.
+        path: shop-orderstatus-ui/src/main/resources/static/orderstatus/components/shop-kpi-tile/shop-kpi-tile.js
+      - id: svc
+        name: orderstatus-service.js
+        module: ui
+        layer: screen
+        status: new
+        kind: JS module
+        sub: fetches the figures
+        what: Fetches the figures from the Acme Shop server.
+        path: shop-orderstatus-ui/src/main/resources/static/orderstatus/services/orderstatus-service.js
+        follows: { file: shop-returns-ui/src/main/resources/static/returns/services/returns-service.js, lines: 1-60 }
+      - id: card
+        name: shop-card
+        module: wc
+        layer: screen
+        status: existing
+        kind: web component
+        extends: BaseComponent
+        sub: base for cards
+        what: Base for the cards in the component library.
+        path: shop-web-components/src/main/resources/static/web-components/components/shop-card/shop-card.js
+        lines: 1-80
+      - id: table
+        name: shop-datatable
+        module: wc
+        layer: screen
+        status: existing
+        kind: web component
+        extends: BaseComponent
+        sub: orders, errors, actions
+        what: Tables for the orders, the errors, the held orders and the action log.
+        path: shop-web-components/src/main/resources/static/web-components/components/shop-datatable/shop-datatable.js
+        lines: 1-80
+      - id: api
+        name: api-client.js
+        module: wc
+        layer: screen
+        status: existing
+        kind: JS module
+        sub: shared fetch with session
+        what: Shared fetch with the session cookie. Throws on every answer that is not 2xx.
+        path: shop-web-components/src/main/resources/static/web-components/services/api-client.js
+        lines: 1-36
+      - id: routes
+        name: admin-routes.yml
+        module: shop
+        layer: server
+        status: changed
+        kind: config
+        sub: new route, same security
+        what: Gets a route of its own under /api/admin/orderstatus/*, behind the existing security of the admin.
+        path: shop-server/src/main/resources/admin-routes.yml
+        lines: 395-465
+        follows: { file: shop-server/src/main/resources/admin-routes.yml, note: "the route of the returns under /api/admin/returns/*" }
+      - id: prov
+        name: WarehouseSettingsProvider
+        module: shop
+        layer: server
+        status: new
+        kind: class
+        implements: WarehouseSettings
+        sub: reads the shop setting
+        what: Reads the URL and the key of the warehouse system from a shop setting, with a provider as the payments have.
+        path: shop-server/src/main/java/com/acme/shop/settings/warehouse/WarehouseSettingsProvider.java
+        follows: { file: shop-server/src/main/java/com/acme/shop/settings/payment/PaymentSettingsProvider.java, lines: 1-21 }
+      - id: iface
+        name: WarehouseSettings
+        module: setm
+        layer: server
+        status: new
+        kind: interface
+        extends: Settings
+        sub: interface for URL and key
+        what: The interface the module asks the URL and the key of the warehouse system through, without knowing the Acme Shop server itself.
+        path: shop-settings/src/main/java/com/acme/shop/settings/warehouse/WarehouseSettings.java
+        follows: { file: shop-settings/src/main/java/com/acme/shop/settings/payment/PaymentSettings.java }
+      - id: ctrl
+        name: OrderStatusController
+        module: ad
+        layer: server
+        status: new
+        kind: class
+        sub: answers the screen
+        what: Answers the screen, overview, orders, errors and the three actions. Hands every request to a use case.
+        path: shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/inbound/web/OrderStatusController.java
+        follows: { file: shop-returns-adapters/src/main/java/com/acme/shop/returns/adapters/inbound/web/ReturnsController.java, lines: 11-33 }
+        right: { short: "view right + role, exist", status: existing, what: "Reading with the view right on orders, the actions only with the role Shop manager. Both exist already.", file: shop-server/src/main/java/com/acme/shop/security/AdminRoles.java, lines: 190-198 }
+      - id: gw
+        name: WarehouseGatewayImpl
+        module: ad
+        layer: server
+        status: new
+        kind: class
+        implements: the port to the warehouse from core
+        sub: calls the warehouse system
+        what: Calls the API of the warehouse system, with timeouts, and passes the name of the user with an action.
+        path: shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/outbound/warehouse/WarehouseGatewayImpl.java
+        follows: { file: shop-returns-adapters/src/main/java/com/acme/shop/returns/adapters/outbound/carrier/CarrierGatewayImpl.java }
+        deviates: Sets timeouts, CarrierGatewayImpl does not. So the screen does not hang when the warehouse system does not answer.
+      - id: trend
+        name: OrderTrendQuery
+        module: ad
+        layer: server
+        status: new
+        kind: class
+        implements: the port to the history from core
+        sub: counts per hour from the tables
+        what: Counts per hour from the order tables, for the trends and the history of an order.
+        path: shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/outbound/db/OrderTrendQuery.java
+      - id: uc
+        name: Order status use cases
+        module: core
+        layer: server
+        status: new
+        kind: classes
+        implements: per use case a Command, a UseCase and a Result
+        sub: overview, orders, actions
+        what: The use cases of the screen, the overview, the orders, the failed and held orders, and running an action.
+        path: shop-orderstatus-core/src/main/java/com/acme/shop/orderstatus/core/ports/inbound/usecases
+        follows: { file: shop-returns-core/src/main/java/com/acme/shop/returns/core/ports/inbound/usecases }
+      - id: events
+        name: ORDER_STATUS_EVENTS
+        layer: database
+        status: changed
+        kind: table
+        sub: gets index ose_window_i
+        what: Every status change of an order, with its time. Gets the index ose_window_i, so a time window does not read the whole table.
+        path: db/migrations/V2026_07_02_03__order_status_events.sql
+        lines: 1-27
+      - id: orders
+        name: ORDERS
+        layer: database
+        status: existing
+        kind: table
+        sub: every order placed
+        what: Every order placed in the webshop.
+        path: db/migrations/V2026_07_02_01__orders.sql
+        lines: 1-17
+      - id: whact
+        name: IntakeController
+        module: wh
+        layer: external
+        status: existing
+        kind: class
+        repo: warehouse
+        sub: pause, resume, resend
+        what: The actions of the warehouse system. The screen uses three of them, pausing and resuming the order intake, and sending an order to the warehouse again.
+        path: warehouse-api/src/main/java/com/acme/warehouse/api/intake/IntakeController.java
+        lines: 44-290
+      - id: whread
+        name: FulfilmentController
+        module: wh
+        layer: external
+        status: existing
+        kind: class
+        repo: warehouse
+        sub: overview, errors, orders
+        what: The read endpoints of the warehouse system, overview, errors, orders, held and the connection test.
+        path: warehouse-api/src/main/java/com/acme/warehouse/api/FulfilmentController.java
+        lines: 27-136
+    links:
+      - { from: menu, to: host, label: opens }
+      - { from: host, to: page, label: loads }
+      - { from: page, to: svc, label: asks }
+      - { from: svc, to: api, label: via, proof: { file: shop-web-components/src/main/resources/static/web-components/services/api-client.js, lines: 1-36 } }
+      - { from: page, to: chart }
+      - { from: page, to: kpi, label: shows with }
+      - { from: page, to: table, proof: { file: shop-web-components/src/main/resources/static/web-components/components/shop-datatable/shop-datatable.js, lines: 1-80 } }
+      - { from: kpi, to: card, kind: builds_on, label: builds on }
+      - { from: api, to: ctrl, label: calls, code: /api/admin/orderstatus }
+      - { from: routes, to: ctrl, label: registers the route }
+      - { from: ctrl, to: uc, label: calls }
+      - { from: uc, to: gw, label: live state and actions }
+      - { from: uc, to: trend, label: history and trends }
+      - { from: gw, to: iface, label: URL and key }
+      - { from: prov, to: iface, kind: builds_on }
+      - { from: trend, to: events, label: reads the changes, adds: the index ose_window_i for the time window }
+      - { from: trend, to: orders, label: reads orders, proof: { file: db/migrations/V2026_07_02_01__orders.sql, lines: 1-17 } }
+      - { from: gw, to: whread, label: reads the live state, proof: { file: warehouse-api/src/main/java/com/acme/warehouse/api/FulfilmentController.java, lines: 27-136, note: the read endpoints exist already } }
+      - { from: gw, to: whact, label: starts the actions, proof: { file: warehouse-api/src/main/java/com/acme/warehouse/api/intake/IntakeController.java, lines: 44-290 } }
+
+stories:
+  - id: "001"
+    title: Order status API in Acme Shop
+    short: Order status API
+    touches:
+      - shop-parent/pom.xml
+      - shop-server/pom.xml
+      - shop-server/src/main/resources/admin-routes.yml
+      - shop-server/src/main/java/com/acme/shop/settings/warehouse/WarehouseSettingsProvider.java
+      - shop-settings/src/main/java/com/acme/shop/settings/warehouse/WarehouseSettings.java
+      - shop-orderstatus-adapters
+      - shop-orderstatus-core
+    drawing:
+      summary: The base on the server side. Acme Shop gets an API of its own for the order status screen, with the check on right and role. The API gets the live state from the warehouse system. There is no screen yet.
+      builds:
+        ad: new, registered in shop-parent
+        core: new, registered in shop-parent
+        setm: adds an interface
+        shop: adds the route and the provider
+        ctrl: new, with the check on right and role
+        uc: new, with the use case for the live state
+        gw: new, reads the live state
+        iface: new
+        prov: new
+        routes: adds the route
+      uses: [whread]
+  - id: "002"
+    title: Overview tab
+    short: Overview
+    depends_on: ["001"]
+    touches:
+      - shop-parent/pom.xml
+      - shop-server/pom.xml
+      - db/migrations/V2026_10_20_01__orderstatus_menu.sql
+      - shop-server/src/main/webapp/admin/orderstatus/OrderStatusHost.jsp
+      - shop-orderstatus-ui
+      - shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/inbound/web/OrderStatusController.java
+      - shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/outbound/db/OrderTrendQuery.java
+      - shop-orderstatus-core/src/main/java/com/acme/shop/orderstatus/core/ports/inbound/usecases
+      - db/migrations/V2026_10_20_02__order_status_events_window.sql
+    drawing:
+      summary: The screen itself, with the Overview tab. It opens from the menu and shows the key figures with the 7-day comparison, and the charts for shipped orders, lead time and errors.
+      builds:
+        ui: new, registered in shop-parent
+        shop: adds the page and the menu item
+        menu: new, with the existing view right
+        host: new
+        page: new, with the header and the Overview tab
+        svc: new
+        kpi: new
+        chart: new, the chart library is chosen at the approval
+        ctrl: adds the trends
+        uc: adds the use case for the trends
+        trend: new, counts per hour
+        events: adds the index
+      uses: [api, card, gw, whread, orders]
+  - id: "003"
+    title: Orders tab
+    short: Orders
+    depends_on: ["002"]
+    touches:
+      - shop-orderstatus-ui/src/main/resources/static/orderstatus/components/shop-orderstatus-page/shop-orderstatus-page.js
+      - shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/inbound/web/OrderStatusController.java
+      - shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/outbound/db/OrderTrendQuery.java
+      - shop-orderstatus-core/src/main/java/com/acme/shop/orderstatus/core/ports/inbound/usecases
+    drawing:
+      summary: The Orders tab. You search the orders of the warehouse system and see per order the history of its status changes.
+      builds:
+        page: adds the Orders tab
+        ctrl: adds the order search
+        uc: adds the use case search orders
+        trend: adds the history of an order
+      uses: [svc, api, table, gw, whread, events]
+  - id: "004"
+    title: Failed and held
+    short: Failed
+    depends_on: ["003"]
+    touches:
+      - shop-orderstatus-ui/src/main/resources/static/orderstatus/components/shop-orderstatus-page/shop-orderstatus-page.js
+      - shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/inbound/web/OrderStatusController.java
+      - shop-orderstatus-core/src/main/java/com/acme/shop/orderstatus/core/ports/inbound/usecases
+    drawing:
+      summary: The Failed and held tab. It shows the failed orders per reason and the held orders, as the warehouse system sees them now.
+      builds:
+        page: adds the Failed and held tab
+        ctrl: adds failed and held
+        uc: adds two use cases
+      uses: [svc, api, table, gw, whread]
+  - id: "005"
+    title: Admin and the three actions
+    short: Admin
+    depends_on: ["004"]
+    touches:
+      - shop-orderstatus-ui/src/main/resources/static/orderstatus/components/shop-orderstatus-page/shop-orderstatus-page.js
+      - shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/inbound/web/OrderStatusController.java
+      - shop-orderstatus-adapters/src/main/java/com/acme/shop/orderstatus/adapters/outbound/warehouse/WarehouseGatewayImpl.java
+      - shop-orderstatus-core/src/main/java/com/acme/shop/orderstatus/core/ports/inbound/usecases
+    drawing:
+      summary: The Admin tab, with three actions, pausing and resuming the order intake and sending an order to the warehouse again. Only the role Shop manager may do that. Every action goes into the action log.
+      builds:
+        page: adds the Admin tab
+        ctrl: adds the three actions, only with the role
+        uc: adds the use case for an action
+        gw: adds the actions, with the name of the user
+      uses: [svc, api, table, whact, whread]

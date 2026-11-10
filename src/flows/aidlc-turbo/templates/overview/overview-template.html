@@ -1,0 +1,2271 @@
+<!doctype html>
+<!--
+  AI-DLC Turbo intent overview.
+
+  This file is a template. scripts/intent-overview.cjs fills it: it puts the page data
+  (the intent, its stories, the pictures from the record and the test cases, all in
+  the record's language) into the <script id="overview-data"> block, the string table
+  of that language into <script id="turbo-text"> (every fixed text the scripts show)
+  and into the {{key}} places of the HTML, and the Turbo logo into the masthead.
+  Never edit a generated overview.html by hand: rerun the script.
+
+  Layout: a night masthead with the intent, then the lifecycle of the main thing the
+  intent builds as a swimlane flow with the stories on its steps, the stories as
+  vertical slices through the system layers, the planned integration tests as arrows
+  between build steps, and what stays out of scope. A click on any story opens a side
+  panel with its user story, acceptance criteria, code, integration and test cases. A
+  section without data is left out.
+-->
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{overview.title}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,600..800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --purple: #1C1230;
+    --violet: #D700D7;
+    --lilac: #FF87FF;
+    --orange: #FF875F;
+    --yellow: #FFD75F;
+    --led: #34D17F;
+
+    --bg: #FFFFFF;
+    --surface: #FFFFFF;
+    --tint: #F6F6FB;
+    --tint-2: #FAFAFD;
+    --chip: #FFE6FA;
+    --line: #E8E8F0;
+    --line-strong: #D3D3E0;
+    --ink: #1A1528;
+    --ink-2: #4C4760;
+    --ink-3: #6E6984;
+    --violet-ink: #A800A8;
+    --on-dark: #FFFFFF;
+    --on-dark-2: #D7D7FF;
+    --on-dark-3: #A9A6C9;
+    --sel: #FFF0EA;
+    --sel-line: #FF875F;
+    --crash: #FFFBE0;
+
+    --done: #1E7A4C;
+    --done-bg: #E1F3E8;
+    --blocked: #B3261E;
+    --blocked-bg: #FBE3E0;
+
+    --font: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --container: 1280px;
+    --page-x: clamp(16px, 4vw, 48px);
+    --dr-w: 520px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    /* how far the first panel rises into the masthead (its height: --masthead-h, set by the page script) */
+    --mast-overlap: 36px;
+
+    --heading: #1C1230; --edge-ink: #1C1230; --badge-bg: #1C1230; --mast: #1C1230;
+    --v1-bg: #FFF3FD; --v1-line: #F6C4EE; --band-a: #FFD7FF; --band-c: #E4E4EE; --state-line: #F0A8E6;
+    --alert-bg: #FFF8E1; --alert-line: #E0AE00; --building-bg: #FEF6C7; --building: #6B5600; --building-line: #C9A800;
+    --review-bg: #FFEDE6; --review: #A3410F; --k-g: #F3F3FA; --k-w: #FFE0FB; --k-w-ink: #8E008E; --k-d: #FFE6D9; --kind-new: #FFE8FC;
+    --shadow: rgb(28 18 48 / .45); --shadow-2: rgb(28 18 48 / .5); --tip-shadow: rgb(0 0 0 / .5);
+    --on-dark-line: rgb(255 255 255 / .3); --on-dark-edge: rgb(255 255 255 / .18); --on-dark-fill: rgb(255 255 255 / .08);
+    color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 15.5px/1.55 var(--font);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    overflow-wrap: break-word;
+  }
+  .wrap { width: min(100% - 2 * var(--page-x), var(--container)); margin-inline: auto; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; border-radius: 6px; }
+  h1, h2, h3 { margin: 0; }
+  p { margin: 0; }
+  ul, ol { margin: 0; padding: 0; list-style: none; }
+
+  /* ---------- story badge: the one recurring mark ---------- */
+  .badge {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--badge-bg);
+    color: var(--on-dark);
+    font: 700 12.5px/1 var(--font);
+    font-variant-numeric: tabular-nums;
+    transition: background 160ms var(--ease), color 160ms var(--ease);
+  }
+  .badge.sm { width: 20px; height: 20px; font-size: 11px; }
+  .badge.lg { width: 40px; height: 40px; font-size: 18px; }
+  /* the chosen story's own mark turns orange; a mark of another story inside a chosen column stays purple */
+  .schip.on .badge, .ftl-b.on .badge, .ftl-wl.on .badge, .sl-head.on .sl-hn .badge, .badge.on { background: var(--orange); color: var(--purple); }
+
+  /* ---------- masthead ---------- */
+  /* compact, so the flow view and Review fit the window below it: the title on the logo row, the lead at most two
+     lines with Read more right after it, then the switch. The title's size comes after the look, in the last
+     style block. The page script keeps the masthead's height in --masthead-h on :root. */
+  .mast { background: var(--mast); color: var(--on-dark); padding: 12px 0 calc(var(--mast-overlap) + 6px); }
+  .mast-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px 18px; }
+  .mast-r { display: flex; align-items: center; justify-content: flex-end; gap: 16px; flex-wrap: wrap; }
+  /* the views of the page (design-tabs.js): Functional (everything but the drawing and Review), Code Scaffold (only
+     the drawing; after the build called Code) and, after the build, Review (only the changes); tabs that look as a switch */
+  .views { display: inline-flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--on-dark-fill); border: 1px solid var(--on-dark-edge); }
+  .views button { border: 0; background: transparent; color: var(--on-dark-2); cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; line-height: 1; padding: 7px 18px; border-radius: 999px; transition: background 160ms var(--ease), color 160ms var(--ease); }
+  .views button:hover { color: var(--on-dark); }
+  .views button:is([aria-pressed="true"], [aria-selected="true"]) { background: var(--on-dark); color: var(--purple); }
+  .views button:focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; border-radius: 999px; }
+  .view-off { display: none !important; }
+  /* Details and ? on the masthead (design-switches.js), small so the masthead keeps its
+     height: Details shows the plain words of the intent and the stories (class plain), ? the page's own explanations
+     (class how) and the help of the tab under it */
+  .mast-sw { display: inline-flex; align-items: center; gap: 8px; }
+  .dswitch { display: inline-flex; flex: none; align-items: center; gap: 7px; min-height: 28px; padding: 2px 11px 2px 4px; border: 1px solid var(--on-dark-edge); border-radius: 999px;
+    background: var(--on-dark-fill); color: var(--on-dark-2); cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 500; line-height: 1.2; white-space: nowrap;
+    transition: background-color 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease); }
+  .dswitch:hover { color: var(--on-dark); border-color: var(--on-dark-line); }
+  .dswitch-k { position: relative; flex: none; width: 28px; height: 18px; border-radius: 9px; background: rgb(255 255 255 / .22); transition: background-color 160ms var(--ease); }
+  .dswitch-k::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--on-dark); transition: translate 160ms var(--ease), background-color 160ms var(--ease); }
+  .dswitch[aria-checked="true"] { color: var(--on-dark); }
+  .dswitch[aria-checked="true"] .dswitch-k { background: var(--on-dark); }
+  .dswitch[aria-checked="true"] .dswitch-k::after { translate: 10px 0; background: var(--purple); }
+  .help-btn { display: inline-grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid var(--on-dark-edge); border-radius: 50%;
+    background: var(--on-dark-fill); color: var(--on-dark); cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; line-height: 1;
+    transition: background-color 160ms var(--ease), border-color 160ms var(--ease), color 160ms var(--ease); }
+  .help-btn:hover { border-color: var(--on-dark-line); background: rgb(255 255 255 / .16); }
+  .help-btn[aria-pressed="true"], .help-btn[aria-pressed="true"]:hover { border-color: var(--on-dark); background: var(--on-dark); color: var(--purple); }
+  :is(.dswitch, .help-btn):focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; }
+  /* the switches at work: Details off hides the plain words, ? off the explanations; never the summary, the legend or a switch */
+  .plain-off .plain { display: none !important; }
+  :root:not(.help-on) .how { display: none !important; }
+  .plain-intent { margin-top: 6px; max-width: 44rem; font-size: 15px; line-height: 1.45; color: var(--on-dark); text-wrap: pretty; }
+  .summary.built ~ .plain-intent { max-width: none; }
+  /* the help of the tab: under the "?", placed by design-switches.js, in the top layer so nothing clips it */
+  .help[hidden] { display: none; }
+  .help { position: fixed; z-index: 60; inset: auto; box-sizing: border-box; margin: 0; padding: 0; overflow: visible; border: 1px solid var(--line); border-radius: 16px;
+    background: var(--surface); color: var(--ink); font: 400 14px/1.5 var(--font); text-align: left; box-shadow: 0 18px 40px -16px var(--shadow), 0 2px 6px -2px var(--shadow); }
+  .help.is-open { display: flex; flex-direction: column; animation: help-in 180ms var(--ease) both; }
+  .help:focus { outline: none; }
+  .help:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
+  .help::backdrop { background: transparent; }
+  .help.hung::before { content: ""; position: absolute; top: -7px; left: calc(var(--nub, 50%) - 7px); width: 12px; height: 12px; border-top: 1px solid var(--line); border-left: 1px solid var(--line);
+    border-top-left-radius: 3px; background: var(--surface); transform: rotate(45deg); }
+  .help-head { display: flex; align-items: flex-start; gap: 10px; padding: 14px 10px 4px 18px; }
+  .help-t { flex: 1 1 auto; min-width: 0; margin: 4px 0 0; color: var(--heading); font-size: 17px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; text-wrap: balance; }
+  .help-x { display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 10px; background: transparent; color: var(--ink-3); cursor: pointer;
+    transition: background-color 160ms var(--ease), color 160ms var(--ease); }
+  .help-x:hover { background: var(--tint); color: var(--ink); }
+  .help-x svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .help-x:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
+  .help-list, .help-foot { min-height: 0; }
+  .help-list { display: grid; gap: 9px; margin: 0; padding: 6px 18px 14px; list-style: none; overflow: auto; overscroll-behavior: contain; }
+  .help-list li { position: relative; padding-left: 16px; color: var(--ink-2); text-wrap: pretty; }
+  .help-list li::before { content: ""; position: absolute; left: 1px; top: .62em; width: 6px; height: 6px; border-radius: 50%; background: var(--heading); }
+  .help-list b { color: var(--ink); font-weight: 650; }
+  .help-foot { display: grid; gap: 4px; padding: 11px 18px 14px; border-top: 1px solid var(--line); border-radius: 0 0 16px 16px; background: var(--tint-2); color: var(--ink-3); font-size: 12.5px; line-height: 1.45; }
+  .help-foot p { margin: 0; text-wrap: pretty; }
+  .help kbd { display: inline-block; min-width: 1.6em; padding: 0 5px; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); color: var(--ink);
+    font: 600 12px/1.45 var(--font); text-align: center; white-space: nowrap; }
+  @keyframes help-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  /* the flow view: the story chips of the drawing beside the switch, on the masthead, as the switch looks */
+  .mast-views { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 24px; margin-top: 12px; }
+  .mast-chips { display: none; }
+  body.view-tech:not(.view-embed) .mast-chips:not(:empty) { display: grid; gap: 10px; padding-top: 2px; }
+  .mast-chips .td-chiprow, .mast-chips .td-chips { margin: 0; }
+  .mast-chips .td-dhint { display: none; }
+  .mast-chips .td-chip { border-color: var(--on-dark-edge); background: var(--on-dark-fill); color: var(--on-dark); }
+  .mast-chips .td-chip:hover { border-color: var(--on-dark-line); background: rgb(255 255 255 / .16); color: var(--on-dark); }
+  .mast-chips .td-chip .td-badge { background: var(--on-dark); color: var(--purple); }
+  .mast-chips .td-chip.td-on { border-color: var(--on-dark); background: var(--on-dark); color: var(--purple); }
+  .mast-chips .td-chip.td-on .td-badge { background: var(--td-orange); color: var(--td-purple); }
+  /* the way back to Review (design-tabs.js), beside the switch, only in the flow view after the link to the flow in Review */
+  .mast-back { display: none; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px 0 12px; border-radius: 999px; border: 1px solid var(--on-dark-edge); background: var(--on-dark-fill); color: var(--on-dark); cursor: pointer; font: inherit; font-size: 14px; font-weight: 600; line-height: 1; white-space: nowrap; transition: background 160ms var(--ease), border-color 160ms var(--ease); }
+  body.view-tech:not(.view-review):not(.view-embed) .mast-back:not([hidden]) { display: inline-flex; }
+  .mast-back:hover { border-color: var(--on-dark-line); background: rgb(255 255 255 / .16); }
+  .mast-back:focus-visible { outline: 2px solid var(--lilac); outline-offset: 2px; }
+  .mast-back svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 160ms var(--ease); }
+  .mast-back:hover svg { transform: translateX(-2px); }
+  .mast-back-f { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding-left: 8px; border-left: 1px solid var(--on-dark-edge); color: var(--on-dark-2); font-weight: 500; }
+  .logo { height: 26px; width: auto; display: block; }
+  .phase { font-size: 14px; font-weight: 500; color: var(--on-dark-2); display: inline-flex; align-items: center; gap: 8px; }
+  .phase::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--led); }
+  /* the title beside the logo, a hairline between them */
+  .mast h1 {
+    min-width: 0;
+    padding-left: 18px;
+    border-left: 1px solid var(--on-dark-edge);
+    font-weight: 600;
+    letter-spacing: -0.024em;
+    text-wrap: balance;
+  }
+  /* the lead: at most two lines, Read more right after its text (the page script cuts a longer lead at a word);
+     open, all of it and the rest under it */
+  .summary { margin-top: 8px; max-width: 44rem; font-size: 15px; line-height: 1.45; color: var(--on-dark-2); text-wrap: pretty;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .summary.open { display: block; -webkit-line-clamp: none; overflow: visible; }
+  /* while the page script measures where the lead ends: no clamp, Read more placed against the lead */
+  .summary.fit { position: relative; display: block; -webkit-line-clamp: none; }
+  /* after the build what was built takes the masthead's full width: less height above the drawing */
+  .summary.built, .summary.built + .rest { max-width: none; }
+  .more { display: inline-block; margin-left: 6px; padding: 0; border: 0; background: none; cursor: pointer; white-space: nowrap;
+    font: inherit; font-size: 13.5px; color: var(--on-dark-2); text-decoration: underline; text-decoration-color: var(--on-dark-line); text-underline-offset: 3px; }
+  .more:hover { color: var(--on-dark); }
+  .more[hidden] { display: none; }
+  /* the marker drawn, not a glyph: a glyph from a fallback font stands taller than the line and reads as a cut lead */
+  .more::before { content: ""; display: inline-block; width: 0; height: 0; margin-right: 6px; vertical-align: 1px;
+    border-left: 6px solid var(--lilac); border-block: 4px solid transparent; transition: transform 160ms var(--ease); }
+  .more[aria-expanded="true"]::before { transform: rotate(90deg); }
+  .rest { margin-top: 4px; max-width: 44rem; font-size: 15px; line-height: 1.45; color: var(--on-dark-3); text-wrap: pretty; }
+
+  /* ---------- cards / sections ---------- */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 30px clamp(16px, 3vw, 40px) 32px;
+  }
+  .flowpanel, .view-tech .td-panel { margin-top: calc(-1 * var(--mast-overlap)); box-shadow: 0 18px 40px -24px var(--shadow); }
+  section + section { margin-top: 32px; }
+  /* the drawing needs room: its panel is wider than the rest of the page */
+  .td-panel { --td-w: min(100vw - 2 * var(--page-x), 1960px); width: var(--td-w); margin-inline: calc((100% - var(--td-w)) / 2); padding-inline: clamp(16px, 2vw, 28px); }
+  /* the flow view and Review: the masthead and the footer take the drawing's width, so all three share one left edge */
+  body.view-tech .mast .wrap, body.view-tech footer.wrap { width: min(100vw - 2 * var(--page-x), 1960px); }
+  /* Review: the other view (window.TdReview) fills its box; on a desktop the box is as high as the window has room
+     under the masthead (design-tabs.js), elsewhere as high as what it holds. Until it is there, a short word */
+  #review-mount { display: flex; flex-direction: column; min-height: 0; }
+  #review-mount > * { flex: 1 1 auto; min-height: 0; }
+  .rv-wait { display: flex; align-items: center; justify-content: center; margin: 0; padding: 48px 16px; text-align: center; font-size: 15px; color: var(--ink-2); }
+  /* the C4 model (design-tabs.js): the v5 page in a frame that fills its box; on a desktop the box
+     is as high as the window has room under the masthead, elsewhere a high window of its own */
+  .td-embed { padding: 0; overflow: hidden; }
+  .td-embed-box { height: min(88vh, 960px); min-height: 420px; }
+  .td-embed-box > iframe { display: block; width: 100%; height: 100%; border: 0; }
+  .sec-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 22px; }
+  .sec-head h2 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.01em; color: var(--heading); }
+  .explain { max-width: 50rem; margin-top: 2px; font-size: 15.5px; line-height: 1.55; color: var(--ink); text-wrap: pretty; }
+  @media (max-width: 400px) { .explain { text-wrap: wrap; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 6px; font-size: 14px; color: var(--ink); }
+  .legend > span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend [data-tip] { cursor: help; text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; }
+  .sw { width: 22px; height: 14px; border-radius: 4px; flex: none; }
+  .sw-2 { background: var(--violet); }
+  .sw-1 { background: var(--v1-bg); box-shadow: inset 0 0 0 1.5px var(--v1-line); }
+
+  /* ---------- story chips (selector) ---------- */
+  .chips { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 22px; }
+  .chips:last-child { margin-bottom: 0; }
+  .schip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 14px 5px 5px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--tint-2);
+    font-size: 13.5px; font-weight: 500; color: var(--ink-2);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 160ms var(--ease), background 160ms var(--ease);
+  }
+  .schip:hover { border-color: var(--violet); background: var(--surface); color: var(--ink); }
+  .schip.on { border-color: var(--sel-line); background: var(--sel); color: var(--ink); }
+
+  /* ---------- flow diagram ---------- */
+  .scroll { overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  .flow > svg { display: block; width: 100%; height: auto; }
+  .swipe { display: none; font-size: 12.5px; color: var(--ink-3); margin-top: 6px; }
+  .lane-bg { fill: var(--tint-2); }
+  .lane-vp { fill: var(--tint); }
+  .lane-crash { fill: var(--crash); }
+  .lane-label { font: 600 13px var(--font); fill: var(--ink-2); }
+  .band-a { fill: var(--band-a); }
+  .band-b { fill: var(--violet); }
+  .band-t { font: 600 10.5px var(--font); letter-spacing: .02em; }
+  .band-ta { fill: var(--heading); }
+  .band-tb { fill: var(--on-dark); }
+  .band-c { fill: var(--band-c); }
+  .band-tc { fill: var(--ink-2); }
+  .band-end { font: 500 11px var(--font); fill: var(--violet-ink); }
+  .fnode { cursor: default; transition: opacity 200ms var(--ease); }
+  .fnode rect { fill: var(--surface); stroke: var(--edge-ink); stroke-width: 1.4; transition: stroke 200ms var(--ease); }
+  .fnode.state rect { fill: var(--surface); stroke: var(--state-line); }
+  .fnode.alert rect { fill: var(--surface); stroke: var(--alert-line); }
+  .fnode .nl { font: 600 14px var(--font); fill: var(--ink); }
+  .fnode .ns { font: 400 11.5px var(--font); fill: var(--ink-3); }
+  .fnode.on rect { stroke: var(--orange); stroke-width: 2.6; }
+  .fedge path { fill: none; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; transition: opacity 200ms var(--ease); }
+  .fedge.main path, .fedge.loop path { stroke: var(--edge-ink); }
+  .fedge.write path { stroke: var(--violet); }
+  .fedge.reject path { stroke: var(--ink-3); stroke-dasharray: 4 4; stroke-width: 1.3; }
+  .fedge.crash path { stroke: var(--ink-2); stroke-dasharray: 6 4; }
+  .fedge text { font: 500 11.5px var(--font); fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+  .fedge.write text { fill: var(--violet-ink); }
+  .fedge .bolt { fill: var(--yellow); stroke: var(--purple); stroke-width: 1; stroke-linejoin: round; stroke-dasharray: none; }
+  .nbadge { cursor: pointer; }
+  .nbadge circle { fill: var(--badge-bg); stroke: var(--surface); stroke-width: 2; transition: fill 160ms var(--ease); }
+  .nbadge text { font: 700 11px var(--font); fill: var(--on-dark); font-variant-numeric: tabular-nums; pointer-events: none; }
+  .nbadge.on circle { fill: var(--orange); }
+  .nbadge.on text { fill: var(--purple); }
+  .fwrap rect.frame { fill: none; stroke: var(--violet); stroke-width: 1.5; stroke-dasharray: 7 5; transition: stroke 200ms var(--ease); }
+  .fwrap .wl { cursor: pointer; }
+  .fwrap .wl rect { fill: var(--surface); stroke: var(--violet); stroke-width: 1.5; }
+  .fwrap .wl circle { fill: var(--badge-bg); }
+  .fwrap .wl .wn { font: 700 11px var(--font); fill: var(--on-dark); }
+  .fwrap .wl .wt { font: 600 12.5px var(--font); fill: var(--heading); }
+  .fwrap.on rect.frame { stroke: var(--orange); stroke-width: 2.4; stroke-dasharray: none; }
+  .fwrap.on .wl rect { stroke: var(--orange); fill: var(--sel); }
+  .flow.active .fnode:not(.on) { opacity: .28; }
+  .flow.active .fedge { opacity: .3; }
+  .flow.active.all .fnode, .flow.active.all .fedge { opacity: 1; }
+
+  /* ---------- the lifecycle top to bottom, for a box too narrow for the lanes (phone, tablet): the status band
+     turns into the rail on the left, each step a card that says who does it and which stories build it ---------- */
+  .ftl { display: none; }
+  .flow.tl > svg { display: none; }
+  .flow.tl .ftl { display: block; }
+  .flow.more-r { -webkit-mask-image: linear-gradient(to left, transparent, #000 48px); mask-image: linear-gradient(to left, transparent, #000 48px); }
+  /* lanes scrolled sideways keep their names at the left edge, each on a piece of its own plate (no fade over them) */
+  .lane-pins { display: none; }
+  .flow.more-l .lane-pins { display: inline; }
+  .pin-bg { fill: var(--tint-2); }
+  .pin-vp { fill: var(--tint); }
+  .pin-crash { fill: var(--crash); }
+  .pf-bg { stop-color: var(--tint-2); }
+  .pf-vp { stop-color: var(--tint); }
+  .pf-crash { stop-color: var(--crash); }
+  .flow .ftl svg { display: inline-block; width: 16px; min-width: 0; height: 16px; flex: none; }
+  .ftl-list { display: grid; gap: 10px; }
+  .ftl-list > li { position: relative; padding-left: 30px; }
+  .ftl-list > li::before { content: ""; position: absolute; left: 10px; top: 0; bottom: -10px; width: 4px; background: var(--rail); }
+  .ftl-list > li:first-child::before { top: 12px; border-radius: 2px 2px 0 0; }
+  .ftl-list > li:last-child::before { bottom: auto; height: 22px; border-radius: 0 0 2px 2px; }
+  .ftl-list > li { --rail: var(--line); }
+  .ftl-list > .r-a { --rail: var(--band-a); }
+  .ftl-list > .r-b { --rail: var(--violet); }
+  .ftl-list > .r-c { --rail: var(--band-c); }
+  .ftl-st { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 2px 0; }
+  .ftl-list > .ftl-st { padding-left: 0; }
+  .ftl-st b { position: relative; z-index: 1; padding: 3px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .ftl-st.r-a b { background: var(--band-a); color: var(--heading); }
+  .ftl-st.r-b b { background: var(--violet); color: var(--on-dark); }
+  .ftl-st.r-c b { background: var(--band-c); color: var(--ink-2); }
+  .ftl-st span { font-size: 13px; line-height: 1.4; color: var(--ink-3); }
+  .ftl-list > .ftl-end { padding-left: 0; }
+  .ftl-end b { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--violet-ink); }
+  .ftl-end b::before { content: ""; width: 0; height: 0; border-style: solid; border-width: 10px 12px 0; border-color: var(--rail) transparent transparent; }
+  .ftl-list > li.ftl-end::before { bottom: 50%; height: auto; }
+  .ftl-step::after { content: ""; position: absolute; left: 6px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 2px var(--edge-ink); }
+  .ftl-step.state::after { box-shadow: 0 0 0 2px var(--state-line); }
+  .ftl-step.alert::after { background: var(--alert-bg); box-shadow: 0 0 0 2px var(--alert-line); }
+  .ftl-card { padding: 10px 12px 11px; border: 1.4px solid var(--edge-ink); border-radius: 10px; background: var(--surface); transition: opacity 200ms var(--ease), border-color 200ms var(--ease), box-shadow 200ms var(--ease); }
+  .ftl-step.state .ftl-card { border-color: var(--state-line); border-radius: 18px; }
+  .ftl-step.alert .ftl-card { border-color: var(--alert-line); background: var(--alert-bg); }
+  .ftl-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; min-height: 24px; }
+  .ftl-lane { display: inline-block; padding: 2px 9px; border-radius: 6px; background: var(--tint-2); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--ink-2); }
+  .ftl-lane.l-strong { background: var(--tint); box-shadow: none; color: var(--heading); }
+  .ftl-lane.l-alert { background: var(--crash); box-shadow: inset 0 0 0 1px var(--alert-line); color: var(--building); }
+  .ftl-ids { display: flex; margin: -8px -8px -8px auto; }
+  .ftl-b { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+  /* the tap areas overlap a little, so three badges stay on the row of the lane name */
+  .ftl-b + .ftl-b { margin-left: -10px; }
+  .ftl-in { display: flex; align-items: flex-start; gap: 6px; margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--ink-2); }
+  .ftl-in b { font-weight: 600; color: var(--ink); }
+  .ftl-in + .ftl-in { margin-top: 3px; }
+  .ftl-ic { width: 16px; height: 16px; margin-top: 1px; fill: none; stroke: var(--edge-ink); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .ftl-in.write .ftl-ic { stroke: var(--violet); }
+  .ftl-in.reject .ftl-ic { stroke: var(--ink-3); stroke-dasharray: 2.4 2.4; }
+  .ftl-in.crash .ftl-ic { fill: var(--yellow); stroke: var(--purple); stroke-width: 1; }
+  .ftl-name { margin-top: 6px; font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--ink); }
+  .ftl-sub { margin-top: 2px; font-size: 13.5px; line-height: 1.45; color: var(--ink-3); }
+  .ftl-frame { position: relative; margin-top: 22px; padding: 30px 10px 12px; border: 1.5px dashed var(--violet); border-radius: 16px; transition: border-color 200ms var(--ease); }
+  .ftl-wl { position: absolute; top: -21px; left: 12px; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; max-width: calc(100% - 24px); padding: 4px 14px 4px 8px; border: 1.5px solid var(--violet); border-radius: 999px; background: var(--surface); font-size: 13.5px; font-weight: 600; color: var(--heading); text-align: left; cursor: pointer; }
+  .ftl-wt { margin: 0 0 12px; font-size: 13px; line-height: 1.45; color: var(--ink-2); }
+  .ftl-frame.on { border-style: solid; border-color: var(--orange); }
+  .ftl-frame.on .ftl-wl { border-color: var(--orange); background: var(--sel); }
+  .ftl-step.on .ftl-card { border-color: var(--orange); box-shadow: 0 0 0 1.2px var(--orange); }
+  .flow.active .ftl-step:not(.on) .ftl-card { opacity: .4; }
+  .flow.active.all .ftl-step .ftl-card { opacity: 1; }
+
+  /* ---------- slice chart: stories along the x-axis at the bottom, system layers up the y-axis on the left ---------- */
+  .grid-scroll { overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+  table.mx { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+  .mx th, .mx td { padding: 0; }
+  .mx tbody tr { height: 40px; }
+  .mx tbody tr + tr > * { border-top: 1px solid var(--line); }
+  .mx tbody tr + tr > th { border-top-color: transparent; }
+  .mx tbody tr.gsep > * { border-top: 1.5px solid var(--line-strong) !important; }
+  .mx td.c { min-width: 84px; width: 84px; padding: 4px 18px; cursor: pointer; transition: background-color 140ms var(--ease); }
+  .blk { display: block; height: 30px; border-radius: 6px; transition: opacity 200ms var(--ease); }
+  .v2 .blk { background: var(--violet); }
+  .v1 .blk { background: var(--v1-bg); box-shadow: inset 0 0 0 1.5px var(--v1-line); }
+  .mx td.sstart { border-left: 1.5px dashed var(--line-strong); }
+  .mx .yg { position: sticky; left: 0; z-index: 1; width: 28px; min-width: 28px; background: var(--surface); }
+  .mx .yg span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11.5px; font-weight: 600; letter-spacing: .04em; color: var(--ink-3); }
+  .mx .yl { position: sticky; left: 28px; z-index: 1; width: 136px; min-width: 136px; padding: 0 14px 0 4px; background: var(--surface); border-right: 1.5px solid var(--ink-3); text-align: right; font-size: 13px; font-weight: 500; color: var(--ink-2); white-space: nowrap; cursor: help; }
+  .mx .ycorner { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+  .mx tr.xaxis td { padding: 10px 2px 4px; border-top: 1.5px solid var(--ink-3); vertical-align: top; text-align: center; }
+  .mx tr.xaxis .ycorner { border-right: 1.5px solid var(--ink-3); }
+  .xbtn { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; padding: 6px 2px 8px; border: 0; border-radius: 10px; background: none; cursor: pointer; transition: background-color 140ms var(--ease); }
+  .xbtn .xn {
+    font-size: 11.5px; font-weight: 500; line-height: 1.25; color: var(--ink-2);
+    hyphens: manual; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+  }
+  .xbtn:hover .xn { color: var(--violet-ink); }
+  .mx tr.xstage td { padding: 12px 8px 0; text-align: center; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+  .mx tr.xstage td span { display: block; padding-top: 6px; border-top: 1.5px solid var(--line-strong); }
+  .mx td.c.on, .mx td.xs.on .xbtn { background-color: var(--sel); }
+  .mx.active td.c:not(.on) .blk { opacity: .3; }
+
+  /* ---------- integration tests: stories per build step, one arrow per test ---------- */
+  .itests svg { display: block; width: 100%; min-width: 880px; height: auto; }
+  .tnode { cursor: pointer; transition: opacity 200ms var(--ease); }
+  .tnode rect { fill: var(--surface); stroke: var(--edge-ink); stroke-width: 1.4; transition: fill 160ms var(--ease), stroke 160ms var(--ease); }
+  .tnode:hover rect { fill: var(--tint-2); }
+  .tnode .tbc { fill: var(--badge-bg); transition: fill 160ms var(--ease); }
+  .tnode .tbt { font: 700 11.5px var(--font); fill: var(--on-dark); text-anchor: middle; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .tnode .tl { font: 600 14px var(--font); fill: var(--ink); pointer-events: none; }
+  .tnode.on rect { fill: var(--sel); stroke: var(--orange); stroke-width: 2.6; }
+  .tnode.on .tbc { fill: var(--orange); }
+  .tnode.on .tbt { fill: var(--purple); }
+  .tnode.rel rect { stroke-width: 2.2; }
+  .tedge { cursor: pointer; transition: opacity 200ms var(--ease); }
+  .tedge .hit { fill: none; stroke: transparent; stroke-width: 14; }
+  .tedge .ln { fill: none; stroke: var(--violet); stroke-width: 1.6; stroke-linecap: round; transition: stroke 160ms var(--ease), stroke-width 160ms var(--ease); }
+  .tedge .ah { fill: var(--violet); transition: fill 160ms var(--ease); }
+  .tedge.on .ln { stroke: var(--edge-ink); stroke-width: 2.6; }
+  .tedge.on .ah { fill: var(--edge-ink); }
+  .itests.active .tnode:not(.on):not(.rel) { opacity: .3; }
+  .itests.active .tedge:not(.on) { opacity: .14; }
+  .taxis line { stroke: var(--ink-3); stroke-width: 1.5; }
+  .taxis text { font: 600 12.5px var(--font); fill: var(--ink-3); text-anchor: middle; }
+  .tkey { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 6px; font-size: 14px; color: var(--ink); }
+  .tkey svg { display: block; flex: none; }
+  .tkey .kb { fill: var(--surface); stroke: var(--edge-ink); stroke-width: 1.4; }
+  .tkey .kt { font: 600 12.5px var(--font); fill: var(--ink); }
+
+  /* ---------- out of scope: one compact row ---------- */
+  .scope-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 18px; padding: 4px 0 0; }
+  .scope-row h2 { font-size: 14px; font-weight: 600; color: var(--ink-3); }
+  .scope-row ul { display: flex; flex-wrap: wrap; gap: 8px; }
+  .scope-row li { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); font-size: 13px; color: var(--ink-2); }
+  .scope-row li[data-tip] { cursor: help; }
+
+  /* one quiet row with the date */
+  footer { margin: 28px auto 40px; font-size: 13px; color: var(--ink-3); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 24px; }
+
+  /* ---------- drawer ---------- */
+  .drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 30;
+    width: min(var(--dr-w), 100vw);
+    background: var(--surface);
+    border-left: 1px solid var(--line);
+    box-shadow: -24px 0 48px -28px var(--shadow-2);
+    transform: translateX(102%);
+    transition: transform 280ms var(--ease);
+    display: flex; flex-direction: column;
+    visibility: hidden;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .drawer.open { transform: none; visibility: visible; }
+  .scrim { position: fixed; inset: 0; z-index: 29; background: rgb(18 10 32 / .38); opacity: 0; visibility: hidden; transition: opacity 280ms var(--ease), visibility 0s 280ms; -webkit-tap-highlight-color: transparent; }
+  /* a wide screen makes room for the side panel, so what a chosen story lights up stays in sight */
+  @media (min-width: 1100px) {
+    body.sheet-open:not(.view-tech) :is(main.wrap, .mast .wrap, footer.wrap) {
+      width: min(100% - 2 * var(--page-x) - var(--dr-w), var(--container));
+      margin-left: max(var(--page-x), (100% - var(--dr-w) - var(--container)) / 2);
+      margin-right: 0;
+    }
+    body.sheet-open:not(.view-tech) #sec-slices.sl-wide { width: auto; margin-inline: 0; }
+  }
+  /* a narrower screen: the panel lies over the page, which dims, and a tap beside it closes it */
+  @media (max-width: 1099.98px) {
+    body.sheet-open .scrim { opacity: 1; visibility: visible; transition: opacity 280ms var(--ease); }
+  }
+  .dr-head { display: flex; align-items: center; gap: 14px; padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
+  .dr-t { flex: 1; min-width: 0; }
+  .dr-t h3 { font-size: 1.1875rem; font-weight: 600; line-height: 1.25; color: var(--heading); text-wrap: balance; }
+  .st { display: inline-flex; align-items: center; gap: 7px; margin-top: 7px; padding: 0 10px 0 8px; border-radius: 999px; background: var(--tint-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); font-size: 12px; font-weight: 600; line-height: 22px; }
+  .st-done { background: var(--done-bg); box-shadow: none; color: var(--done); }
+  .st-building { background: var(--building-bg); box-shadow: none; color: var(--building); }
+  .st-review { background: var(--review-bg); box-shadow: none; color: var(--review); }
+  .st-blocked { background: var(--blocked-bg); box-shadow: none; color: var(--blocked); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ink-3); }
+  .dot-done { background: var(--done); box-shadow: none; }
+  .dot-building { background: var(--yellow); box-shadow: 0 0 0 1.5px var(--building-line); }
+  .dot-review { background: var(--orange); box-shadow: none; }
+  .dot-blocked { background: var(--blocked); box-shadow: none; }
+  .dr-nav { margin-left: auto; display: flex; gap: 6px; flex: none; }
+  .ib { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; color: var(--ink-2); }
+  .ib:hover { border-color: var(--violet); color: var(--heading); background: var(--tint-2); }
+  .ib.close span { display: none; }
+  .ib:disabled { opacity: .35; cursor: default; }
+  .ib svg { width: 16px; height: 16px; }
+  .dr-body { overflow-y: auto; padding: 4px 24px 40px; overscroll-behavior: contain; }
+  .dr-sec { margin-top: 28px; }
+  .dr-sec.first { margin-top: 18px; }
+  .dr-h { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--heading); }
+  .us, .why { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-2); text-wrap: pretty; }
+  .us b { font-weight: 600; color: var(--violet-ink); }
+  .acs { display: grid; gap: 8px; }
+  .gwt { padding: 10px 12px; border-radius: 10px; background: var(--tint-2); font-size: 13.5px; line-height: 1.7; }
+  .k { display: inline-block; margin: 0 2px; padding: 0 7px; border-radius: 6px; font-size: 11.5px; font-weight: 600; line-height: 18px; white-space: nowrap; vertical-align: 1px; }
+  .k-g { background: var(--k-g); color: var(--heading); }
+  .k-w { background: var(--k-w); color: var(--k-w-ink); }
+  .k-d { background: var(--k-d); color: var(--review); }
+  .code-mod + .code-mod { margin-top: 14px; }
+  .code-m { margin-bottom: 6px; font-size: 12px; font-weight: 500; color: var(--ink-3); }
+  .code-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .code-item { display: inline-flex; align-items: center; gap: 8px; padding: 4px 5px 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: help; }
+  .code-item:hover, .code-item:focus-visible { border-color: var(--line-strong); }
+  .cname { font: 500 12.5px/1.4 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+  .kind { flex: none; padding: 0 7px; border-radius: 5px; font-size: 11px; font-weight: 600; line-height: 19px; }
+  /* the same words and colours as the slices: new, changes */
+  .kind.new { background: var(--violet-ink); color: var(--surface); }
+  .kind.changes { background: var(--building); color: var(--surface); }
+  .code-more { margin-top: 12px; font-size: 12.5px; color: var(--ink-3); }
+  .int-g + .int-g { margin-top: 18px; }
+  .int-h { margin-bottom: 8px; font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+  .ents { display: grid; gap: 8px; }
+  .ent { padding: 10px 12px 11px; border: 1px solid var(--line); border-radius: 10px; }
+  .ent.hit { border-color: var(--sel-line); background: var(--sel); }
+  .ent-chip { display: inline-flex; align-items: center; gap: 8px; padding: 3px 12px 3px 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--tint-2); font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer; transition: border-color 140ms var(--ease), background 140ms var(--ease); }
+  .ent-chip:hover { border-color: var(--violet); background: var(--surface); }
+  .ent-line { margin-top: 7px; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+
+  /* test cases (construction): one card per test case, the steps folded away */
+  .tcs { display: grid; gap: 8px; }
+  .tc { border: 1px solid var(--line); border-radius: 10px; }
+  .tc > summary { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; cursor: pointer; list-style: none; font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .tc > summary::-webkit-details-marker { display: none; }
+  .tc > summary::before { content: ""; flex: none; width: 6px; height: 6px; margin: 0 2px 0 1px; border-right: 1.6px solid var(--ink-3); border-bottom: 1.6px solid var(--ink-3); transform: rotate(-45deg); transition: transform 160ms var(--ease); }
+  .tc[open] > summary::before { transform: rotate(45deg); }
+  .tc > summary:hover { background: var(--tint-2); }
+  .tc-t { flex: 1; min-width: 0; }
+  .twin { flex: none; padding: 0 7px; border-radius: 5px; background: var(--chip); color: var(--ink-2); font-size: 11px; font-weight: 600; line-height: 19px; }
+  .twin.passed { background: var(--done-bg); color: var(--done); }
+  .twin.failed { background: var(--blocked-bg); color: var(--blocked); }
+  .tc-b { padding: 0 14px 14px 30px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+  .tc-b h5 { margin: 12px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+  .tc-b h5:first-child { margin-top: 2px; }
+  .tc-b p + p { margin-top: 6px; }
+  .tc-b ol { list-style: decimal; padding-left: 20px; }
+  .tc-b ul { list-style: disc; padding-left: 20px; }
+  .tc-b li + li { margin-top: 3px; }
+  .tc-b li > ul, .tc-b li > ol { margin-top: 3px; }
+  .tc-b code { font: 500 12px/1.4 var(--mono); padding: 0 4px; border-radius: 4px; background: var(--tint-2); color: var(--ink); overflow-wrap: anywhere; }
+  .tc-b table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tc-b th, .tc-b td { padding: 5px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  .tc-b th { font-weight: 600; color: var(--ink-2); }
+
+  /* ---------- tooltip ---------- */
+  .tip {
+    position: fixed; z-index: 40; max-width: 320px;
+    padding: 9px 12px; border-radius: 10px;
+    background: var(--purple); color: var(--on-dark);
+    font-size: 13px; line-height: 1.45; white-space: pre-line;
+    box-shadow: 0 10px 24px -12px var(--tip-shadow);
+    pointer-events: none; opacity: 0; transform: translateY(4px);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+  .tip.show { opacity: 1; transform: none; }
+  .tip b { font-weight: 600; }
+  .tip .muted { color: var(--on-dark-3); }
+
+  @media (max-width: 760px) {
+    .mx .yl { width: 112px; min-width: 112px; font-size: 12px; }
+    .swipe { display: block; }
+    .mast-top { grid-template-columns: auto minmax(0, 1fr); gap: 0 12px; }
+    /* a phone: the title under the logo row, the phase under the title */
+    .mast-r { display: contents; }
+    .mast h1 { grid-column: 1 / -1; padding-left: 0; border-left: 0; }
+    .mast .phase { grid-column: 1 / -1; margin-top: 4px; font-size: 13px; }
+    /* the switches on the phase's row, at its right: the logo's row has no room for them */
+    .mast .phase:has(+ .mast-sw) { grid-column: 1; }
+    .mast .mast-sw { grid-column: 2; justify-self: end; margin-top: 4px; }
+    .drawer { width: 100vw; border-left: 0; box-shadow: none; transform: translateY(100%); }
+    .drawer.open { transform: none; }
+    body.sheet-open { overflow: hidden; }
+    .dr-head { flex-wrap: wrap; padding: 14px 16px 16px; gap: 12px 10px; }
+    .dr-t { order: 3; flex-basis: 100%; }
+    .dr-head .badge.lg { width: 34px; height: 34px; font-size: 15px; }
+    .dr-t h3 { font-size: 1.0625rem; }
+    .ib.close { width: auto; padding: 0 12px; font-size: 14px; font-weight: 600; color: var(--heading); border-color: var(--line-strong); }
+    .ib.close span { display: inline; }
+    .dr-body { padding: 0 16px 40px; }
+    .tc-b { padding-left: 14px; }
+    .chips { gap: 8px; }
+    .mast-views { margin-top: 14px; }
+    .views { display: flex; width: 100%; }
+    .views button { flex: 1 1 auto; padding-inline: 10px; white-space: nowrap; }
+  }
+  @media (max-width: 359px) {
+    .views button { white-space: normal; }
+  }
+  /* a finger, not a mouse: every tap target at least 40 px high, no words under 12 px */
+  @media (pointer: coarse) {
+    .dswitch { min-height: 44px; }
+    .help-btn { width: 44px; height: 44px; }
+    .help-x { width: 44px; height: 44px; margin: -5px -5px 0 0; }
+    .views button { min-height: 44px; }
+    .more { padding-block: 9px; margin-block: -9px; }
+    .schip { min-height: 40px; padding-block: 7px; }
+    .badge.sm { width: 22px; height: 22px; font-size: 12px; }
+    .scope-row li { display: inline-flex; align-items: center; min-height: 40px; padding: 7px 14px; line-height: 1.35; }
+    .ib { width: 40px; height: 40px; }
+    .ent-chip { min-height: 40px; }
+    .code-item { min-height: 40px; }
+    .k, .kind, .twin { font-size: 12px; }
+    .tc > summary { min-height: 44px; }
+  }
+  /* a phone: what stays out of scope is a plain list in a card, not a pile of full-width pills */
+  @media (max-width: 760px) {
+    .scope-row { display: block; padding: 22px 16px 8px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+    .scope-row h2 { margin-bottom: 4px; font-size: 1.25rem; letter-spacing: -0.01em; color: var(--heading); }
+    .scope-row ul { display: block; }
+    .scope-row li { display: flex; align-items: center; min-height: 44px; padding: 10px 0; border: 0; border-radius: 0; background: none; font-size: 14.5px; line-height: 1.45; color: var(--ink-2); }
+    .scope-row li + li { border-top: 1px solid var(--line); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+    .help.is-open { animation: none; }
+  }
+  @media print {
+    body { background: #fff; font-size: 12px; }
+    .mast { -webkit-print-color-adjust: exact; print-color-adjust: exact; padding-bottom: 24px; }
+    .flowpanel { margin-top: 16px; box-shadow: none; }
+    .drawer, .scrim, .tip, .chips, .swipe, .more { display: none !important; }
+    .scroll, .grid-scroll { overflow: visible; }
+    .flow svg { min-width: 0; }
+    .mx, .flow, .itests, .blk, .badge, .k, .band { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .flow.active .fnode, .flow.active .fedge, .itests.active .tnode, .itests.active .tedge { opacity: 1 !important; }
+    .panel { break-inside: avoid; }
+    table.mx { table-layout: fixed; width: 100%; }
+    .mx td.c { min-width: 0; width: auto; }
+    .itests svg { min-width: 0; }
+    .flow > svg { display: block !important; }
+    .ftl { display: none !important; }
+  }
+</style>
+<style id="slices-css">/* the vertical slices */
+  #sec-slices { --sl-new-bg: var(--band-a); --sl-new-line: var(--violet); --sl-new-chip: var(--violet-ink);
+    --sl-chg-bg: var(--alert-bg); --sl-chg-line: var(--alert-line); --sl-chg-chip: var(--building);
+    --sl-seam: var(--violet); --sl-spine: var(--line-strong); --sl-stage: var(--tint-2); }
+  /* five stories or more: the panel takes the width of the screen, like the drawing, before the columns scroll */
+  #sec-slices.sl-wide { --sl-w: min(100vw - 2 * var(--page-x), 1960px); width: var(--sl-w); margin-inline: calc((100% - var(--sl-w)) / 2); }
+  #x-slices2 { margin-top: 4px; color: var(--ink-2); }
+  #lg-slices { gap: 8px 22px; margin-top: 10px; font-size: 13.5px; color: var(--ink-2); }
+  .sl-lg { display: inline-flex; align-items: center; gap: 8px; }
+  .sl-role { flex: none; display: inline-block; padding: 1px 8px 2px; border-radius: 999px; font: 700 11px/1.4 var(--font); font-style: normal; letter-spacing: .02em; }
+  .sl-role.k-new { background: var(--sl-new-chip); color: var(--surface); }
+  .sl-role.k-changes { background: var(--sl-chg-chip); color: var(--surface); }
+  .sl-role.k-uses { box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink-3); }
+  .sl-lgseam { position: relative; width: 34px; height: 2px; background: var(--sl-seam); flex: none; }
+  .sl-lgseam::after, .sl-seam::after { content: ''; position: absolute; right: -1px; top: 50%; border: 5px solid transparent; border-left: 7px solid var(--sl-seam); border-right: 0; transform: translateY(-50%); }
+  .sl-lgseam.open, .sl-seam.open::before { background: repeating-linear-gradient(90deg, var(--ink-3) 0 5px, transparent 5px 9px); }
+  .sl-lgseam.open::after, .sl-seam.open::after { border-left-color: var(--ink-3); }
+
+  .sl-scroll { overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; padding-bottom: 4px; }
+  .sl-scroll.more-r { -webkit-mask-image: linear-gradient(to left, transparent, #000 48px); mask-image: linear-gradient(to left, transparent, #000 48px); }
+  .sl { --gap: 46px; position: relative; isolation: isolate; display: grid; min-width: calc(100% - var(--gap) / 2 + 5px); margin-right: calc(var(--gap) / 2 - 5px);
+    grid-template-columns: minmax(150px, min(220px, 18%)) repeat(var(--n), minmax(168px, 1fr)); column-gap: var(--gap); }
+  .sl > * { min-width: 0; }
+  .sl-corner { position: sticky; left: 0; z-index: 4; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; gap: 4px; padding: 0 0 16px; background: var(--surface); font-size: 12px; font-weight: 600; color: var(--ink-3); }
+  .sl-down { width: 2px; height: 26px; margin-left: 8px; background: var(--ink-3); position: relative; }
+  .sl-down::after { content: ''; position: absolute; left: 50%; bottom: -1px; transform: translateX(-50%); border: 5px solid transparent; border-top: 7px solid var(--ink-3); border-bottom: 0; }
+  .sl-stbg { z-index: -1; margin: 0 calc(var(--gap) / -2 + 5px); border-radius: 16px; background: var(--sl-stage); border: 1px solid var(--line); }
+  .sl-stage { padding: 12px 12px 2px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+  .sl-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 4px -8px 10px; padding: 8px; border: 0; border-radius: 10px; background: none; text-align: left; cursor: pointer; transition: background-color 160ms var(--ease); }
+  .sl-head:hover { background: var(--tint); }
+  .sl-hn { display: flex; align-items: flex-start; gap: 8px; font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--heading); }
+  .sl-hn .badge { margin-top: 1px; }
+  .sl-hn > span:last-child { text-wrap: balance; }
+  .sl-hd { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); text-wrap: pretty; }
+  .sl-hp { font-size: 13.5px; line-height: 1.45; color: var(--ink); text-wrap: pretty; }
+  .sl-hs { font-size: 12.5px; color: var(--ink-3); }
+  .sl-hs b { font-weight: 600; color: var(--ink-2); }
+
+  .sl-group { display: flex; align-items: flex-end; padding: 10px 0 4px; border-top: 1px solid var(--line-strong); }
+  .sl-group span { position: sticky; left: 0; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  .sl-y { position: sticky; left: 0; z-index: 4; display: flex; flex-direction: column; justify-content: center; padding: 6px 0; background: var(--surface); cursor: help; }
+  .sl-yl { font-size: 14px; font-weight: 600; line-height: 1.3; color: var(--ink); }
+  .sl-yt { font: 11.5px/1.4 var(--mono); color: var(--ink-3); overflow-wrap: break-word; }
+  .sl-yt > span { display: block; }
+  .sl-yt > span + span { margin-top: 1px; }
+
+  .sl-cell { position: relative; display: flex; padding: 5px 0; }
+  .sl-cell::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--sl-spine); }
+  .sl-cell.top::before { top: 50%; }
+  .sl-cell.bot::before { bottom: 50%; }
+  .sl-cell.top.bot::before { display: none; }
+  .sl-card { position: relative; z-index: 3; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 8px 11px; border-radius: 10px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--line-strong); cursor: pointer; transition: box-shadow 160ms var(--ease), transform 160ms var(--ease); }
+  .sl-card:hover { box-shadow: inset 0 0 0 2px var(--violet); }
+  .sl-card.c-new { background: var(--sl-new-bg); box-shadow: inset 0 0 0 1.5px var(--sl-new-line); }
+  .sl-card.c-changes { background: var(--sl-chg-bg); box-shadow: inset 0 0 0 1.5px var(--sl-chg-line); }
+  .sl-cn { display: flex; align-items: baseline; gap: 8px; font-size: 13.5px; font-weight: 600; line-height: 1.3; color: var(--ink); }
+  .sl-cn > span:last-child { text-wrap: pretty; hyphens: manual; }
+  .sl-cn.stack { flex-wrap: wrap; row-gap: 3px; }
+  .sl-cn.stack > span:last-child { flex-basis: 100%; }
+  .c-uses .sl-cn { font-weight: 500; color: var(--ink-2); }
+  .sl-note { font-size: 12.5px; line-height: 1.4; color: var(--ink-2); text-wrap: pretty; }
+  .sl-from { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--violet-ink); }
+  .sl-card { min-width: 0; }
+  .sl-cn > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+  .sl .badge.xs { width: 17px; height: 17px; font-size: 10px; }
+  /* a seam runs from behind the earlier card up to the left edge of the later one, across the gap */
+  /* no stacking context of its own: every line sits under every badge, every badge under the cards */
+  .sl-seam { position: relative; align-self: center; height: 3px; margin-right: calc(-1 * var(--gap)); }
+  .sl-seam::before { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: 2px; background: var(--sl-seam); }
+  .sl-seam::after { z-index: 1; border-width: 6px 0 6px 9px; right: -2px; }
+  .sl-seam .badge { z-index: 2; position: absolute; right: 13px; top: 50%; transform: translateY(-50%); box-shadow: 0 0 0 2px var(--sl-stage); }
+  /* a seam that passes behind the card of a story in between runs a little lower, so it does not seem to leave that card */
+  .sl-seam.via { top: 9px; }
+  .sl-card.seam { box-shadow: inset 3px 0 0 var(--sl-seam), inset 0 0 0 1px var(--line-strong); }
+  .sl-card.c-changes.seam { box-shadow: inset 3px 0 0 var(--sl-seam), inset 0 0 0 1.5px var(--sl-chg-line); }
+  .sl-card.c-new.seam { box-shadow: inset 3px 0 0 var(--sl-seam), inset 0 0 0 1.5px var(--sl-new-line); }
+  .sl-card.feeds { box-shadow: inset -3px 0 0 var(--sl-seam), inset 0 0 0 1.5px var(--sl-chg-line); }
+  .sl-card.c-new.feeds { box-shadow: inset -3px 0 0 var(--sl-seam), inset 0 0 0 1.5px var(--sl-new-line); }
+  .sl-card.seam.feeds { box-shadow: inset 3px 0 0 var(--sl-seam), inset -3px 0 0 var(--sl-seam), inset 0 0 0 1.5px var(--sl-chg-line); }
+
+  .sl-foot { display: flex; flex-direction: column; gap: 8px; padding: 14px 0 16px; }
+  .sl-foot > :last-child { flex: 1; }
+  .sl-test { display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 9px 11px; border-radius: 10px; border: 1px dashed var(--sl-seam); }
+  a.sl-test { color: inherit; text-decoration: none; transition: background-color 160ms var(--ease), border-color 160ms var(--ease); }
+  a.sl-test:hover { border-style: solid; background: var(--surface); }
+  a.sl-test:hover .sl-tl { text-decoration: underline; text-underline-offset: 3px; }
+  /* a line in the foot wraps like a sentence in a narrow column, a story number stays with its word */
+  .sl-foot .sl-tt { display: block; line-height: 21px; }
+  .sl-foot .sl-tid { display: inline-block; margin-right: 2px; }
+  .sl-nw { white-space: nowrap; }
+  .sl-test.base { border-style: solid; border-color: var(--line-strong); }
+  .sl-test.none { border-color: var(--line-strong); }
+  .sl-tt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: var(--violet-ink); }
+  .sl-tid { flex: none; padding: 0 6px; border-radius: 999px; background: var(--badge-bg); color: var(--on-dark); font-size: 11px; line-height: 17px; font-variant-numeric: tabular-nums; }
+  .sl-test.base .sl-tt { font-weight: 600; color: var(--ink-2); }
+  .sl-td { font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
+  .sl-tolink { justify-self: start; margin-top: 10px; font-size: 13.5px; font-weight: 600; color: var(--violet-ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+  .sl-tolink:hover { text-decoration-color: currentColor; }
+
+  /* another story open: its cards stay solid (the seam lines run behind them), only their words fade */
+  .sl-card > *, .sl-foot, .sl-head { transition: opacity 200ms var(--ease); }
+  .sl.active .sl-cell:not(.on) .sl-card > *, .sl.active .sl-foot:not(.on), .sl.active .sl-head:not(.on) { opacity: .4; }
+  .sl.active .sl-cell:not(.on) .sl-card { filter: saturate(.35); }
+  .sl-head.on { background: var(--sel); }
+  @media print { .sl, .sl-role, .sl-card, .sl-mstage, .sl-mcard { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+
+  /* phone and tablet: the columns turn into one block per story under each other, nothing scrolls sideways */
+  .sl-list, #sec-slices .sl-ph { display: none; }
+  @media (max-width: 960px) {
+    #sec-slices.sl-wide { width: auto; margin-inline: 0; }
+    #sec-slices .sl-scroll, #sec-slices .sl-dk { display: none; }
+    #sec-slices .sl-ph { display: inline; }
+    #sec-slices .sl-lg.sl-ph { display: inline-flex; }
+    /* the legend as two columns, so the explanations line up next to their chips; a seam row takes the full width */
+    #lg-slices { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 10px 12px; font-size: 14px; }
+    #lg-slices .sl-lg:not(.sl-dk):not(.sl-ph) { display: contents; }
+    #lg-slices .sl-role { justify-self: start; }
+    #sec-slices .sl-role { padding: 2px 9px 3px; font-size: 12.5px; }
+    #sec-slices .badge.xs { width: 20px; height: 20px; font-size: 12px; }
+    #sec-slices .sl-tid { padding: 0 7px; font-size: 12px; line-height: 20px; }
+    #sec-slices .badge.sm { width: 24px; height: 24px; font-size: 12.5px; }
+
+    .sl-list { display: flex; flex-direction: column; gap: 14px; }
+    .sl-mstage { padding: 2px 12px 4px; border: 1px solid var(--line); border-radius: 16px; background: var(--sl-stage); }
+    .sl-mstage > .sl-stage { padding: 12px 0 0; }
+    .sl-mstory { padding: 0 0 16px; }
+    .sl-mstory + .sl-mstory { border-top: 1px solid var(--line-strong); }
+    .sl-mhead { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: calc(100% + 16px); min-height: 44px; margin: 6px -8px 8px; padding: 8px;
+      border: 0; border-radius: 10px; background: none; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 160ms var(--ease); }
+    .sl-mhead:active { background: var(--tint); }
+    .sl-mhead .sl-hn { font-size: 16.5px; }
+    .sl-mhead .sl-hn > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+    .sl-mchev { flex: none; width: 18px; height: 18px; margin-top: 2px; color: var(--ink-3); }
+    .sl-mhead :is(.sl-hd, .sl-hp) { font-size: 14.5px; }
+    .sl-mhead .sl-hs { font-size: 13.5px; }
+
+    .sl-mparts { display: flex; flex-direction: column; gap: 8px; }
+    .sl-mgroup { margin-top: 8px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+    .sl-mgroup:first-child { margin-top: 0; }
+    .sl-mcard { --ring: inset 0 0 0 1px var(--line-strong); --stripe: 0 0 transparent; display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+      padding: 10px 12px; border-radius: 10px; background: var(--surface); box-shadow: var(--stripe), var(--ring); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .sl-mcard.c-new { --ring: inset 0 0 0 1.5px var(--sl-new-line); background: var(--sl-new-bg); }
+    .sl-mcard.c-changes { --ring: inset 0 0 0 1.5px var(--sl-chg-line); background: var(--sl-chg-bg); }
+    .sl-mcard.seam { --stripe: inset 4px 0 0 var(--sl-seam); padding-left: 15px; }
+    .sl-mcard.seam.open { --stripe: inset 4px 0 0 var(--ink-3); }
+    .sl-mcard:active { --ring: inset 0 0 0 2px var(--violet); }
+    .sl-mcard .sl-cn { align-items: baseline; font-size: 15px; }
+    .sl-mcard .sl-note { display: block; overflow: visible; font-size: 14px; line-height: 1.45; -webkit-line-clamp: none; }
+    .sl-mtag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; box-shadow: inset 0 0 0 1.5px var(--sl-seam);
+      font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--violet-ink); }
+    .sl-mtag.open { box-shadow: none; outline: 1.5px dashed var(--ink-3); outline-offset: -1.5px; color: var(--ink-2); }
+    #lg-slices .sl-lg.sl-ph { grid-column: 1 / -1; display: block; line-height: 1.6; }
+    #lg-slices .sl-mtag { margin-right: 8px; vertical-align: middle; }
+    .sl-mfeed { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); }
+    .sl-mused { display: flex; align-items: baseline; gap: 8px; padding: 2px 0 0 2px; font-size: 14px; line-height: 1.45; color: var(--ink-2); }
+
+    .sl-list .sl-foot { padding: 14px 0 0; }
+    .sl-list .sl-tt { flex-wrap: wrap; font-size: 13.5px; }
+    .sl-list .sl-td { font-size: 14px; }
+    .sl-list a.sl-test { min-height: 44px; }
+    .sl-list .sl-tolink { display: flex; align-items: center; min-height: 44px; margin-top: 0; font-size: 14.5px; }
+  }
+</style>
+<style id="tests-css">/* the integration tests */
+  .tlay { display: grid; gap: 22px 36px; }
+  .tlay.side { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .tlay.side .tgraph { position: sticky; top: 16px; }
+  .tgraph { min-width: 0; }
+  .tlay:not(.side) .tgraph .itests { width: fit-content; max-width: 100%; }
+  .tgraph .itests { padding: 14px 16px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--tint-2); }
+  .itests svg { width: auto; min-width: 0; max-width: none; height: auto; overflow: visible; }
+  .tkey { display: block; margin-top: 8px; max-width: 32em; font-size: 13px; line-height: 1.45; color: var(--ink-2); text-wrap: balance; }
+  /* the graph on top of the cards: its caption stands beside it, at its foot */
+  .tlay:not(.side):not(.tg-fit):not(.tg-off) .tgraph { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 24px; }
+  .tlay:not(.side):not(.tg-fit):not(.tg-off) .tkey { flex: 0 1 22em; margin: 0 0 4px; }
+  .tedge .tlb { fill: var(--surface); stroke: var(--violet); stroke-width: 1.3; transition: fill 160ms var(--ease), stroke 160ms var(--ease); }
+  .tedge .tlt { font: 700 11.5px var(--font); fill: var(--violet-ink); text-anchor: middle; pointer-events: none; font-variant-numeric: tabular-nums; }
+  .tedge.hot .ln { stroke: var(--orange); stroke-width: 2.4; }
+  .tedge.hot .ah { fill: var(--orange); }
+  .tedge.hot .tlb { fill: var(--orange); stroke: var(--orange); }
+  .tedge.hot .tlt { fill: #120A20; }
+  .tnode.hot rect { stroke: var(--orange); stroke-width: 2; }
+  .tlay.thot .tedge:not(.hot) { opacity: .2; }
+  .tlay.thot .tnode:not(.hot) { opacity: .4; }
+  .tcards { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .tlay:not(.side) .tcards { grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr)); }
+  .tcard { position: relative; padding: 14px 18px 15px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface); cursor: pointer; transition: border-color 160ms var(--ease), box-shadow 160ms var(--ease); }
+  .tcard:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+  .tcard.hot { border-color: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
+  .tcard.pin { background: var(--sel); box-shadow: inset 4px 0 0 var(--orange); }
+  .tcard.pin.hot { box-shadow: inset 4px 0 0 var(--orange), 0 0 0 1px var(--orange); }
+  /* the number stays on the first line, the story names wrap next to it */
+  .tc-head { display: flex; align-items: flex-start; gap: 8px 12px; flex-wrap: nowrap; }
+  .tc-head .tc-id { margin-top: 1px; }
+  .tc-id { flex: none; min-width: 32px; padding: 3px 8px; border-radius: 999px; background: var(--badge-bg); color: var(--on-dark); font: 700 12.5px var(--font); text-align: center; font-variant-numeric: tabular-nums; transition: background 160ms var(--ease), color 160ms var(--ease); }
+  .tcard.hot .tc-id { background: var(--orange); color: #120A20; }
+  .tc-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; flex: 1 1 auto; min-width: 0; }
+  .tc-s { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font: 600 15px var(--font); color: var(--ink); cursor: pointer; text-align: left; }
+  .tc-s:hover { color: var(--violet-ink); text-decoration: underline; text-underline-offset: 3px; }
+  .tc-n { display: inline-grid; place-items: center; flex: none; width: 21px; height: 21px; border-radius: 50%; background: var(--badge-bg); color: var(--on-dark); font: 700 11.5px var(--font); }
+  .tc-rel { font-size: 14px; color: var(--ink-3); }
+  .tc-step { display: inline-block; margin-right: 4px; padding: 0 8px; border-radius: 999px; background: var(--tint); color: var(--ink); font-size: 12.5px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+  .tc-do { margin: 10px 0 12px; max-width: 46em; font-size: 15.5px; line-height: 1.5; color: var(--ink); text-wrap: pretty; }
+  .tc-rows { display: grid; grid-template-columns: 7.2em minmax(0, 1fr); align-items: baseline; gap: 7px 14px; margin: 0; padding-top: 11px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.55; }
+  .tc-rows dt { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+  .tc-rows dd { margin: 0; color: var(--ink-2); text-wrap: pretty; }
+  .tc-rows dd.tc-none { color: var(--ink-3); font-style: italic; }
+  .tc-c { padding: 1px 6px; border-radius: 5px; background: var(--chip); color: var(--violet-ink); font: 600 12.5px var(--mono); overflow-wrap: anywhere; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+  .tc-c[data-tip] { cursor: help; }
+  .tc-q { color: var(--ink-2); font-style: italic; quotes: '\201C' '\201D' '\2018' '\2019'; }
+  .tc-q[data-tip] { cursor: help; }
+  .tc-lead { color: var(--ink-3); }
+  .tc-nw { white-space: nowrap; }
+  .tc-k { font: 600 12.5px var(--mono); color: var(--ink); }
+  .tc-src { display: inline-block; margin-left: 4px; padding: 0 7px; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 11.5px; line-height: 17px; color: var(--ink-3); white-space: nowrap; vertical-align: 1px; }
+  @media (max-width: 760px) {
+    .tlay.side { grid-template-columns: minmax(0, 1fr); }
+    .tlay.side .tgraph { position: static; }
+    .tc-rows { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .tc-rows dd + dt { margin-top: 6px; }
+  }
+  @media (max-width: 760px) and (pointer: coarse) { .tc-head .tc-id { margin-top: 8px; } }
+  /* a narrow screen: the graph shrinks to the width when it stays readable, otherwise the cards say it all */
+  .tlay.tg-fit .tgraph .itests { width: auto; }
+  .tlay.tg-fit .itests svg { width: 100%; height: auto; }
+  .tlay.tg-off .tgraph { display: none; }
+  /* on touch the code names explain themselves under the sentence, no hover needed */
+  .tc-what { display: grid; gap: 5px; margin-top: 8px; font-size: 13px; line-height: 1.45; color: var(--ink-3); }
+  .tc-what .tc-c { margin-right: 6px; }
+  @media (pointer: coarse) {
+    .tc-pair { row-gap: 0; }
+    .tc-s { min-height: 40px; }
+    .tc-n { width: 22px; height: 22px; font-size: 12px; }
+    .tc-src { font-size: 12px; }
+  }
+  @media print { .tlay.side .tgraph { position: static; } .tlay.tg-off .tgraph { display: block; } }
+</style><style>/*__DESIGN_CSS__*/</style>
+<style>
+  /* ---------- the masthead's size, after the look: the look (maquette.css) keeps the title's display face,
+     its larger sizes and wider spacing give way, so the flow view and Review fit the window below the masthead ---------- */
+  .mq .mast h1 { margin-top: 0; max-width: none; font-size: clamp(1.375rem, 1.05rem + 0.75vw, 1.75rem); line-height: 1.15; }
+  .mq .mast h1:not(.built) { max-width: none; }
+  .mq .summary { margin-top: 8px; }
+  @media (max-width: 760px) {
+    .mq .mast { padding-bottom: calc(var(--mast-overlap) + 6px); }
+    .mq .mast h1 { margin-top: 10px; font-stretch: 100%; font-size: 1.375rem; line-height: 1.15; }
+    .mq .views { margin-top: 0; }
+  }
+</style>
+</head>
+<body class="mq">
+
+<header class="mast">
+  <div class="wrap">
+    <div class="mast-top">
+      __TURBO_LOGO__
+      <h1 id="title"></h1>
+      <div class="mast-r">
+        <span class="phase" id="phase"></span>
+        <div class="mast-sw" id="mast-sw" role="group" aria-label="{{design.switches.aria}}"></div>
+      </div>
+    </div>
+    <p class="summary" id="summary"><span id="lead"></span> <button type="button" class="more" id="more" aria-expanded="false" aria-controls="rest">{{overview.more}}</button></p>
+    <p class="rest" id="rest" hidden></p>
+    <p class="plain plain-intent" id="plain-intent"></p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel flowpanel" aria-labelledby="h-flow">
+    <div class="sec-head">
+      <h2 id="h-flow">{{overview.lifecycle}}</h2>
+      <p class="explain how" id="x-flow"></p>
+    </div>
+    <div class="chips" id="chips" role="list"></div>
+    <div class="scroll flow" id="flow"></div>
+  </section>
+
+  <section class="panel" id="sec-slices" aria-labelledby="h-slices">
+    <div class="sec-head">
+      <h2 id="h-slices">{{overview.slices}}</h2>
+      <p class="explain how" id="x-slices"></p>
+      <div class="legend how" id="lg-slices"></div>
+    </div>
+    <div class="sl-scroll"><div class="sl" id="matrix"></div></div>
+    <div class="sl-list" id="sl-list"></div>
+  </section>
+
+  <section class="panel td-panel" id="sec-design" aria-labelledby="h-design">
+    <div class="sec-head">
+      <h2 id="h-design">{{overview.design}}</h2>
+    </div>
+    <div id="td-mount"></div>
+  </section>
+
+  <section class="panel td-panel rv-panel" id="sec-review" aria-label="{{design.tabs.review}}">
+    <div id="review-mount"></div>
+  </section>
+
+  <section class="panel" id="sec-tests" aria-labelledby="h-tests">
+    <div class="sec-head">
+      <h2 id="h-tests">{{overview.tests}}</h2>
+      <p class="explain how" id="x-tests"></p>
+    </div>
+    <div class="tlay" id="tlay">
+      <div class="tgraph">
+        <div class="scroll itests" id="tests"></div>
+        <p class="tkey how" id="tkey"></p>
+      </div>
+      <ol class="tcards" id="tcards"></ol>
+    </div>
+  </section>
+
+  <section class="scope-row" id="scope-row" aria-labelledby="h-scope">
+    <h2 id="h-scope">{{overview.outOfScope}}</h2>
+    <ul id="scope"></ul>
+  </section>
+</main>
+
+<footer class="wrap" id="foot">
+  <span id="foot-at"></span>
+</footer>
+
+<div class="scrim" id="scrim" aria-hidden="true"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="false" aria-labelledby="dr-title">
+  <div class="dr-head" id="dr-head"></div>
+  <div class="dr-body" id="dr-body"></div>
+</aside>
+
+<script id="turbo-text" type="application/json">__TURBO_TEXT__</script>
+<script>/*__DESIGN_JS__*/</script>
+<script id="overview-data" type="application/json">__OVERVIEW_DATA__</script>
+<script>
+(() => {
+  'use strict';
+  const D = JSON.parse(document.getElementById('overview-data').textContent);
+  document.documentElement.lang = D.lang || 'en';
+  // every fixed text of the page, from the string table in the turbo-text block (design-text.js)
+  const TT = (key, vars) => window.TdText.t('overview.' + key, vars);
+  const MD = (key) => window.TdText.t('md.' + key);
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const num = (id) => { const n = parseInt(id, 10); return esc(Number.isNaN(n) ? id : n); };
+  const plain = (t) => String(t ?? '').replace(/­/g, '');
+  const LB = D.labels || {};
+  const intent = D.intent || {};
+  // after the build the page says what happened, before it what will happen
+  const afterBuild = D.phase === 'construction';
+  const statusLabel = (st) => (LB.storyStatus || {})[st] || st || '';
+  // soft hyphens in a long word, so a narrow column breaks it the way Dutch and English do:
+  // between syllables, a consonant cluster split so the next syllable starts with a valid onset
+  const ONSETS = new Set('bl br ch chr dr dw fl fr gl gr kl kn kr kw pl pr sch schr sj sk sl sm sn sp spl spr st str sw th tr tw vl vr wr zw'.split(' '));
+  const hyphenate = (text) => plain(text).replace(/[A-Za-zÀ-ÿ]{10,}/g, (w) => {
+    const lw = w.toLowerCase();
+    const isV = (i) => /[aeiouyàáâäèéêëìíîïòóôöùúûü]/.test(lw[i]) || (lw[i] === 'j' && lw[i - 1] === 'i');
+    const cuts = [];
+    let i = 0;
+    while (i < lw.length && !isV(i)) i++;
+    while (i < lw.length) {
+      while (i < lw.length && isV(i)) i++;
+      const c0 = i;
+      while (i < lw.length && !isV(i)) i++;
+      if (i >= lw.length) break;
+      const cl = lw.slice(c0, i);
+      let k = cl.length - 1;
+      for (let n = Math.min(4, cl.length - 1); n >= 2; n--) if (ONSETS.has(cl.slice(-n))) { k = cl.length - n; break; }
+      cuts.push(c0 + k);
+    }
+    let out = '', last = 0;
+    cuts.filter((c) => c >= 2 && w.length - c >= 3).forEach((c) => { out += w.slice(last, c) + '\u00ad'; last = c; });
+    return out + w.slice(last);
+  });
+
+  /* a name keeps its long words whole: a word too wide for the room beside its chip moves the name under the chip,
+     and only a word wider than the whole card gets the soft hyphens. Measured in the font the name shows in, again
+     when its box changes width or the web font comes in */
+  const fitMeasure = document.createElement('canvas').getContext('2d');
+  const fitNames = (root) => $$('[data-name]', root).forEach((el) => {
+    const row = el.parentElement, name = el.dataset.name, full = row.clientWidth;
+    if (!full) return; // not shown
+    const chip = el.previousElementSibling;
+    const beside = full - (chip ? chip.offsetWidth + (parseFloat(getComputedStyle(row).columnGap) || 0) : 0);
+    const cs = getComputedStyle(el);
+    fitMeasure.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const widthOf = (word) => fitMeasure.measureText(word).width;
+    const widest = Math.max(0, ...(name.match(/[A-Za-zÀ-ÿ]{6,}/g) || []).map(widthOf));
+    const stack = row.classList.contains('sl-cn') && widest > beside + 0.5;
+    row.classList.toggle('stack', stack);
+    const room = stack ? full : beside;
+    const out = name.replace(/[A-Za-zÀ-ÿ]{6,}/g, (word) => (widthOf(word) > room + 0.5 ? hyphenate(word) : word));
+    if (el.textContent !== out) el.textContent = out;
+  });
+  const nameSpan = (text) => `<span data-name="${esc(plain(text))}">${esc(plain(text))}</span>`;
+  /* code names that break only where a reader expects it: after , _ / . and between the words of a CamelCase name */
+  const codeLines = (text) => String(text || '').split(/,\s*/).filter(Boolean)
+    .map((n) => `<span>${esc(n).replace(/([_/.])(?=\S)/g, '$1<wbr>').replace(/([a-z0-9])(?=[A-Z])/g, '$1<wbr>')}</span>`).join('');
+
+  /* ---------- order: build stages from depends_on ---------- */
+  const stories = (D.stories || []).filter((s) => s && s.id);
+  const byId = new Map(stories.map((s) => [s.id, s]));
+  const stageOf = {};
+  const stage = (id, seen = new Set()) => {
+    if (stageOf[id]) return stageOf[id];
+    if (seen.has(id)) return 1;
+    seen.add(id);
+    const deps = (byId.get(id).depends_on || []).filter((d) => byId.has(d));
+    stageOf[id] = 1 + (deps.length ? Math.max(...deps.map((d) => stage(d, seen))) : 0);
+    return stageOf[id];
+  };
+  stories.forEach((s) => stage(s.id));
+  const order = [...stories].sort((a, b) => stageOf[a.id] - stageOf[b.id] || a.id.localeCompare(b.id));
+  const idx = new Map(order.map((s, i) => [s.id, i]));
+  const titleOf = (id) => byId.get(id).title || id;
+  const shortOf = (id) => byId.get(id).short || titleOf(id);
+  const storyTip = (id) => `<span class="muted">${num(id)}</span> ${esc(titleOf(id))}`;
+
+  const tests = (D.integration || []).filter((t) => t && byId.has(t.later) && byId.has(t.earlier) && t.later !== t.earlier);
+  tests.forEach((t, i) => { if (!t.id) t.id = 'T' + (i + 1); });
+  const LC = D.lifecycle && (D.lifecycle.nodes || []).length && (D.lifecycle.lanes || []).length ? D.lifecycle : null;
+  const layerList = (D.layers || []).filter((l) => l && l.id);
+
+  /* ---------- tooltip ---------- */
+  const TIPS = new Map();
+  let tipN = 0;
+  const tipAttr = (html) => { const k = 't' + (++tipN); TIPS.set(k, html); return `data-tip="${k}"`; };
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.setAttribute('role', 'tooltip');
+  document.body.append(tip);
+  let tipEl = null;
+  const showTip = (el, ev) => {
+    const html = TIPS.get(el.getAttribute('data-tip'));
+    if (!html) return;
+    tipEl = el;
+    tip.innerHTML = html;
+    tip.classList.add('show');
+    let r = el.getBoundingClientRect();
+    if (el.dataset.tipAt === 'graph') {
+      // an arrow in the test graph: under the graph (or above it), at the pointer, so the tip never covers a story box
+      const g = (el.closest('.itests') || el).getBoundingClientRect(), x = ev ? ev.clientX : r.left + r.width / 2;
+      r = { left: x, right: x, width: 0, top: g.top, bottom: g.bottom };
+    }
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let x = r.left + r.width / 2 - tw / 2;
+    x = Math.max(8, Math.min(x, window.innerWidth - tw - 8));
+    let y = r.bottom + 8;
+    if (y + th > window.innerHeight - 8) y = r.top - th - 8;
+    tip.style.left = x + 'px';
+    tip.style.top = Math.max(8, y) + 'px';
+  };
+  const hideTip = () => { tipEl = null; tip.classList.remove('show'); };
+  // a finger has no hover: the hover effects wait for a mouse, and a tap on something that only explains
+  // itself shows its tip, until a second tap or a tap elsewhere
+  let touch = false;
+  document.addEventListener('pointerdown', (e) => { touch = e.pointerType === 'touch'; }, true);
+  document.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') touch = false; }, true);
+  document.addEventListener('click', (e) => {
+    if (!touch) return;
+    const el = e.target.closest('[data-tip]');
+    if (el && el !== tipEl && !el.closest('button, a, summary, [data-story], [data-t], [data-switch], [role="button"]')) showTip(el); else hideTip();
+  });
+  document.addEventListener('mouseover', (e) => { if (touch) return; const el = e.target.closest('[data-tip]'); if (el && el !== tipEl) showTip(el, e); else if (!el && tipEl) hideTip(); });
+  document.addEventListener('focusin', (e) => { if (touch) return; const el = e.target.closest('[data-tip]'); if (el) showTip(el); });
+  document.addEventListener('focusout', hideTip);
+  window.addEventListener('scroll', hideTip, { passive: true });
+
+  /* an SVG label that is longer than its box ends in an ellipsis; rerun once the web font is in */
+  const fitLabels = () => $$('text[data-fit]').forEach((t) => {
+    const full = t.dataset.full ?? (t.dataset.full = t.textContent);
+    const max = +t.dataset.fit;
+    t.textContent = full;
+    if (!t.getComputedTextLength || t.getComputedTextLength() <= max) return;
+    let n = full.length;
+    while (n > 1 && t.getComputedTextLength() > max) t.textContent = full.slice(0, --n).trimEnd() + '…';
+  });
+
+  /* ---------- masthead ---------- */
+  document.title = plain(intent.title) || document.title;
+  $('#phase').textContent = (LB.phase || {})[D.phase] || '';
+  // after the build the masthead says what the intent built, in the words finish wrote into the brief (built);
+  // without them the intent's own summary, never the drawing's: that is the design, not what was built
+  const asBuilt = D.phase === 'construction' && D.design && D.design.build;
+  $('#title').textContent = plain(intent.title);
+  const lead = (afterBuild && intent.built) || intent.summary;
+  $('#title').classList.toggle('built', !!asBuilt);
+  // under a built lead, Read more holds the whole intent
+  const rest = lead === intent.summary ? intent.rest : [intent.summary, intent.rest].filter(Boolean).join(' ');
+  const sum = $('#summary'), leadEl = $('#lead'), more = $('#more'), restEl = $('#rest');
+  if (LB.more) more.textContent = LB.more;
+  if (rest) restEl.textContent = rest;
+  if (!lead && !rest) { sum.remove(); restEl.remove(); } else {
+    sum.classList.toggle('built', !!asBuilt);
+    // the lead at most two lines, Read more right after it: a lead too long is cut at a word, with an ellipsis,
+    // so Read more still fits; Read more only with a rest or a cut lead; open, the whole lead and the rest
+    let open = false, wasCut = false, fitW = -1;
+    // cut: Read more (without it, the lead's own end) lies under the second line, measured without the clamp,
+    // by the line Read more sits on: never by its tap area, which reaches past the line on a phone
+    const cut = () => {
+      sum.classList.add('fit');
+      const lh = parseFloat(getComputedStyle(sum).lineHeight);
+      const over = more.hidden ? sum.clientHeight > 2 * lh + 1 : more.offsetTop + more.offsetHeight / 2 > 2 * lh;
+      sum.classList.remove('fit');
+      return over;
+    };
+    const fitLead = () => {
+      leadEl.textContent = lead || '';
+      more.hidden = !rest && !open; // without a rest, first the lead alone
+      wasCut = !open && cut();
+      if (wasCut) {
+        more.hidden = false;
+        const words = (lead || '').split(' ');
+        let lo = 0, hi = words.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi + 1) >> 1;
+          leadEl.textContent = words.slice(0, mid).join(' ') + '\u2026';
+          if (cut()) hi = mid - 1; else lo = mid;
+        }
+        leadEl.textContent = words.slice(0, lo).join(' ') + '\u2026';
+      }
+      more.hidden = !rest && !open && !wasCut;
+    };
+    more.addEventListener('click', () => {
+      open = !open;
+      more.setAttribute('aria-expanded', String(open));
+      sum.classList.toggle('open', open);
+      restEl.hidden = !open || !rest;
+      fitLead();
+    });
+    const onWidth = () => { if (sum.clientWidth !== fitW) { fitW = sum.clientWidth; fitLead(); } };
+    if (window.ResizeObserver) new ResizeObserver(onWidth).observe(sum); else window.addEventListener('resize', onWidth);
+    if (document.fonts) document.fonts.ready.then(fitLead);
+    onWidth();
+  }
+  // under the summary the intent in plain words (Details, design-switches.js): after the build what it built when the
+  // lead does not already say that, else the record's plain text; the summary and Read more stay whatever the switch
+  const said = [afterBuild && intent.built, intent.plain].find((t) => t && t !== lead);
+  if (said) $('#plain-intent').textContent = plain(said); else $('#plain-intent').remove();
+  // the masthead's own height on :root, for the flow view and Review to fit the window below it
+  const mast = $('.mast');
+  const mastH = () => document.documentElement.style.setProperty('--masthead-h', `${Math.ceil(mast.getBoundingClientRect().height)}px`);
+  if (window.ResizeObserver) new ResizeObserver(mastH).observe(mast); else window.addEventListener('resize', mastH);
+  mastH();
+  const X = LB.explain || {};
+  [['#x-flow', LC && X.flow], ['#x-slices', X.slices], ['#x-tests', X.tests]].forEach(([sel, txt]) => { if (txt) $(sel).textContent = txt; else $(sel).remove(); });
+  const CELL = LB.cell || {};
+  $('#foot-at').textContent = D.generated ? TT('updated', { at: D.generated }) : '';
+
+  /* ---------- story chips ---------- */
+  $('#chips').innerHTML = order.map((s) =>
+    `<button class="schip" role="listitem" data-story="${esc(s.id)}" data-hover ${tipAttr(storyTip(s.id))}><span class="badge sm">${num(s.id)}</span>${esc(shortOf(s.id))}</button>`).join('');
+
+  /* ---------- flow diagram ---------- */
+  // text is measured in the page font, so a name wraps where it really runs out of room
+  const measure = document.createElement('canvas').getContext('2d');
+  const FONT = getComputedStyle(document.documentElement).getPropertyValue('--font').trim() || 'sans-serif';
+  const textW = (t, font) => { measure.font = font + ' ' + FONT; return measure.measureText(t).width; };
+  /* the break of a text into at most k lines that keeps the longest line shortest: { lines, w } */
+  const balance = (text, font, k) => {
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    const width = (a, b) => textW(words.slice(a, b).join(' '), font);
+    const split = (from, k) => {
+      let best = { lines: [words.slice(from).join(' ')], w: width(from, words.length) };
+      for (let i = from + 1; k > 1 && i < words.length; i++) {
+        const head = width(from, i);
+        if (head >= best.w) break;
+        const rest = split(i, k - 1);
+        if (Math.max(head, rest.w) < best.w) best = { lines: [words.slice(from, i).join(' '), ...rest.lines], w: Math.max(head, rest.w) };
+      }
+      return best;
+    };
+    return words.length ? split(0, k) : { lines: [], w: 0 };
+  };
+  /* the fewest lines (up to `most`) that fit `max`; when even `most` lines do not fit, the best of those
+     (fitLabels then shortens what still sticks out) */
+  const wrapW = (text, max, font, most) => {
+    for (let k = 1; k < most; k++) { const r = balance(text, font, k); if (r.w <= max) return r.lines; }
+    return balance(text, font, most).lines;
+  };
+  let flowW = 0; // the width the lanes are drawn at
+  function renderFlow() {
+    const COLW = 186, PAD = 16, GAP = 18;
+    const wrapped = !!(LC.wrap && byId.has(LC.wrap.story));
+    const TOP = wrapped ? 46 : 14; // room for the wrap label above the frame
+    // the lanes reach the edges of the panel, or sit inside the frame of a story under the whole lifecycle
+    const LX = wrapped ? PAD : 0;
+    // the label column is as wide as the longest word of a lane name (a name only breaks between words)
+    const laneNeed = Math.max(0, ...LC.lanes.map((l) => Math.max(balance(l.label, '600 13px', 2).w,
+      ...String(l.label || '').split(/\s+/).map((w) => textW(w, '600 13px')))));
+    const X0 = Math.min(240, Math.max(118, Math.ceil(LX + 20 + laneNeed)));
+    const cxOf = (col) => X0 + 86 + col * COLW;
+    // a step is wide enough for every name on two lines and every line under it on three, up to the column
+    const steps = LC.nodes.filter((n) => LC.lanes.some((l) => l.id === n.lane && !l.bandOnly));
+    const need = Math.max(0, ...steps.flatMap((n) => [balance(n.label, '600 14px', 2).w + 16, balance(n.sub, '400 11.5px', 3).w + 14]));
+    const NW = Math.min(COLW - 14, Math.max(144, Math.ceil(need)));
+    const text = Object.fromEntries(steps.map((n) => {
+      const t = { titleLines: wrapW(n.label, NW - 16, '600 14px', 3), subLines: wrapW(n.sub, NW - 14, '400 11.5px', 4) };
+      return [n.id, { ...t, h: 44 + 14 * Math.max(1, t.subLines.length) + 17 * (t.titleLines.length - 1) }];
+    }));
+    const ROWH = Math.max(86, ...Object.values(text).map((t) => t.h + 14));
+    // lanes: a band-only lane holds the status band, every other lane one or more rows of steps
+    let y = TOP;
+    const lanes = {};
+    LC.lanes.forEach((ln) => {
+      const h = ln.bandOnly ? 44 : (ln.rows || 1) * ROWH + 16;
+      lanes[ln.id] = { ...ln, top: y, h, cy: y + h / 2, lines: wrapW(ln.label, X0 - LX - 20, '600 13px', 2) };
+      y += h + GAP;
+    });
+    const H = y + 6;
+    const rowY = (lane, row) => (row == null || !lane.rows ? lane.cy : lane.top + 8 + (row + 0.5) * ROWH);
+    // steps
+    const N = {};
+    steps.forEach((n) => {
+      const ids = (n.stories || []).filter((id) => byId.has(id));
+      N[n.id] = { ...n, ...text[n.id], ids, cx: cxOf(+n.col || 0), cy: rowY(lanes[n.lane], n.row), w: NW };
+    });
+    const nodes = Object.values(N);
+    const maxCol = Math.max(0, ...nodes.map((n) => +n.col || 0), ...(LC.band || []).map((b) => +b.to || 0));
+    // room after the last column, and for the end word of the status band inside its lane
+    const endNeed = Math.max(0, ...(LC.band || []).filter((b) => b.end).map((b) => cxOf(+b.to || 0) + 18 + textW(b.end, '500 11px') + 14 + LX));
+    const W = Math.ceil(Math.max(X0 + 86 + maxCol * COLW + 114 + LX, endNeed));
+    flowW = W;
+    const anchor = (n, side, off = 0) => {
+      switch (side) {
+        case 'top': return [n.cx + off, n.cy - n.h / 2];
+        case 'bottom': return [n.cx + off, n.cy + n.h / 2];
+        case 'left': return [n.cx - n.w / 2, n.cy + off];
+        default: return [n.cx + n.w / 2, n.cy + off];
+      }
+    };
+    const flatSide = (sd) => sd === 'left' || sd === 'right';
+    // an arrow without layout hints: forward goes right side to left side, within one column
+    // it runs straight down or up, and backwards it is a loop under the steps
+    const shape = (e, a, b) => {
+      const back = b.cx < a.cx, same = b.cx === a.cx, down = b.cy > a.cy;
+      const kind = back && (!e.kind || e.kind === 'main') ? 'loop' : e.kind || 'main';
+      const fromSide = e.fromSide || (same ? (down ? 'bottom' : 'top') : back ? 'bottom' : 'right');
+      const toSide = e.toSide || (same ? (down ? 'top' : 'bottom') : back ? 'bottom' : 'left');
+      const flat = (s) => s === 'left' || s === 'right';
+      const route = e.route || (back ? 'v' : !same && flat(fromSide) && flat(toSide) && a.cy !== b.cy ? 'h' : null);
+      return { kind, fromSide, toSide, route };
+    };
+    const rounded = (pts, r = 9) => {
+      let d = `M${pts[0][0]},${pts[0][1]}`;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+        const d1 = Math.hypot(x1 - x0, y1 - y0), d2 = Math.hypot(x2 - x1, y2 - y1);
+        if (!d1 || !d2) continue;
+        const rr = Math.min(r, d1 / 2, d2 / 2);
+        const ax = x1 - (x1 - x0) / d1 * rr, ay = y1 - (y1 - y0) / d1 * rr;
+        const bx = x1 + (x2 - x1) / d2 * rr, by = y1 + (y2 - y1) / d2 * rr;
+        d += ` L${ax},${ay} Q${x1},${y1} ${bx},${by}`;
+      }
+      const last = pts[pts.length - 1];
+      return d + ` L${last[0]},${last[1]}`;
+    };
+    let svg = `<svg viewBox="0 0 ${W} ${H + 4}" role="img" aria-label="${esc(TT('lifecycleAria', { subject: LC.subject || TT('theWork') }))}">
+      <defs>
+        ${[['main', 'var(--edge-ink)'], ['loop', 'var(--edge-ink)'], ['write', 'var(--violet)'], ['reject', 'var(--ink-3)'], ['crash', 'var(--ink-2)']].map(([k, c]) =>
+          `<marker id="ah-${k}" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1,1 L9,5 L1,9 Z" style="fill: ${c}"/></marker>`).join('')}
+      </defs>`;
+    // lanes
+    LC.lanes.forEach((ln) => {
+      const g = lanes[ln.id];
+      const cls = ln.tone === 'alert' ? 'lane-crash' : ln.tone === 'strong' ? 'lane-vp' : 'lane-bg';
+      svg += `<rect class="${cls}" x="${LX}" y="${g.top}" width="${W - 2 * LX}" height="${g.h}" rx="12"/>`;
+      svg += g.lines.map((l, i) => `<text class="lane-label" x="${LX + 14}" y="${g.cy + 4.5 + (i - (g.lines.length - 1) / 2) * 16}" data-fit="${X0 - LX - 20}">${esc(l)}</text>`).join('');
+    });
+    // status band
+    const bandLane = Object.values(lanes).find((l) => l.bandOnly);
+    if (bandLane && (LC.band || []).length) {
+      svg += `<g class="band">`;
+      LC.band.forEach((b, bi) => {
+        const bh = 20, by = bandLane.cy - bh / 2;
+        const x1 = cxOf(+b.from || 0), x2 = cxOf(+b.to || 0);
+        const tone = ['a', 'b', 'c'].includes(b.tone) ? b.tone : 'a';
+        const t = b.tip ? tipAttr(`<b>${esc(b.label)}</b><br>${esc(b.tip)}`) : '';
+        svg += `<g ${t}><rect class="band-${tone}" x="${x1}" y="${by}" width="${Math.max(0, x2 - x1)}" height="${bh}" rx="${bi === 0 ? 10 : 0}"/>`;
+        if (bi > 0) svg += `<rect class="band-${tone}" x="${x1}" y="${by}" width="${Math.max(0, Math.min(14, x2 - x1))}" height="${bh}"/>`;
+        svg += `<text class="band-t band-t${tone}" x="${x1 + 12}" y="${by + 14}">${esc(b.label)}</text>`;
+        if (b.end) {
+          svg += `<path d="M${x2},${by} L${x2 + 12},${by + bh / 2} L${x2},${by + bh} Z" class="band-${tone}"/>`;
+          svg += `<text class="band-end" x="${x2 + 18}" y="${by + 14}">${esc(b.end)}</text>`;
+        }
+        svg += `</g>`;
+      });
+      svg += `</g>`;
+    }
+    // arrows; several ends on one side of a step spread out, so no two arrows run on top of each other:
+    // an arrow that goes straight across keeps the middle, the others move towards where they go
+    const E = (LC.edges || []).map((e) => {
+      const a = N[e.from], b = N[e.to];
+      return a && b && a !== b ? { e, a, b, ...shape(e, a, b), fromOff: +e.fromOff || 0, toOff: +e.toOff || 0 } : null;
+    }).filter(Boolean);
+    const sides = new Map();
+    E.forEach((x) => [['from', x.a, x.fromSide, x.b], ['to', x.b, x.toSide, x.a]].forEach(([end, n, side, o]) => {
+      if (x[end + 'Off']) return; // the record placed this end itself
+      const flat = side === 'left' || side === 'right';
+      const d = flat ? o.cy - n.cy : o.cx - n.cx;
+      const k = n.id + '|' + side;
+      if (!sides.has(k)) sides.set(k, { n, flat, list: [] });
+      sides.get(k).list.push({ x, end, d: Math.abs(d) < 1 ? 0 : d });
+    }));
+    const STEP = 10;
+    sides.forEach(({ n, flat, list }) => {
+      if (list.length < 2) return;
+      const room = (flat ? n.h : n.w) / 2 - 8;
+      const put = (it, off) => { it.x[it.end + 'Off'] = Math.max(-room, Math.min(room, off)); };
+      const straight = list.filter((it) => !it.d);
+      if (!straight.length) { list.sort((p, q) => p.d - q.d).forEach((it, i) => put(it, (i - (list.length - 1) / 2) * STEP)); return; }
+      straight.forEach((it, i) => put(it, (i - (straight.length - 1) / 2) * STEP));
+      const edge = (straight.length - 1) / 2 * STEP;
+      list.filter((it) => it.d < 0).sort((p, q) => q.d - p.d).forEach((it, i) => put(it, -edge - (i + 1) * STEP));
+      list.filter((it) => it.d > 0).sort((p, q) => p.d - q.d).forEach((it, i) => put(it, edge + (i + 1) * STEP));
+    });
+    E.forEach(({ e, a, b, kind, fromSide, toSide, route, fromOff, toOff }) => {
+      const p1 = anchor(a, fromSide, fromOff);
+      const p2 = anchor(b, toSide, toOff);
+      let pts;
+      if (route === 'v') {
+        const m = fromSide === 'bottom' && toSide === 'bottom' ? Math.max(p1[1], p2[1]) + 22
+          : fromSide === 'top' && toSide === 'top' ? Math.min(p1[1], p2[1]) - 22
+          : (p1[1] + p2[1]) / 2 + 8;
+        pts = [p1, [p1[0], m], [p2[0], m], p2];
+      } else if (p1[1] !== p2[1] && (route === 'h' || (!route && flatSide(fromSide) && flatSide(toSide)))) { const m = (p1[0] + p2[0]) / 2; pts = [p1, [m, p1[1]], [m, p2[1]], p2]; }
+      else if (!route && p1[0] !== p2[0] && !flatSide(fromSide) && !flatSide(toSide)) { const m = (p1[1] + p2[1]) / 2; pts = [p1, [p1[0], m], [p2[0], m], p2]; }
+      else pts = [p1, p2];
+      svg += `<g class="fedge ${kind}"><path d="${rounded(pts)}" marker-end="url(#ah-${kind})"/>`;
+      if (e.label) {
+        let seg = 0, best = -1;
+        for (let i = 0; i < pts.length - 1; i++) { const l = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); if (l > best) { best = l; seg = i; } }
+        const mx = (pts[seg][0] + pts[seg + 1][0]) / 2, my = (pts[seg][1] + pts[seg + 1][1]) / 2;
+        const vertical = pts[seg][0] === pts[seg + 1][0];
+        const tx = vertical ? mx + 8 : mx;
+        let ty = vertical ? my + 4 : my - 7;
+        // the halo is the plate the label stands on; a label between two plates sits in the gap, clear of their edges
+        const plate = Object.values(lanes).find((l) => ty - 10 >= l.top && ty + 4 <= l.top + l.h);
+        const place = !plate ? 'in-gap' : plate.tone === 'alert' ? 'on-crash' : plate.tone === 'strong' ? 'on-vp' : '';
+        if (!plate && vertical) {
+          const above = Object.values(lanes).filter((l) => l.top + l.h <= ty).sort((p, q) => q.top - p.top)[0];
+          if (above) ty = above.top + above.h + 14.5;
+        }
+        const tcls = place ? ` class="${place}"` : '';
+        const anchorTxt = vertical ? 'start' : 'middle';
+        if (kind === 'crash') {
+          const bx = tx + 2, byy = ty - 11;
+          svg += `<path class="bolt" d="M${bx + 6},${byy} L${bx},${byy + 8} L${bx + 4},${byy + 8} L${bx + 2},${byy + 15} L${bx + 9},${byy + 5} L${bx + 5},${byy + 5} Z"/>`;
+          svg += `<text${tcls} x="${tx + 16}" y="${ty}" text-anchor="${anchorTxt}">${esc(e.label)}</text>`;
+        } else {
+          svg += `<text${tcls} x="${tx}" y="${ty}" text-anchor="${anchorTxt}">${esc(e.label)}</text>`;
+        }
+      }
+      svg += `</g>`;
+    });
+    // steps
+    nodes.forEach((n) => {
+      const x = n.cx - n.w / 2, yy = n.cy - n.h / 2;
+      const ids = n.ids.slice().sort((p, q) => idx.get(p) - idx.get(q));
+      const tipHtml = `<b>${esc(n.label)}</b>` + (ids.length ? '<br>' + ids.map(storyTip).join('<br>') : '');
+      const kind = ['state', 'alert'].includes(n.shape) ? n.shape : 'process';
+      const rx = kind === 'state' ? 22 : 10;
+      // the name lines sit 17 apart, the line under it starts 17 lower and runs 14 apart; the block is centred
+      const T = n.titleLines.length, S = n.subLines.length;
+      const y0 = n.cy - (17 * (T - 1) + (S ? 17 + 14 * (S - 1) : 0)) / 2 + 4.5;
+      const subY = y0 + 17 * (T - 1) + 17;
+      svg += `<g class="fnode ${kind}" data-stories="${esc(ids.join(' '))}" ${tipAttr(tipHtml)}>
+        <rect x="${x}" y="${yy}" width="${n.w}" height="${n.h}" rx="${rx}"/>
+        ${n.titleLines.map((l, i) => `<text class="nl" x="${n.cx}" y="${y0 + i * 17}" text-anchor="middle" data-fit="${n.w - 8}">${esc(l)}</text>`).join('')}
+        ${n.subLines.map((l, i) => `<text class="ns" x="${n.cx}" y="${subY + i * 14}" text-anchor="middle" data-fit="${n.w - 8}">${esc(l)}</text>`).join('')}
+      </g>`;
+    });
+    // story badges on top of the steps (after the steps, so they are never covered)
+    nodes.forEach((n) => {
+      const ids = n.ids.slice().sort((p, q) => idx.get(q) - idx.get(p));
+      ids.forEach((id, i) => {
+        const bx = n.cx + n.w / 2 - 14 - i * 23, by = n.cy - n.h / 2;
+        svg += `<g class="nbadge" data-story="${esc(id)}" data-hover tabindex="0" role="button" aria-label="Story ${num(id)}: ${esc(titleOf(id))}">
+          <circle cx="${bx}" cy="${by}" r="10.5"/><text x="${bx}" y="${by + 4}" text-anchor="middle">${num(id)}</text></g>`;
+      });
+    });
+    // wrap: the story that sits under or around the whole lifecycle
+    if (LC.wrap && byId.has(LC.wrap.story)) {
+      const w = LC.wrap, label = plain(w.label || shortOf(w.story));
+      const lw = 48 + textW(label, '600 12.5px');
+      const wtip = `<b>${esc(titleOf(w.story))}</b>` + (w.tip ? `<br>${esc(w.tip)}` : '');
+      svg += `<g class="fwrap" data-story="${esc(w.story)}">
+        <rect class="frame" x="6" y="${TOP - 26}" width="${W - 12}" height="${H - TOP + 22}" rx="18"/>
+        <g class="wl" data-hover data-story="${esc(w.story)}" tabindex="0" role="button" aria-label="Story ${num(w.story)}: ${esc(titleOf(w.story))}" ${tipAttr(wtip)}>
+          <rect x="22" y="${TOP - 40}" width="${lw}" height="28" rx="14"/>
+          <circle cx="38" cy="${TOP - 26}" r="10.5"/>
+          <text class="wn" x="38" y="${TOP - 22}" text-anchor="middle">${num(w.story)}</text>
+          <text class="wt" x="56" y="${TOP - 22}">${esc(label)}</text>
+        </g></g>`;
+    }
+    // the names of the lanes once more, pinned: shown while the lanes scroll sideways, kept at the left edge (flowEdges)
+    const PW = X0 - LX - 6;
+    svg += `<g class="lane-pins" aria-hidden="true"><defs>${['bg', 'vp', 'crash'].map((k) => `<linearGradient id="pf-${k}"><stop offset="0" class="pf-${k}"/><stop offset="1" class="pf-${k}" stop-opacity="0"/></linearGradient>`).join('')}</defs>`;
+    LC.lanes.forEach((ln) => {
+      const g = lanes[ln.id], k = ln.tone === 'alert' ? 'crash' : ln.tone === 'strong' ? 'vp' : 'bg', r = 12, x2 = LX + PW, y2 = g.top + g.h;
+      svg += `<path class="pin-${k}" d="M${LX + r},${g.top} H${x2} V${y2} H${LX + r} A${r} ${r} 0 0 1 ${LX},${y2 - r} V${g.top + r} A${r} ${r} 0 0 1 ${LX + r},${g.top} Z"/>`;
+      svg += `<rect x="${x2}" y="${g.top}" width="18" height="${g.h}" fill="url(#pf-${k})"/>`;
+      svg += g.lines.map((l, i) => `<text class="lane-label" x="${LX + 14}" y="${g.cy + 4.5 + (i - (g.lines.length - 1) / 2) * 16}" data-fit="${X0 - LX - 20}">${esc(l)}</text>`).join('');
+    });
+    svg += `</g></svg>`;
+    $('#flow').innerHTML = svg + renderTimeline();
+    layoutFlow(true);
+  }
+  /* the lanes fill their box while they stay readable (scaled to at least 0.9); a narrower box shows the steps top to
+     bottom. While the side panel takes room on a wide screen, the lanes keep their own size and scroll sideways
+     (to the steps of the chosen story), unless less than 0.6 of them would show */
+  const wideScreen = matchMedia('(min-width: 1100px)');
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let flowBox = -1, flowPushed = null;
+  function layoutFlow(force) {
+    const flow = $('#flow'), svg = flow && flow.firstElementChild;
+    if (!svg || !flowW) return;
+    const box = flow.clientWidth;
+    const pushed = document.body.classList.contains('sheet-open') && wideScreen.matches && !document.body.classList.contains('view-tech');
+    if (!box || (!force && box === flowBox && pushed === flowPushed)) return;
+    flowBox = box; flowPushed = pushed;
+    const k = box / flowW;
+    const mode = pushed ? (k >= 0.6 ? 'own' : 'list') : k >= 0.9 ? 'fit' : 'list';
+    flow.classList.toggle('tl', mode === 'list');
+    svg.style.width = mode === 'own' && k < 1 ? flowW + 'px' : '';
+    flowEdges();
+  }
+  /* lanes that scroll sideways fade out at the edge where more of them is */
+  function flowEdges() {
+    const flow = $('#flow');
+    if (!flow) return;
+    const max = flow.scrollWidth - flow.clientWidth;
+    flow.classList.toggle('more-l', !flow.classList.contains('tl') && max > 1 && flow.scrollLeft > 2);
+    flow.classList.toggle('more-r', !flow.classList.contains('tl') && max > 1 && flow.scrollLeft < max - 2);
+    const pins = $('.lane-pins', flow), svg = flow.firstElementChild;
+    if (pins && svg) { const w = svg.getBoundingClientRect().width || flowW; pins.setAttribute('transform', `translate(${flow.scrollLeft * flowW / w} 0)`); }
+  }
+  /* bring the lit steps of the chosen story into sight: the lanes scroll sideways to them (to the end when they are
+     close to it), the list of steps scrolls the page to the first one, but only while the lifecycle is on screen */
+  function showLit() {
+    const flow = $('#flow');
+    if (!flow || flow.classList.contains('all')) return;
+    const smooth = reduceMotion.matches ? 'auto' : 'smooth';
+    if (flow.classList.contains('tl')) {
+      const first = $('.ftl-step.on', flow), f = flow.getBoundingClientRect();
+      if (first && f.top < window.innerHeight && f.bottom > 0) first.scrollIntoView({ block: 'nearest', behavior: smooth });
+      return;
+    }
+    const max = flow.scrollWidth - flow.clientWidth;
+    const on = $$('.fnode.on', flow).map((n) => n.getBoundingClientRect());
+    if (max <= 1 || !on.length) return;
+    const f = flow.getBoundingClientRect(), at = (x) => x - f.left + flow.scrollLeft;
+    const l = at(Math.min(...on.map((r) => r.left))), r = at(Math.max(...on.map((r) => r.right)));
+    let left = Math.min(Math.max(0, r + 24 - flow.clientWidth), Math.max(0, l - 24));
+    if (max - left < 160 && max <= l - 12) left = max;
+    flow.scrollTo({ left, behavior: smooth });
+  }
+  /* the same lifecycle top to bottom, for a box too narrow for the lanes: the steps in the order of their columns,
+     the status band as the rail on the left, and an arrow in words wherever a step does not simply follow the one above */
+  const IN_ICON = {
+    arrow: '<svg class="ftl-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 2v6a3 3 0 0 0 3 3h6.5"/><path d="M10.5 8l3 3-3 3"/></svg>',
+    bolt: '<svg class="ftl-ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.6 1.2 3.6 9h4.1l-2 5.8 6.9-8.3H8.1z"/></svg>',
+  };
+  function renderTimeline() {
+    const laneOf = new Map(LC.lanes.map((l, i) => [l.id, { ...l, i }]));
+    const steps = LC.nodes.filter((n) => laneOf.has(n.lane) && !laneOf.get(n.lane).bandOnly)
+      .sort((a, b) => (+a.col || 0) - (+b.col || 0) || laneOf.get(a.lane).i - laneOf.get(b.lane).i || (+a.row || 0) - (+b.row || 0));
+    const nameOf = new Map(steps.map((n) => [n.id, n.label]));
+    const colOf = new Map(steps.map((n) => [n.id, +n.col || 0]));
+    const band = (LC.band || []).map((b, i) => ({ ...b, i, from: +b.from || 0, to: +b.to || 0, tone: ['a', 'b', 'c'].includes(b.tone) ? b.tone : 'a' }))
+      .sort((p, q) => p.from - q.from);
+    const begun = new Set(), ended = new Set();
+    let h = '', prev = null;
+    // the status marks up to a column: where a band part starts, and its end word where the band stops
+    const marks = (col) => band.forEach((b) => {
+      if (b.from <= col && !begun.has(b.i)) { begun.add(b.i); h += `<li class="ftl-st r-${b.tone}"><b>${esc(b.label)}</b>${b.tip ? `<span>${esc(b.tip)}</span>` : ''}</li>`; }
+      if (b.end && b.to <= col && !ended.has(b.i)) { ended.add(b.i); h += `<li class="ftl-end r-${b.tone}"><b>${esc(b.end)}</b></li>`; }
+    });
+    steps.forEach((n) => {
+      const col = +n.col || 0;
+      marks(col);
+      const seg = band.find((b) => col >= b.from && col < b.to);
+      const lane = laneOf.get(n.lane);
+      const kind = ['state', 'alert'].includes(n.shape) ? n.shape : 'process';
+      const ids = (n.stories || []).filter((id) => byId.has(id)).sort((p, q) => idx.get(p) - idx.get(q));
+      const ins = (LC.edges || []).filter((e) => e.to === n.id && e.from !== n.id && nameOf.has(e.from)).map((e) => {
+        const back = colOf.get(e.from) > col;
+        return { ...e, kind: back && (!e.kind || e.kind === 'main') ? 'loop' : e.kind || 'main' };
+      });
+      const plainNext = ins.length === 1 && ins[0].from === prev && ins[0].kind === 'main' && !ins[0].label;
+      const inLines = plainNext ? '' : ins.map((e) => `<p class="ftl-in ${esc(e.kind)}">${e.kind === 'crash' ? IN_ICON.bolt : IN_ICON.arrow}<span>${esc(TT(e.kind === 'loop' ? 'againAfter' : 'after'))} <b>${esc(nameOf.get(e.from))}</b>${e.label ? ': ' + esc(e.label) : ''}</span></p>`).join('');
+      const btns = ids.map((id) => `<button type="button" class="ftl-b" data-story="${esc(id)}" data-hover aria-label="Story ${num(id)}: ${esc(titleOf(id))}" ${tipAttr(storyTip(id))}><span class="badge">${num(id)}</span></button>`).join('');
+      h += `<li class="ftl-step ${kind}${seg ? ' r-' + seg.tone : ''}" data-stories="${esc(ids.join(' '))}"><div class="ftl-card">
+        <div class="ftl-top"><span class="ftl-lane${lane.tone === 'alert' ? ' l-alert' : lane.tone === 'strong' ? ' l-strong' : ''}">${esc(lane.label)}</span>${btns ? `<span class="ftl-ids">${btns}</span>` : ''}</div>
+        ${inLines}<p class="ftl-name">${esc(n.label)}</p>${n.sub ? `<p class="ftl-sub">${esc(n.sub)}</p>` : ''}</div></li>`;
+      prev = n.id;
+    });
+    marks(Infinity);
+    const list = `<ol class="ftl-list" aria-label="${esc(TT('lifecycleListAria', { subject: LC.subject || TT('theWork') }))}">${h}</ol>`;
+    const w = LC.wrap && byId.has(LC.wrap.story) ? LC.wrap : null;
+    if (!w) return `<div class="ftl">${list}</div>`;
+    return `<div class="ftl"><div class="ftl-frame" data-wrap="${esc(w.story)}">
+      <button type="button" class="ftl-wl" data-story="${esc(w.story)}" data-hover aria-label="Story ${num(w.story)}: ${esc(titleOf(w.story))}"><span class="badge">${num(w.story)}</span>${esc(plain(w.label || shortOf(w.story)))}</button>
+      ${w.tip ? `<p class="ftl-wt">${esc(w.tip)}</p>` : ''}${list}</div></div>`;
+  }
+  if (LC) {
+    renderFlow();
+    $('#flow').addEventListener('scroll', flowEdges, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(() => layoutFlow()).observe($('#flow'));
+    else window.addEventListener('resize', () => layoutFlow());
+  } else {
+    // no lifecycle: the panel keeps only the story chips
+    $('#h-flow').textContent = TT('stories');
+    $('#flow').remove();
+  }
+
+  /* ---------- slice chart ---------- */
+  const WORD = TT('count');
+  /** The heading of a build step: its number, and how many stories build at once in it. */
+  const stageName = (g) => (g.n > 1 ? TT('stageTogether', { n: g.stage, count: WORD[g.n] || g.n }) : TT('stage', { n: g.stage }));
+  /* one column per story in build order, its slice read top (where it starts) to bottom (the tables);
+     a seam is a later story using or changing, in the same layer, what an earlier build step made or changed */
+  function renderMatrix() {
+    const ROLE = {
+      new: [CELL.new || '', CELL.newTip || ''],
+      changes: [CELL.changes || '', CELL.changesTip || ''],
+      uses: [CELL.uses || '', CELL.usesTip || ''],
+    };
+    const cellOf = (sid, lid) => {
+      const c = (((D.slices || {})[sid] || {}).cells || {})[lid];
+      return c && ROLE[c.role] ? c : null;
+    };
+    const rows = layerList.slice().reverse(); // drawn top-down, the layers go bottom-up
+    const groupLabel = (id) => ((D.groups || []).find((g) => g.id === id) || {}).label || '';
+    const N = order.length;
+    const col = (i) => i + 2;
+    // the grid rows: build steps, story heads, then per group a heading and its layers, then the tests
+    const ents = [];
+    rows.forEach((l, li) => {
+      if (li === 0 || rows[li - 1].group !== l.group) ents.push({ g: l.group });
+      ents.push({ l });
+    });
+    const R0 = 3, RF = R0 + ents.length, R = RF;
+    const seams = [];
+    const fromOf = {};
+    rows.forEach((l) => order.forEach((s, ti) => {
+      if (!cellOf(s.id, l.id)) return;
+      for (let i = ti - 1; i >= 0; i--) {
+        const e = order[i], c = cellOf(e.id, l.id);
+        if (stageOf[e.id] < stageOf[s.id] && c && c.role !== 'uses') {
+          const tested = tests.some((t) => t.later === s.id && t.earlier === e.id);
+          seams.push({ l: l.id, from: e.id, to: s.id, fi: i, ti, tested });
+          fromOf[s.id + '|' + l.id] = e.id;
+          return;
+        }
+      }
+    }));
+    const stages = [];
+    order.forEach((s, i) => { const last = stages[stages.length - 1]; if (last && last.stage === stageOf[s.id]) last.n++; else stages.push({ stage: stageOf[s.id], at: i, n: 1 }); });
+
+    // legend and the second line of the explanation, in words; a phone shows a seam as a tag, not a line (sl-dk / sl-ph)
+    const chip = (r) => `<i class="sl-role k-${r}">${esc(ROLE[r][0])}</i>`;
+    const seamTag = (from, tested) => `<span class="sl-mtag${tested ? '' : ' open'}">${esc(TT('buildsOn'))}<span class="badge xs">${num(from)}</span></span>`;
+    const seamOpen = esc(TT(afterBuild ? 'seamOpenBuilt' : 'seamOpen'));
+    const both = (dk, ph) => (ph ? `<span class="sl-dk">${esc(dk)}</span><span class="sl-ph">${esc(ph)}</span>` : esc(dk));
+    $('#lg-slices').innerHTML = ['new', 'changes', 'uses'].map((r) => `<span class="sl-lg">${chip(r)}${esc(ROLE[r][1])}</span>`).join('')
+      + (seams.length ? `<span class="sl-lg sl-dk"><i class="sl-lgseam"></i>${esc(CELL.seam || '')}: ${esc(TT('seamTested'))}</span>`
+        + `<span class="sl-lg sl-ph">${seamTag(seams[0].from, true)}${esc(CELL.seam || '')}: ${esc(TT('seamTested'))}</span>` : '')
+      + (seams.some((m) => !m.tested) ? `<span class="sl-lg sl-dk"><i class="sl-lgseam open"></i>${seamOpen}</span>`
+        + `<span class="sl-lg sl-ph">${seamTag(seams.find((m) => !m.tested).from, false)}${seamOpen}</span>` : '');
+    if (X.slices && X.slicesPhone && $('#x-slices')) $('#x-slices').innerHTML = both(X.slices, X.slicesPhone);
+    if (X.slicesLink && seams.length && !$('#x-slices2')) $('#x-slices').insertAdjacentHTML('afterend', `<p class="explain how" id="x-slices2">${both(X.slicesLink, X.slicesLinkPhone)}</p>`);
+
+    const at = (r, c, extra = '') => `style="grid-row:${r};grid-column:${c}${extra}"`;
+    let h = `<div class="sl-corner" ${at('1 / 3', 1)}><span>${esc(TT('from'))}</span><i class="sl-down" aria-hidden="true"></i><span>${esc(TT('downTo'))}</span></div>`;
+    stages.forEach((g) => {
+      h += `<div class="sl-stbg" ${at(`1 / ${R + 1}`, `${col(g.at)} / ${col(g.at + g.n)}`)}></div>`;
+      h += `<div class="sl-stage" ${at(1, `${col(g.at)} / ${col(g.at + g.n)}`)}>${esc(stageName(g))}</div>`;
+    });
+    order.forEach((s, i) => {
+      const sl = (D.slices || {})[s.id] || {};
+      const top = rows.find((l) => cellOf(s.id, l.id));
+      h += `<button class="sl-head" data-col="${esc(s.id)}" data-story="${esc(s.id)}" data-hover ${at(2, col(i))}>`
+        + `<span class="sl-hn"><span class="badge sm">${num(s.id)}</span><span>${esc(titleOf(s.id))}</span></span>`
+        + (s.plain ? `<span class="sl-hp plain">${esc(s.plain)}</span>` : '')
+        + (sl.delivers ? `<span class="sl-hd">${esc(sl.delivers)}</span>` : '')
+        + (top ? `<span class="sl-hs">${esc(TT('startsAt'))} <b>${esc(top.label)}</b></span>` : '')
+        + '</button>';
+    });
+    ents.forEach((en, k) => {
+      const r = R0 + k;
+      if (en.g) h += `<div class="sl-group" ${at(r, `1 / ${N + 2}`)}><span>${esc(groupLabel(en.g))}</span></div>`;
+      else h += `<div class="sl-y" ${at(r, 1)} ${tipAttr(`<b>${esc(en.l.label)}</b>` + (en.l.tip ? `<br>${esc(en.l.tip)}` : ''))}><span class="sl-yl">${esc(en.l.label)}</span>${en.l.tip ? `<span class="sl-yt">${codeLines(en.l.tip)}</span>` : ''}</div>`;
+    });
+    order.forEach((s, i) => {
+      const hit = ents.map((en, k) => (en.l && cellOf(s.id, en.l.id) ? k : -1)).filter((k) => k >= 0);
+      if (!hit.length) return;
+      const first = hit[0], last = hit[hit.length - 1];
+      for (let k = first; k <= last; k++) {
+        const en = ents[k], c = en.l && cellOf(s.id, en.l.id);
+        const cls = `sl-cell${k === first ? ' top' : ''}${k === last ? ' bot' : ''}`;
+        if (!c) { h += `<div class="${cls}" data-col="${esc(s.id)}" ${at(R0 + k, col(i))}></div>`; continue; }
+        const from = fromOf[s.id + '|' + en.l.id];
+        const tipHtml = `${storyTip(s.id)}<br><b>${esc(ROLE[c.role][0])}</b>: ${esc(en.l.label)}${en.l.tip ? ` <span class="muted">(${esc(en.l.tip)})</span>` : ''}`
+          + (c.note ? `<br>${esc(c.note)}` : '') + (from ? `<br>${esc(TT('buildsOn'))} ${num(from)}: ${esc(titleOf(from))}` : '');
+        h += `<div class="${cls}" data-col="${esc(s.id)}" ${at(R0 + k, col(i))}>`
+          + `<div class="sl-card c-${c.role}${from ? ' seam' : ''}${seams.some((m) => m.from === s.id && m.l === en.l.id) ? ' feeds' : ''}" data-story="${esc(s.id)}" data-hover ${tipAttr(tipHtml)}>`
+          + `<span class="sl-cn">${chip(c.role)}${nameSpan(en.l.label)}</span>`
+          + (c.note ? `<span class="sl-note">${esc(c.note)}</span>` : '')
+          + (from ? `<span class="sl-from">${esc(TT('buildsOn'))}<span class="badge xs">${num(from)}</span></span>` : '')
+          + '</div></div>';
+      }
+    });
+    seams.forEach((m) => {
+      const k = ents.findIndex((en) => en.l && en.l.id === m.l);
+      // the badge on the arrow names the story it comes from, also when the line runs behind a card in between
+      const via = order.slice(m.fi + 1, m.ti).some((x) => cellOf(x.id, m.l));
+      h += `<div class="sl-seam${m.tested ? '' : ' open'}${via ? ' via' : ''}" ${at(R0 + k, `${col(m.fi)} / ${col(m.ti)}`)} aria-hidden="true"><span class="badge xs">${num(m.from)}</span></div>`;
+    });
+    const footOf = (s) => {
+      const mine = tests.filter((t) => t.later === s.id);
+      const later = [...new Set(seams.filter((m) => m.from === s.id).map((m) => m.to))];
+      // one line per test, a link to its card under the integration tests, where the test is told in full
+      let f = mine.map((t) => `<a class="sl-test" href="#tc-${esc(t.id)}" data-pin="${esc(t.id)}" ${tipAttr(`<b>${esc(t.id)}</b> ${esc(t.full || '')}`)}><span class="sl-tt"><span class="sl-tid">${esc(t.id)}</span> <span class="sl-tl">${esc(TT('testWith'))} <span class="sl-nw">story <span class="badge xs">${num(t.earlier)}</span></span></span></span></a>`).join('');
+      if (later.length) f += `<div class="sl-test base"><span class="sl-tt">${esc(TT(later.length > 1 ? 'feedsMany' : 'feedsOne'))} ${later.map((x) => `<span class="badge xs">${num(x)}</span>`).join(' ')}</span></div>`;
+      return f || `<div class="sl-test none"><span class="sl-td">${esc(TT('noSeam'))}</span></div>`;
+    };
+    order.forEach((s, i) => { h += `<div class="sl-foot" data-col="${esc(s.id)}" ${at(RF, col(i))}>${footOf(s)}</div>`; });
+    const toTests = esc(TT(afterBuild ? 'toTestsBuilt' : 'toTests'));
+    if (tests.length) h += `<a class="sl-tolink" href="#sec-tests" ${at(RF + 1, `2 / ${N + 2}`)}>${toTests}</a>`;
+    const el = $('#matrix');
+    $('#sec-slices').classList.toggle('sl-wide', N >= 5);
+    el.style.setProperty('--n', N);
+    el.style.gridTemplateRows = `repeat(${RF + 1}, auto)`;
+    el.innerHTML = h;
+
+    /* a phone or a tablet: no columns but one block per story, in build order under its build step, its parts a list
+       read from where it starts down to the tables. A part it only uses, with no seam and no note, folds into one line per group. */
+    const chev = '<svg class="sl-mchev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 3 5 5-5 5"/></svg>';
+    const story = (s) => {
+      const sl = (D.slices || {})[s.id] || {};
+      const top = rows.find((l) => cellOf(s.id, l.id));
+      let parts = '', grp = null, used = [];
+      const fold = () => { if (used.length) parts += `<p class="sl-mused">${chip('uses')}${nameSpan(used.join(', '))}</p>`; used = []; };
+      rows.forEach((l) => {
+        const c = cellOf(s.id, l.id);
+        if (!c) return;
+        if (l.group !== grp) { fold(); grp = l.group; if (groupLabel(grp)) parts += `<p class="sl-mgroup">${esc(groupLabel(grp))}</p>`; }
+        const m = seams.find((x) => x.to === s.id && x.l === l.id);
+        const feeds = [...new Set(seams.filter((x) => x.from === s.id && x.l === l.id).map((x) => x.to))];
+        if (c.role === 'uses' && !m && !c.note) { used.push(l.label); return; }
+        parts += `<div class="sl-mcard c-${c.role}${m ? ' seam' : ''}${m && !m.tested ? ' open' : ''}" data-story="${esc(s.id)}">`
+          + `<span class="sl-cn">${chip(c.role)}${nameSpan(l.label)}</span>`
+          + (c.note ? `<span class="sl-note">${esc(c.note)}</span>` : '')
+          + (m ? seamTag(m.from, m.tested) + (m.tested ? '' : `<span class="sl-mfeed">${esc(TT(afterBuild ? 'noTest' : 'noTestYet'))}</span>`) : '')
+          + (feeds.length ? `<span class="sl-mfeed">${esc(TT(feeds.length > 1 ? 'feedsMany' : 'feedsOne'))} ${feeds.map((x) => `<span class="badge xs">${num(x)}</span>`).join('')}</span>` : '')
+          + '</div>';
+      });
+      fold();
+      return `<article class="sl-mstory"><button class="sl-mhead" data-story="${esc(s.id)}">`
+        + `<span class="sl-hn"><span class="badge sm">${num(s.id)}</span><span>${esc(titleOf(s.id))}</span>${chev}</span>`
+        + (s.plain ? `<span class="sl-hp plain">${esc(s.plain)}</span>` : '')
+        + (sl.delivers ? `<span class="sl-hd">${esc(sl.delivers)}</span>` : '')
+        + (top ? `<span class="sl-hs">${esc(TT('startsAt'))} <b>${esc(top.label)}</b></span>` : '')
+        + `</button><div class="sl-mparts">${parts}</div><div class="sl-foot">${footOf(s)}</div></article>`;
+    };
+    $('#sl-list').innerHTML = stages.map((g) => `<div class="sl-mstage" role="group" aria-label="${esc(TT('stage', { n: g.stage }))}">`
+      + `<h3 class="sl-stage">${esc(stageName(g))}</h3>`
+      + order.slice(g.at, g.at + g.n).map(story).join('') + '</div>').join('')
+      + (tests.length ? `<a class="sl-tolink" href="#sec-tests">${toTests}</a>` : '');
+    fitNames(el);
+    fitNames($('#sl-list'));
+    if (window.ResizeObserver) { const ro = new ResizeObserver((es) => es.forEach((x) => fitNames(x.target))); ro.observe(el); ro.observe($('#sl-list')); }
+  }
+  if (layerList.length && order.length) renderMatrix(); else $('#sec-slices').remove();
+  // columns that run on past the right edge (a story open on a wide screen) fade out there
+  const slScroll = $('.sl-scroll');
+  if (slScroll) {
+    const slEdges = () => { const max = slScroll.scrollWidth - slScroll.clientWidth; slScroll.classList.toggle('more-r', max > 1 && slScroll.scrollLeft < max - 2); };
+    slScroll.addEventListener('scroll', slEdges, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(slEdges).observe(slScroll); else window.addEventListener('resize', slEdges);
+    slEdges();
+  }
+  /* ---------- the views under the masthead (design-tabs.js): Functional (all the rest), Code Scaffold (only the
+     drawing; after the build it is called Code) and after the build Review (the changes file by file). The drawing measures its text, so it mounts the
+     first time it shows; Review mounts the first time it shows as well. ---------- */
+  let td = null, tabs = null, rv = null, back = null, v5 = null, sw = null;
+  const tdSec = $('#sec-design');
+  const main = tdSec.parentNode;
+  // a page without a drawing (an intent built before the Code Scaffold, design.drawing false): Functional and Review only
+  const drawn = !!(D.design && D.design.drawing !== false);
+  if (!afterBuild) $('#sec-review').remove();
+  let rvSec = $('#sec-review');
+  const titles = () => Object.fromEntries(order.map((s) => [s.id, s.title]));
+  const setHash = (h) => { try { history.replaceState(null, '', h); } catch (err) { /* the view shows all the same */ } };
+  const showView = (v) => !!tabs && tabs.show(v);
+  /** What a view needs when it shows, a tab clicked or a link followed (TdTabs calls it on every show). */
+  function shown(v) {
+    if (sw) sw.shown(v);
+    if (v === 'flow' && !td) {
+      td = window.CodeScaffold.mount($('#td-mount'), D.design, { titles: titles(), steer: D.phase === 'inception', phase: D.phase,
+        stories: Object.fromEntries(order.map((s) => [s.id, { story: s.story, built: s.built, plain: s.plain }])), chipSlot: $('.mast-chips'),
+        onReview: rvSec ? openReview : null });
+    }
+    if (v === 'review') {
+      if (back) back.clear();
+      if (!rv) rv = window.TdTabs.reviewer($('#review-mount'), { model: D.design, titles: titles(), phase: D.phase, onFlow: drawn ? toFlow : null });
+      rv.show();
+    }
+    // the story open on the page is the story the drawing shows; its side panel would cover the view
+    if (v !== 'functional' && selected) { if (v === 'flow') td.choose(selected); close(); }
+  }
+  /** From the flow view to a part's change in Review. */
+  function openReview(id) {
+    setHash('#review' + (id ? '/' + id : ''));
+    if (showView('review') && id) rv.open(id);
+  }
+  /** The file of a part as Review lists it: the last piece of its path, else its name. */
+  const fileOf = (id) => { const p = D.design.parts.find((x) => x.id === id); return p ? (p.path ? p.path.split('/').pop() : p.name) : null; };
+  /** From Review back to the flow view, that part chosen in the drawing; the masthead then holds the way back. */
+  function toFlow(id) {
+    setHash(id ? '#' + id : '#flow');
+    if (back && id) back.set(id, fileOf(id));
+    const mounted = !!td; // a fresh drawing follows the link itself
+    showView('flow');
+    if (mounted && id) td.follow('#' + id);
+  }
+  // the switches Details and ? on the masthead (design-switches.js): the plain words and the explanations of
+  // the page, and the help of the tab shown; the tabs of the v5 page follow them
+  if (window.TdSwitches) {
+    sw = window.TdSwitches.mount({ slot: $('#mast-sw'), built: afterBuild, plan: !!D.plan, code: drawn && D.design.parts.length > 0,
+      tabs: () => (tabs ? [...tabs.el.querySelectorAll('[role="tab"]')].map((b) => b.dataset.view) : ['functional']),
+      now: () => (tabs && tabs.get()) || 'functional',
+      onChange: (s) => { if (v5) v5.set(s); } });
+  } else $('#mast-sw').remove();
+  // the drawing and Review need the drawing's model and its code; a page without them still has the tab of the v5
+  // page it holds (#v5-embed): the C4 model, in a frame made the first time it shows, opened as the switches stand
+  const withDrawing = !!(D.design && window.TdTabs && (window.CodeScaffold || !drawn));
+  v5 = window.TdTabs && window.TdTabs.embed ? window.TdTabs.embed({ page: main, ...(sw ? sw.state() : {}) }) : null;
+  if (!withDrawing) { tdSec.remove(); if (rvSec) rvSec.remove(); rvSec = null; }
+  if (withDrawing || v5) {
+    tabs = window.TdTabs.create({ page: main, flow: withDrawing && drawn ? tdSec : null, review: rvSec, built: afterBuild, embed: v5, onShow: shown });
+    if (!drawn) tdSec.remove();
+    back = window.TdTabs.back({ onBack: openReview });
+    // beside the switch, in the flow view, the drawing's story chips (CodeScaffold, chipSlot)
+    const mv = document.createElement('div');
+    mv.className = 'mast-views';
+    const slot = document.createElement('div');
+    slot.className = 'mast-chips';
+    mv.append(tabs.el, back.el, slot);
+    $('.mast .wrap').append(mv);
+    // after the build the masthead carries the heading: the drawing's panel starts with the drawing
+    if (drawn && D.phase === 'construction' && D.design.build) {
+      tdSec.setAttribute('aria-label', TT('design'));
+      tdSec.removeAttribute('aria-labelledby');
+      $('.sec-head', tdSec).remove();
+    }
+  }
+  /** A link into the drawing: story-N, or a part or module of it. */
+  const inDrawing = (h) => withDrawing && (/^story-\d+$/.test(h) || D.design.parts.some((p) => p.id === h) || D.design.modules.some((m) => m.id === h));
+  /** A link to something on the functional side of the page. */
+  const inFunc = (h) => { const el = h && document.getElementById(h); return !!el && !tdSec.contains(el) && !(rvSec && rvSec.contains(el))
+    && !(v5 && Object.values(v5.sections).some((s) => s.contains(el))); };
+  const fromHash = () => {
+    if (!tabs) return;
+    // after the build the page opens on what was built, and the saved Code Scaffold page (D.scaffold) on the drawing
+    const r = window.TdTabs.route(location.hash, { review: !!rvSec, built: !!(asBuilt || D.scaffold), flow: drawn, c4: !!(v5 && v5.has.c4),
+      drawing: inDrawing, func: inFunc });
+    if (r.view === 'review') { showView('review'); if (r.part) rv.open(r.part); return; }
+    if (r.follow) {
+      const mounted = !!td; // a fresh drawing follows the link itself
+      showView('flow');
+      if (mounted) td.follow(location.hash);
+      return;
+    }
+    // a view this page has not (the drawing's, on a page without one): Functional
+    if (!showView(r.view)) showView('functional');
+  };
+
+  /* ---------- integration tests: one column per build step, one arrow per test ---------- */
+  let pinTest = null, redrawTests = null;
+  function renderTests() {
+    const box = $('#tests');
+    const NH = 38, CG = 92, PAD = 6;
+    let NW = 208;
+    const nStage = Math.max(...order.map((s) => stageOf[s.id]));
+    const cols = Array.from({ length: nStage }, () => []);
+    const node = new Map();
+    const add = (key, k, real) => { const n = { key, k, real, ins: [], outs: [] }; node.set(key, n); cols[k].push(n); return n; };
+    order.forEach((s) => add(s.id, stageOf[s.id] - 1, true));
+    // an arrow that skips a build step passes through a gap in that column
+    // tests between the same two stories share one arrow, labelled with all their numbers
+    const pairs = [];
+    tests.forEach((t) => {
+      let p = pairs.find((x) => x.later === t.later && x.earlier === t.earlier);
+      if (!p) pairs.push(p = { later: t.later, earlier: t.earlier, ids: [], lines: [] });
+      p.ids.push(t.id); p.lines.push(`${t.id}: ${t.full}`);
+    });
+    pairs.forEach((p) => { p.id = p.ids.join(' '); p.full = p.lines.join('\n'); });
+    const chains = pairs.map((t) => {
+      const a = stageOf[t.earlier] - 1, b = stageOf[t.later] - 1;
+      if (b <= a) return { t, keys: [t.earlier, t.later], side: true };
+      const keys = [t.earlier];
+      for (let k = a + 1; k < b; k++) keys.push(add(`${t.later}>${t.earlier}@${k}`, k, false).key);
+      keys.push(t.later);
+      for (let i = 1; i < keys.length; i++) { node.get(keys[i - 1]).outs.push(keys[i]); node.get(keys[i]).ins.push(keys[i - 1]); }
+      return { t, keys };
+    });
+
+    // order each column so the arrows cross as little as possible
+    const pos = () => { const p = new Map(); cols.forEach((col) => col.forEach((n, i) => p.set(n.key, i))); return p; };
+    const crossings = () => {
+      const p = pos(); let c = 0;
+      for (let k = 0; k < nStage - 1; k++) {
+        const es = [];
+        cols[k].forEach((n) => n.outs.forEach((o) => es.push([p.get(n.key), p.get(o)])));
+        for (let i = 0; i < es.length; i++) for (let j = i + 1; j < es.length; j++) if ((es[i][0] - es[j][0]) * (es[i][1] - es[j][1]) < 0) c++;
+      }
+      return c;
+    };
+    const sweep = (k, side) => {
+      const p = pos();
+      const v = new Map(cols[k].map((n) => {
+        const nb = side === 'in' ? n.ins : n.outs;
+        return [n.key, nb.length ? nb.reduce((sum, x) => sum + p.get(x), 0) / nb.length : p.get(n.key)];
+      }));
+      cols[k].sort((a, b) => v.get(a.key) - v.get(b.key));
+    };
+    let best = cols.map((col) => col.slice()), bestC = crossings();
+    for (let it = 0; it < 8; it++) {
+      for (let k = 1; k < nStage; k++) sweep(k, 'in');
+      for (let k = nStage - 2; k >= 0; k--) sweep(k, 'out');
+      const c = crossings();
+      if (c < bestC) { bestC = c; best = cols.map((col) => col.slice()); }
+    }
+    best.forEach((col, k) => { cols[k] = col; });
+
+    // place each column, pulling a story towards the stories it is linked to
+    const size = (n) => (n.real ? NH : 0);
+    const sep = (a, b) => (size(a) + size(b)) / 2 + (a.real && b.real ? 22 : 16);
+    const y = new Map();
+    const spans = cols.map((col) => { let acc = 0; col.forEach((n, i) => { if (i) acc += sep(col[i - 1], n); y.set(n.key, acc); }); return acc; });
+    const H0 = Math.max(...spans);
+    cols.forEach((col, k) => col.forEach((n) => y.set(n.key, y.get(n.key) + (H0 - spans[k]) / 2)));
+    const fit = (col, want) => {
+      const f = [], b = [], r = [];
+      col.forEach((n, i) => { f[i] = i ? Math.max(want[i], f[i - 1] + sep(col[i - 1], n)) : want[i]; });
+      for (let i = col.length - 1; i >= 0; i--) b[i] = i < col.length - 1 ? Math.min(want[i], b[i + 1] - sep(col[i], col[i + 1])) : want[i];
+      col.forEach((n, i) => { const m = (f[i] + b[i]) / 2; r[i] = i ? Math.max(m, r[i - 1] + sep(col[i - 1], n)) : m; });
+      return r;
+    };
+    for (let it = 0; it < 6; it++) {
+      cols.forEach((col) => {
+        const want = col.map((n) => { const nb = [...n.ins, ...n.outs]; return nb.length ? nb.reduce((sum, x) => sum + y.get(x), 0) / nb.length : y.get(n.key); });
+        fit(col, want).forEach((v, i) => y.set(col[i].key, v));
+      });
+    }
+    const top = Math.min(...[...node.values()].map((n) => y.get(n.key) - size(n) / 2));
+    node.forEach((n) => y.set(n.key, y.get(n.key) - top + PAD));
+    const plotH = Math.max(...[...node.values()].map((n) => y.get(n.key) + size(n) / 2)) + PAD;
+    /* the graph is drawn again once the web font is in: a story box is as wide as its name needs, measured in the page font */
+    const draw = () => {
+      NW = Math.min(300, Math.max(208, Math.ceil(Math.max(...order.map((s) => textW(plain(shortOf(s.id)), '600 14px'))) + 58)));
+      const X = (k) => k * (NW + CG);
+      const W = X(nStage - 1) + NW + 8 + (chains.some((c) => c.side) ? 52 : 0);
+
+      // spread the ends of several arrows over the side of a story
+      const port = new Map();
+      const spread = (list, keyOf) => list.forEach((e, i) => {
+        const step = list.length > 1 ? Math.min(9, 28 / (list.length - 1)) : 0;
+        port.set(keyOf(e), (i - (list.length - 1) / 2) * step);
+      });
+      order.forEach((s) => {
+        const out = chains.filter((c) => !c.side && c.keys[0] === s.id).sort((a, b) => y.get(a.keys[1]) - y.get(b.keys[1]));
+        const inn = chains.filter((c) => !c.side && c.keys[c.keys.length - 1] === s.id).sort((a, b) => y.get(a.keys[a.keys.length - 2]) - y.get(b.keys[b.keys.length - 2]));
+        spread(out, (c) => c.t.id + ':out');
+        spread(inn, (c) => c.t.id + ':in');
+      });
+
+      let edges = '';
+      chains.forEach((c) => {
+        const id = c.t.id;
+        let d, ah, lx, ly;
+        if (c.side) {
+          const k = stageOf[c.t.earlier] - 1, x = X(k) + NW, ya = y.get(c.t.earlier), yb = y.get(c.t.later);
+          d = `M${x} ${ya}C${x + 44} ${ya} ${x + 44} ${yb} ${x + 8} ${yb}`;
+          ah = `M${x + 8} ${yb - 4.5}L${x + 1} ${yb}L${x + 8} ${yb + 4.5}Z`;
+          lx = x + 33; ly = (ya + yb) / 2;
+        } else {
+          const pts = [];
+          c.keys.forEach((key, i) => {
+            const n = node.get(key), x0 = X(n.k), yy = y.get(key);
+            if (i === 0) pts.push([x0 + NW, yy + (port.get(id + ':out') || 0)]);
+            else if (i === c.keys.length - 1) pts.push([x0, yy + (port.get(id + ':in') || 0)]);
+            else pts.push([x0, yy], [x0 + NW, yy]);
+          });
+          const end = pts[pts.length - 1];
+          end[0] -= 8;
+          d = `M${pts[0][0]} ${pts[0][1]}`;
+          for (let i = 1; i < pts.length; i++) {
+            const [xa, ya] = pts[i - 1], [xb, yb] = pts[i];
+            if (i % 2 === 0) { d += `L${xb} ${yb}`; continue; } // straight through a gap
+            const dx = (xb - xa) / 2;
+            d += `C${xa + dx} ${ya} ${xb - dx} ${yb} ${xb} ${yb}`;
+          }
+          ah = `M${end[0]} ${end[1] - 4.5}L${end[0] + 7} ${end[1]}L${end[0]} ${end[1] + 4.5}Z`;
+          lx = (pts[0][0] + pts[1][0]) / 2; ly = (pts[0][1] + pts[1][1]) / 2;
+        }
+        const tipHtml = `<span class="muted">${esc(TT('pair', { later: num(c.t.later), earlier: num(c.t.earlier) }))}</span><br>${c.t.lines.map(esc).join('<br>')}`;
+        const lw = 12 + 7.2 * String(id).length;
+        edges += `<g class="tedge" data-t="${esc(id)}" data-later="${esc(c.t.later)}" data-earlier="${esc(c.t.earlier)}" data-tip-at="graph" ${tipAttr(tipHtml)}>
+          <path class="hit" d="${d}"/><path class="ln" d="${d}"/><path class="ah" d="${ah}"/>
+          <rect class="tlb" x="${lx - lw / 2}" y="${ly - 10}" width="${lw}" height="20" rx="10"/><text class="tlt" x="${lx}" y="${ly + 4}">${esc(id)}</text></g>`;
+      });
+
+      let nodes = '';
+      order.forEach((s) => {
+        const x = X(stageOf[s.id] - 1), cy = y.get(s.id), y0 = cy - NH / 2;
+        nodes += `<g class="tnode" data-story="${esc(s.id)}" data-hover role="button" tabindex="0" aria-label="Story ${num(s.id)}: ${esc(titleOf(s.id))}" ${tipAttr(storyTip(s.id))}>
+          <rect x="${x}" y="${y0}" width="${NW}" height="${NH}" rx="10"/>
+          <circle class="tbc" cx="${x + 22}" cy="${cy}" r="11.5"/><text class="tbt" x="${x + 22}" y="${cy + 4}">${num(s.id)}</text>
+          <text class="tl" x="${x + 42}" y="${cy + 5}" data-fit="${NW - 52}">${esc(plain(shortOf(s.id)))}</text></g>`;
+      });
+
+      const ax = plotH + 18;
+      let axis = `<g class="taxis"><line x1="0" y1="${ax}" x2="${W}" y2="${ax}"/>`;
+      for (let k = 0; k < nStage; k++) {
+        const cx = X(k) + NW / 2;
+        axis += `<line x1="${cx}" y1="${ax}" x2="${cx}" y2="${ax + 6}"/><text x="${cx}" y="${ax + 26}">${esc(TT('stage', { n: k + 1 }))}</text>`;
+      }
+      axis += '</g>';
+      const Hs = ax + 36;
+      box.innerHTML = `<svg viewBox="0 0 ${W} ${Hs}" width="${W}" height="${Hs}" role="img" aria-label="${esc(TT('testsAria'))}">${edges}${nodes}${axis}</svg>`;
+      return W;
+    };
+    let W = draw();
+
+    $('#tkey').textContent = TT('testsKey');
+
+    // one card per test: who tests with whom, what it does, the real code it runs against, what it expects
+    const lay = $('#tlay');
+    // a small graph next to a few cards; a wide graph or many tests: graph on top, cards in two columns
+    const sideWanted = () => W <= 600 && tests.length <= 4;
+    lay.classList.toggle('side', sideWanted());
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    const and =(xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} ${esc(window.TdText.t('design.and'))} ${xs[xs.length - 1]}`);
+    const sname = (id) => `<button type="button" class="tc-s" data-story="${esc(id)}" title="${esc(TT('openStory', { id: num(id), title: titleOf(id) }))}"><span class="tc-n">${num(id)}</span>${esc(plain(shortOf(id)))}</button>`;
+    const hl = (s) => esc(s).replace(/\b(?:[A-Z][A-Z0-9]*_[A-Z0-9_]+|[A-Z]{4,}|[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+)\b/g, (m) => `<code class="tc-k">${m}</code>`);
+    const codeRow = (t) => {
+      const code = (t.code || []).filter((c) => c && c.name);
+      if (!code.length) return `<dt>${esc(TT('runsAgainst'))}</dt><dd class="tc-none">${esc(TT('noClasses'))}</dd>`;
+      const groups = [];
+      code.forEach((c) => { let g = groups.find((x) => x.story === c.story); if (!g) groups.push(g = { story: c.story, items: [] }); g.items.push(c); });
+      const who = (s) => esc(s === t.later ? TT('fromThisStory') : s ? TT('fromStory', { id: num(s) }) : TT('existing'));
+      // the tag about the source stays on the line of the last word before it
+      const src = t.codeFrom === 'drawing' ? ` <span class="tc-src">${esc(TT('fromDrawing'))}</span>` : '';
+      const tail = (w, i) => { if (i < groups.length - 1 || !src) return w; const at = w.lastIndexOf(' '); return `${w.slice(0, at + 1)}<span class="tc-nw">${w.slice(at + 1)}${src}</span>`; };
+      const parts = groups.map((g, i) => `${esc(TT('theReal'))} ${and(g.items.map((c) => `<code class="tc-c"${c.what && !coarse ? ' tabindex="0" ' + tipAttr(esc(c.what)) : ''}>${esc(c.name)}</code>`))} ${tail(who(g.story), i)}`);
+      // on touch there is no hover: what each class does stands under the sentence
+      const what = coarse ? code.filter((c) => c.what) : [];
+      const whatList = what.length ? `<ul class="tc-what">${what.map((c) => `<li><code class="tc-c">${esc(c.name)}</code>${esc(c.what)}</li>`).join('')}</ul>` : '';
+      return `<dt>${esc(TT('runsAgainst'))}</dt><dd>${parts.join(esc(TT('andThen')))}${whatList}</dd>`;
+    };
+    // the expected outcome, cut from the test text, shows as a quote of the test plan
+    const expectRow = (t) => (t.expect
+      ? `<dt>${esc(TT('expected'))}</dt><dd><span class="tc-lead">${esc(TT('perPlan'))}</span> <q class="tc-q">${hl(t.expect)}</q></dd>`
+      : `<dt>${esc(TT('expected'))}</dt><dd class="tc-none">${esc(TT('noExpect'))}</dd>`);
+    const whenRow = (t) => {
+      const [l, e] = [num(t.later), num(t.earlier)];
+      const key = (stageOf[t.earlier] < stageOf[t.later] ? 'whenAfter' : 'whenWith') + (afterBuild ? 'Built' : '');
+      return `<dt>${esc(TT('when'))}</dt><dd><span class="tc-step">${esc(TT('stage', { n: stageOf[t.later] }))}</span> ${esc(TT(key, { later: l, earlier: e }))}</dd>`;
+    };
+    const sorted = [...tests].sort((a, b) => stageOf[a.later] - stageOf[b.later] || (parseInt(a.id.slice(1), 10) - parseInt(b.id.slice(1), 10)));
+    $('#tcards').innerHTML = sorted.map((t) => `<li class="tcard" id="tc-${esc(t.id)}" data-t="${esc(t.id)}" tabindex="0" aria-label="${esc(TT('pairAria', { id: t.id, later: num(t.later), earlier: num(t.earlier) }))}">
+      <div class="tc-head"><span class="tc-id">${esc(t.id)}</span>
+        <div class="tc-pair">${sname(t.later)}<span class="tc-rel">${esc(TT('testsTogether'))}</span>${sname(t.earlier)}</div></div>
+      <p class="tc-do">${esc(t.full)}</p>
+      <dl class="tc-rows">${codeRow(t)}${expectRow(t)}${whenRow(t)}</dl></li>`).join('');
+
+    // the graph stays next to the cards only while both have room; on a phone or tablet the graph shrinks to
+    // the width while it stays readable, otherwise it steps aside and the cards say it all
+    const GBOX = 34; // the padding and border around the graph
+    const narrow = matchMedia('(max-width: 1024px), (pointer: coarse)');
+    let laidW = 0;
+    const fitTests = () => {
+      const room = lay.clientWidth;
+      if (!room || room === laidW) return; // hidden behind the other view, or nothing changed
+      laidW = room;
+      let side = sideWanted() && room >= W + GBOX + 36 + 400;
+      const k = (room - GBOX) / W;
+      lay.classList.toggle('side', side);
+      // next to the cards only while the graph fills a fair part of their column, or the cards are taller than the
+      // screen (then the graph stays in sight beside them); else the graph on top and the cards side by side under it
+      if (side) {
+        const gh = $('.tgraph', lay).offsetHeight, ch = $('#tcards').offsetHeight;
+        if (ch > gh * 1.6 && ch < window.innerHeight - 40) { side = false; lay.classList.remove('side'); }
+      }
+      lay.classList.toggle('tg-fit', !side && narrow.matches && k < 1 && k >= 0.75);
+      lay.classList.toggle('tg-off', !side && narrow.matches && k < 0.75);
+    };
+    fitTests();
+    if (window.ResizeObserver) new ResizeObserver(fitTests).observe(lay); else window.addEventListener('resize', fitTests);
+
+    // a card and its arrow light up together, on hover, focus or a click that pins it
+    let pin = null, hov = null;
+    const ids = (v) => String(v || '').split(' ').filter(Boolean);
+    const mark = () => {
+      const on = ids(hov || pin), pinned = ids(pin);
+      const hit = tests.filter((x) => on.includes(x.id));
+      lay.classList.toggle('thot', hit.length > 0);
+      $$('[data-t]', lay).forEach((el) => el.classList.toggle('hot', ids(el.dataset.t).some((x) => on.includes(x))));
+      $$('.tnode', lay).forEach((n) => n.classList.toggle('hot', hit.some((t) => n.dataset.story === t.later || n.dataset.story === t.earlier)));
+      $$('.tcard', lay).forEach((c) => c.classList.toggle('pin', pinned.includes(c.dataset.t)));
+    };
+    const toggle = (id) => { pin = pin === id ? null : id; mark(); };
+    pinTest = (id) => { pin = id; mark(); };
+    redrawTests = () => { W = draw(); laidW = 0; fitTests(); mark(); paint(); fitLabels(); };
+    // on touch only a tap counts: it pins the card and lights its arrow, a second tap lets go
+    lay.addEventListener('mouseover', (e) => { if (touch) return; const el = e.target.closest('[data-t]'); const v = el ? el.dataset.t : null; if (v !== hov) { hov = v; mark(); } });
+    lay.addEventListener('mouseleave', () => { hov = null; mark(); });
+    lay.addEventListener('focusin', (e) => { if (touch) return; const el = e.target.closest('.tcard'); hov = el ? el.dataset.t : null; mark(); });
+    lay.addEventListener('focusout', () => { hov = null; mark(); });
+    lay.addEventListener('click', (e) => {
+      if (e.target.closest('[data-story]')) return; // a story name or box opens the story
+      const el = e.target.closest('[data-t]');
+      if (!el) return;
+      e.stopPropagation(); // an arrow pins its test card instead of opening the story
+      toggle(el.dataset.t);
+      if (pin && el.matches('.tedge')) { const c = $(`.tcard[data-t="${ids(pin)[0]}"]`, lay); if (c) c.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+    });
+    lay.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.tcard')) { e.preventDefault(); toggle(e.target.dataset.t); } });
+  }
+  if (tests.length) renderTests(); else $('#sec-tests').remove();
+  // a link in a slice to a test card pins that card
+  document.addEventListener('click', (e) => { const a = e.target.closest('a[data-pin]'); if (a && pinTest) pinTest(a.dataset.pin); });
+
+  fitLabels();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+    if (LC) { renderFlow(); paint(); }
+    if (redrawTests) redrawTests();
+    fitLabels();
+    fitNames(document);
+  });
+
+  /* ---------- out of scope: one compact row ---------- */
+  const scope = (D.outOfScope || []).filter((i) => i && i.text);
+  if (scope.length) $('#scope').innerHTML = scope.map((i) => `<li${i.tip ? ' tabindex="0" ' + tipAttr(esc(i.tip)) : ''}>${esc(i.text)}</li>`).join('');
+  else $('#scope-row').remove();
+
+  /* ---------- side panel ---------- */
+  const drawer = $('#drawer');
+  const ICON = {
+    prev: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3 5 8l5 5"/></svg>',
+    next: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 3 5 5-5 5"/></svg>',
+    close: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  };
+  const sec = (title, body, first) => `<section class="dr-sec${first ? ' first' : ''}">${title ? `<h4 class="dr-h">${title}</h4>` : ''}${body}</section>`;
+  const userStory = (s) => {
+    const u = s.story;
+    if (!u || !(u.asA || u.iWant || u.soThat)) return '';
+    return sec('', `<p class="us"><b>${esc(MD('asA'))}</b> ${esc(u.asA)}, <b>${esc(MD('iWant'))}</b> ${esc(u.iWant)}, <b>${esc(MD('soThat'))}</b> ${esc(u.soThat)}</p>`, true);
+  };
+  const why = (s, first) => (s.why ? sec(window.TdText.t('md.why'), `<p class="why">${esc(s.why)}</p>`, first) : '');
+  const criteria = (s, first) => {
+    const list = (s.criteria || []).filter(Boolean);
+    if (!list.length) return '';
+    return sec(esc(MD('criteria')), `<ol class="acs">${list.map((c) =>
+      `<li class="gwt"><span class="k k-g">${esc(MD('given'))}</span> ${esc(c.given)} <span class="k k-w">${esc(MD('when'))}</span> ${esc(c.when)} <span class="k k-d">${esc(MD('then'))}</span> ${esc(c.then)}</li>`).join('')}</ol>`, first);
+  };
+  const codeBlock = (s) => {
+    const code = s.code || [];
+    if (!code.length && !s.testFiles) return '';
+    const mods = [...new Set(code.map((c) => c.module))];
+    // the words and colours of the slices: new or changes
+    let h = mods.map((m) => `<div class="code-mod"><p class="code-m">${esc(m)}</p><ul class="code-list">${code.filter((c) => c.module === m).map((c) => {
+      const kind = c.kind === 'new' ? 'new' : 'changes';
+      const [word, why] = kind === 'new' ? [CELL.new || '', CELL.newTip] : [CELL.changes || '', CELL.changesTip];
+      return `<li class="code-item" tabindex="0" ${tipAttr(`<b>${esc(word)}</b>${why ? ': ' + esc(why) : ''}<br><span class="muted">${esc(c.path)}</span>`)}><span class="cname">${esc(c.name)}</span><span class="kind ${kind}">${esc(word)}</span></li>`;
+    }).join('')}</ul></div>`).join('');
+    if (s.testFiles) h += `<p class="code-more">+ ${esc(TT(s.testFiles > 1 ? 'testFiles' : 'testFile', { n: s.testFiles }))}</p>`;
+    return sec(esc(TT('code')), h);
+  };
+  const entry = (other, line, hit) => `<li class="ent${hit ? ' hit' : ''}">
+      <button class="ent-chip" data-switch="${esc(other)}" ${tipAttr(storyTip(other))}><span class="badge sm">${num(other)}</span>${esc(shortOf(other))}</button>
+      <p class="ent-line">${esc(line)}</p></li>`;
+  const integration = (s, hit) => {
+    const up = tests.filter((t) => t.later === s.id).sort((a, b) => idx.get(a.earlier) - idx.get(b.earlier));
+    const down = tests.filter((t) => t.earlier === s.id).sort((a, b) => idx.get(a.later) - idx.get(b.later));
+    if (!up.length && !down.length) return '';
+    let h = '';
+    if (up.length) h += `<div class="int-g"><p class="int-h">${esc(TT('buildsOnHead'))}</p><ul class="ents">${up.map((t) => entry(t.earlier, t.full, hit === t.earlier)).join('')}</ul></div>`;
+    if (down.length) h += `<div class="int-g"><p class="int-h">${esc(TT('basisFor'))}</p><ul class="ents">${down.map((t) => entry(t.later, t.full, false)).join('')}</ul></div>`;
+    return sec(esc(TT('integration')), h);
+  };
+  // the test case sections are HTML the generator rendered from the test case file
+  const testCases = (s) => {
+    const list = (s.tests || []).filter(Boolean);
+    if (!list.length) return '';
+    return sec(esc(TT('testCases')), `<div class="tcs">${list.map((t) => {
+      const result = t.twinResult ? ((LB.twinResult || {})[t.twinResult] || t.twinResult) : '';
+      const cls = ['passed', 'failed'].includes(t.twinResult) ? ' ' + t.twinResult : '';
+      const tag = result ? `<span class="twin${cls}"${t.twin ? ' ' + tipAttr(esc(t.twin)) : ''}>${esc(result)}</span>` : '';
+      const body = (t.sections || []).map((x) => `${x.heading ? `<h5>${esc(x.heading)}</h5>` : ''}${x.html || ''}`).join('');
+      return `<details class="tc"><summary><span class="tc-t">${esc(t.title || t.testId)}</span>${tag}</summary><div class="tc-b">${body}</div></details>`;
+    }).join('')}</div>`);
+  };
+  function fillDrawer(id, hit) {
+    const s = byId.get(id);
+    const i = idx.get(id);
+    const status = D.phase === 'construction' && s.status
+      ? `<span class="st st-${esc(s.status)}"><i class="dot dot-${esc(s.status)}"></i>${esc(statusLabel(s.status))}</span>` : '';
+    $('#dr-head').innerHTML = `<span class="badge lg on">${num(id)}</span>
+      <div class="dr-t"><h3 id="dr-title">${esc(s.title)}</h3>${status}</div>
+      <div class="dr-nav">
+        <button class="ib" data-go="${i - 1}" aria-label="${esc(TT('prev'))}" title="${esc(TT('prevTitle'))}" ${i === 0 ? 'disabled' : ''}>${ICON.prev}</button>
+        <button class="ib" data-go="${i + 1}" aria-label="${esc(TT('next'))}" title="${esc(TT('nextTitle'))}" ${i === order.length - 1 ? 'disabled' : ''}>${ICON.next}</button>
+        <button class="ib close" data-close aria-label="${esc(TT('close'))}" title="${esc(TT('closeTitle'))}">${ICON.close}<span>${esc(TT('close'))}</span></button>
+      </div>`;
+    const us = userStory(s);
+    $('#dr-body').innerHTML = us + why(s, !us) + criteria(s, !us && !s.why) + codeBlock(s) + integration(s, hit) + testCases(s);
+    $('#dr-body').scrollTop = 0;
+    if (hit) { const el = $('.ent.hit', drawer); if (el) el.scrollIntoView({ block: 'center' }); }
+  }
+
+  /* ---------- selection and highlight ---------- */
+  let selected = null, preview = null, edgeHover = null;
+  function paint() {
+    const a = preview || selected;
+    const flow = $('#flow');
+    if (flow) {
+      flow.classList.toggle('active', !!a);
+      flow.classList.toggle('all', !!a && !!LC.wrap && LC.wrap.story === a);
+      $$('.fnode', flow).forEach((n) => n.classList.toggle('on', !!a && n.dataset.stories.split(' ').includes(a)));
+      $$('.nbadge', flow).forEach((b) => b.classList.toggle('on', b.dataset.story === a));
+      $$('.fwrap', flow).forEach((w) => w.classList.toggle('on', w.dataset.story === a));
+      $$('.ftl-step', flow).forEach((n) => n.classList.toggle('on', !!a && n.dataset.stories.split(' ').includes(a)));
+      $$('.ftl-b, .ftl-wl', flow).forEach((b) => b.classList.toggle('on', b.dataset.story === a));
+      $$('.ftl-frame', flow).forEach((w) => w.classList.toggle('on', w.dataset.wrap === a));
+    }
+    $$('.schip').forEach((c) => { c.classList.toggle('on', c.dataset.story === a); });
+    const mx = $('#matrix');
+    if (mx) {
+      mx.classList.toggle('active', !!a);
+      $$('[data-col]', mx).forEach((c) => c.classList.toggle('on', c.dataset.col === a));
+    }
+    const tg = $('#tests');
+    if (tg) {
+      // hovering one arrow shows only that test; otherwise every test of the active story
+      const [hl, he] = edgeHover ? edgeHover.split('>') : [];
+      const edgeOn = (e) => (edgeHover ? e.dataset.later === hl && e.dataset.earlier === he : e.dataset.later === a || e.dataset.earlier === a);
+      const rel = new Set();
+      $$('.tedge', tg).forEach((e) => { const on = !!(edgeHover || a) && edgeOn(e); e.classList.toggle('on', on); if (on) rel.add(e.dataset.later).add(e.dataset.earlier); });
+      tg.classList.toggle('active', !!(edgeHover || a));
+      $$('.tnode', tg).forEach((n) => {
+        const id = n.dataset.story;
+        n.classList.toggle('on', edgeHover ? id === hl : id === a);
+        n.classList.toggle('rel', rel.has(id) && !n.classList.contains('on'));
+      });
+    }
+  }
+  function select(id, hit) {
+    if (!id || !byId.has(id) || (selected === id && !hit)) { close(); return; }
+    selected = id;
+    fillDrawer(id, hit);
+    drawer.classList.add('open');
+    document.body.classList.add('sheet-open');
+    paint();
+    if (LC) { layoutFlow(); showLit(); }
+  }
+  function close() {
+    selected = null;
+    drawer.classList.remove('open');
+    document.body.classList.remove('sheet-open');
+    paint();
+    if (LC) layoutFlow();
+  }
+  document.addEventListener('click', (e) => {
+    const go = e.target.closest('[data-go]');
+    if (go) { const s = order[+go.dataset.go]; if (s) select(s.id); return; }
+    if (e.target.closest('[data-close], .scrim')) { close(); return; }
+    const sw = e.target.closest('[data-switch]');
+    if (sw) { select(sw.dataset.switch); return; }
+    const te = e.target.closest('.tedge');
+    if (te) { select(te.dataset.later, te.dataset.earlier); return; }
+    const el = e.target.closest('[data-story]');
+    if (el && !el.closest('.drawer')) {
+      if (el.classList.contains('fwrap') && !e.target.closest('.wl')) return;
+      select(el.dataset.story);
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && selected) { close(); return; }
+    const t = e.target instanceof Element ? e.target : document.body;
+    if ((e.key === 'Enter' || e.key === ' ') && t.matches('g[role="button"][data-story]')) { e.preventDefault(); select(t.dataset.story); }
+    if (selected && (e.key === 'ArrowRight' || e.key === 'ArrowLeft') && !t.closest('input,textarea')) {
+      const i = idx.get(selected) + (e.key === 'ArrowRight' ? 1 : -1);
+      if (order[i]) select(order[i].id);
+    }
+  });
+  document.addEventListener('mouseover', (e) => {
+    if (touch) return; // a tap selects; the hover preview is for a mouse
+    const el = e.target.closest('[data-hover]');
+    const id = el ? el.dataset.story : null;
+    const te = e.target.closest('.tedge');
+    const eh = te ? te.dataset.later + '>' + te.dataset.earlier : null;
+    if (id !== preview || eh !== edgeHover) { preview = id; edgeHover = eh; paint(); }
+  });
+  paint();
+  fromHash();
+  window.addEventListener('hashchange', fromHash);
+})();
+</script>
+</body>
+</html>

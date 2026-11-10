@@ -1,0 +1,50 @@
+/* Code Scaffold, flow first: the module as a tag on each part, quiet lines for what only reads. */
+:root {
+  --td-edge-q: #A9A6C2; --td-edge-q-w: 1.25; --td-step-q-bg: #FFFFFF; --td-step-q-ink: #4C4760;
+  --td-mc0-bg: #FFE3FB; --td-mc0-ink: #7A0A78; --td-mc0-line: #F5B5EC;
+  --td-mc1-bg: #DDF0E8; --td-mc1-ink: #1D5A45; --td-mc1-line: #A3D3C0;
+  --td-mc2-bg: #FCEBD9; --td-mc2-ink: #7A4310; --td-mc2-line: #EDC79C;
+  --td-mc3-bg: #E6E6FF; --td-mc3-ink: #3A3A8A; --td-mc3-line: #BDBDF0;
+  --td-mc4-bg: #DDF6F8; --td-mc4-ink: #1B5A63; --td-mc4-line: #A6DCE2;
+  --td-mc5-bg: #FFF6CC; --td-mc5-ink: #6B5600; --td-mc5-line: #E8D27A;
+}
+
+/* the module tag: a row at the bottom of a part, inside it; a plain label, the pointer goes through it to the part */
+.td-mtag { pointer-events: none; transition: opacity 200ms var(--td-ease); }
+.td-mtag .td-mt-r { stroke-width: 1; transition: stroke 160ms var(--td-ease); }
+.td-mtag .td-mt-t { font: 600 13px var(--td-mono); letter-spacing: -.01em; }
+.td-mc0 .td-mt-r { fill: var(--td-mc0-bg); stroke: var(--td-mc0-line); } .td-mc0 .td-mt-t { fill: var(--td-mc0-ink); }
+.td-mc1 .td-mt-r { fill: var(--td-mc1-bg); stroke: var(--td-mc1-line); } .td-mc1 .td-mt-t { fill: var(--td-mc1-ink); }
+.td-mc2 .td-mt-r { fill: var(--td-mc2-bg); stroke: var(--td-mc2-line); } .td-mc2 .td-mt-t { fill: var(--td-mc2-ink); }
+.td-mc3 .td-mt-r { fill: var(--td-mc3-bg); stroke: var(--td-mc3-line); } .td-mc3 .td-mt-t { fill: var(--td-mc3-ink); }
+.td-mc4 .td-mt-r { fill: var(--td-mc4-bg); stroke: var(--td-mc4-line); } .td-mc4 .td-mt-t { fill: var(--td-mc4-ink); }
+.td-mc5 .td-mt-r { fill: var(--td-mc5-bg); stroke: var(--td-mc5-line); } .td-mc5 .td-mt-t { fill: var(--td-mc5-ink); }
+.td-mtag.td-sel .td-mt-r { stroke: var(--td-orange); stroke-width: 2.2; }
+/* a module built otherwise than drawn: the build colour on the tag, and a dot */
+.td-mtag.td-mt-built .td-mt-r { stroke: var(--td-built-line); stroke-width: 2; }
+.td-mtag .td-mt-dot { fill: var(--td-built-line); }
+
+/* a part reached with the keyboard: its own outline lights up (design.css), never the square box of the browser */
+.td-svg g[tabindex]:focus { outline: none; }
+
+/* the small texts of the drawing, big enough to read at the size the page shows it */
+.td-node .td-pk-t { font-size: 13.5px; }
+.td-node .td-pa-t, .td-pb-t { font-size: 12.5px; }
+.td-nb text { font-size: 13px; }
+
+/* a call that only reads or looks up: thin, light, only its number */
+.td-edge.td-quiet path { stroke: var(--td-edge-q); stroke-width: var(--td-edge-q-w); marker-end: url(#td-arr-q); }
+.td-elab-q .td-step circle { fill: var(--td-step-q-bg); stroke: var(--td-edge-q); stroke-width: 1.4; }
+.td-elab-q .td-step text { fill: var(--td-step-q-ink); font-weight: 600; }
+.td-ltag { cursor: default; }
+.td-ltag .td-mt-r { fill: var(--td-surface); stroke: var(--td-line-strong); stroke-dasharray: 3 2; }
+.td-ltag .td-mt-t { fill: var(--td-ink-2); font-family: var(--td-font); font-weight: 700; letter-spacing: .04em; }
+/* a tag fades with its part when a story or a neighbourhood is in focus, as far as its part */
+.td-dz.td-focus .td-node:not(.td-in) + .td-mtag { opacity: .15; }
+.td-dz.td-focus .td-node.td-in + .td-mtag { opacity: 1; }
+.td-dz.td-focus .td-node:not(.td-in) + .td-mtag > .td-nb { display: none; }
+/* and while a step is held, as its part does: the chip of a block chosen or hovered stays lit with it */
+.td-svg.td-trace .td-node:not(.td-hot, .td-sel, .td-lit) + .td-mtag { opacity: .35; }
+/* the legend swatch for a module tag (the old frame swatch no longer applies), and for one built otherwise */
+.td-sw-mtag { width: 26px; height: 12px; border-radius: 4px; background: var(--td-mc0-bg); box-shadow: inset 0 0 0 1px var(--td-mc0-line); }
+.td-sw-mtag.td-sw-built { box-shadow: inset 0 0 0 2px var(--td-built-line); background: radial-gradient(circle at calc(100% - 6px) 50%, var(--td-built-line) 0 2.5px, var(--td-mc0-bg) 3px); }

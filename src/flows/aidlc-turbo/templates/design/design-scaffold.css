@@ -1,0 +1,40 @@
+/* Code Scaffold readability: labels, start marker, step order (owned by the drawing agent). */
+:root {
+  --td-step-bg: #1C1230; --td-step-ink: #FFFFFF; --td-plate-line: #D3D3E0; --td-hot: #FF875F;
+  --td-start-bg: #FF875F; --td-start-ink: #1C1230; --td-start2-bg: #FFE4D6; --td-start2-ink: #8A3A10;
+}
+
+/* the start of the flow: an orange band on top of the block */
+.td-start .td-start-r { fill: var(--td-start-bg); }
+.td-start .td-start-i { fill: var(--td-start-ink); }
+.td-start .td-start-t { font: 800 14px var(--td-font); letter-spacing: .08em; fill: var(--td-start-ink); }
+.td-start .td-start-w { font-weight: 600; letter-spacing: 0; }
+.td-start.td-start-2 .td-start-r { fill: var(--td-start2-bg); }
+.td-start.td-start-2 .td-start-i, .td-start.td-start-2 .td-start-t { fill: var(--td-start2-ink); }
+
+/* the labels: an opaque plate beside the line, never under it */
+.td-svg .td-elab text { stroke: none; paint-order: normal; }
+.td-plate { stroke: var(--td-plate-line); stroke-width: 1; fill: var(--td-surface); }
+.td-elab.td-pl-lane-1 .td-plate { fill: var(--td-lane-1); }
+.td-elab.td-pl-lane-2 .td-plate { fill: var(--td-lane-2); }
+.td-elab.td-pl-lane-3 .td-plate { fill: var(--td-lane-3); }
+.td-elab.td-pl-frame .td-plate { fill: var(--td-frame-solid); }
+.td-svg .td-elab .td-pl-t { font: 500 14px var(--td-font); fill: var(--td-ink); }
+.td-step circle { fill: var(--td-step-bg); }
+.td-step text { font: 700 13px var(--td-font); fill: var(--td-step-ink); }
+.td-step.td-step-b circle { stroke: var(--td-surface); stroke-width: 2.5; }
+.td-step.td-step-b text { font-size: 13.5px; }
+
+/* a wide invisible stroke, so a line is easy to point at for its tooltip */
+.td-edge .td-hit { stroke: transparent !important; stroke-width: 12 !important; marker-end: none !important; stroke-dasharray: none !important; pointer-events: stroke; }
+
+/* one step lit from the list: the rest fades, all but the block chosen (a block no step goes to is chosen with a
+   step still held, design-chosen.js) and a block hovered with its neighbours and the lines between them (td-lit,
+   design-light.js) */
+.td-svg.td-trace .td-edge:not(.td-hot, .td-lit), .td-svg.td-trace .td-elab:not(.td-hot, .td-lit) { opacity: .12; }
+.td-svg.td-trace .td-node:not(.td-hot, .td-sel, .td-lit) { opacity: .35; }
+.td-svg.td-trace .td-edge.td-hot path:not(.td-hit) { stroke: var(--td-hot); stroke-width: 3.4; marker-end: url(#td-arr-h); }
+.td-svg.td-trace .td-elab.td-hot .td-plate { stroke: var(--td-hot); stroke-width: 2; }
+.td-svg.td-trace .td-elab.td-hot .td-step circle { fill: var(--td-hot); }
+.td-svg.td-trace .td-elab.td-hot .td-step text { fill: #120A20; }
+.td-svg.td-trace .td-node.td-hot .td-outline { stroke: var(--td-hot); stroke-width: 2.6; }

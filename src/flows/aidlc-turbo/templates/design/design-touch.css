@@ -1,0 +1,107 @@
+/* AI-DLC Turbo - Code Scaffold on a phone, a tablet and any touch screen (owned by the drawing agent).
+   On the page a drawing too small to read becomes a preview that opens the full-screen view, with the
+   legend folded away (.td-pv). In the view a finger gets controls of thumb size at the bottom, and on a
+   narrow screen the details and the legend come up as sheets from the bottom (.td-touch). A wide
+   screen with a mouse keeps design.css as it is. */
+
+/* the preview: the whole drawing as a picture, one clear way in */
+.td-pv-open { display: none; }
+.td-pv .td-dz { position: relative; display: flex; justify-content: center; overflow: hidden; border: 1px solid var(--td-line); border-radius: 14px; background: var(--td-lane-1); cursor: zoom-in; }
+.td-pv .td-dz svg.td-svg { pointer-events: none; }
+.td-pv .td-dz::after { content: ""; position: absolute; inset: 0; background: var(--td-surface); opacity: .3; pointer-events: none; }
+.td-pv .td-pv-open { display: inline-flex; position: absolute; z-index: 1; left: 50%; top: 50%; transform: translate(-50%, -50%); min-height: 52px; padding: 0 24px; border-radius: 999px; border-color: var(--td-orange); background: var(--td-orange); color: var(--td-purple); font-size: 16px; box-shadow: 0 14px 34px -12px var(--td-shadow); }
+.td-pv .td-pv-open:hover { border-color: var(--td-orange); background: var(--td-orange); filter: brightness(1.06); }
+.td-pv .td-pv-open .td-i { width: 20px; height: 20px; }
+
+/* the preview opens the view by itself: no second way to full screen beside it; on a narrow page the
+   legend button is a row of its own (design.css), the whole width */
+.td-pv .td-fsb, .td-pv .td-small-t { display: none !important; }
+@media (max-width: 760px) {
+  .td-tools .td-lgb { width: 100%; justify-content: flex-start; min-height: 44px; padding: 0 8px; border: 0; background: none; font-size: 15px; }
+  .td-tools .td-lgb:hover, .td-tools .td-lgb[aria-expanded="true"] { background: none; }
+  .td-tools .td-lgb .td-i { margin-left: auto; }
+}
+
+/* a finger needs a bigger target and no word under 12 px */
+:is(.td-pv, .td-touch) :is(.td-lg-h, .td-num, .td-pa, .td-pb, .td-pill) { font-size: 12px; }
+:is(.td-pv, .td-touch) .td-chip { min-height: 40px; }
+:is(.td-pv, .td-touch) .td-walkb { min-height: 44px; }
+.td-touch .td-tools .td-btn { min-height: 44px; }
+/* "More" under a finger: the same look, a tap area of 40 px high */
+.td-touch .td-tbar .td-sb-more { display: inline-block; padding: 9px 4px; margin: -9px -4px; }
+
+/* a line in the details: its step, and the steps before and after, with play in the middle */
+.td-pill.td-stp { background: var(--td-step-bg); color: var(--td-step-ink); }
+.td-walk { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 4px; }
+.td-walkb.td-prev { grid-column: 1; justify-self: start; }
+.td-walk .td-play { grid-column: 2; }
+.td-walkb.td-next { grid-column: 3; justify-self: end; flex-direction: row-reverse; }
+@media (max-width: 400px) { .td-dhead h3 { font-size: 17px; } }
+
+/* the view: the page behind never moves, only the sheets and the chips scroll */
+.td-fs-lock { overscroll-behavior: none; }
+.td-fs { touch-action: none; overscroll-behavior: none; }
+.td-fs .td-chips { touch-action: pan-x; }
+.td-fs-side { touch-action: pan-y; overscroll-behavior: contain; }
+.td-side-h { display: none; }
+
+/* the view on a touch screen: one row on top, zoom at the bottom within reach of a thumb (the legend and
+   the steps buttons there too, in design-steps.css) */
+.td-fs.td-touch .td-fs-top { flex-wrap: nowrap; gap: 10px 14px; padding: 8px 12px; }
+.td-fs.td-touch .td-fs-chips { order: 0; flex: 1 1 auto; }
+.td-fs.td-touch .td-fs-tools { margin-left: 0; }
+.td-fs.td-touch.td-chips-row .td-fs-top { flex-wrap: wrap; }
+.td-fs.td-touch.td-chips-row .td-fs-chips { order: 3; flex-basis: 100%; }
+.td-fs.td-touch.td-chips-row .td-fs-tools { margin-left: auto; }
+.td-fs.td-touch .td-btn { min-height: 44px; }
+.td-fs.td-touch .td-chip { font-size: 14px; }
+.td-fs.td-touch .td-sideb span, .td-fs.td-touch .td-closeb span, .td-fs.td-touch .td-fitb span { display: inline; }
+.td-fs.td-touch .td-zoom { padding: 3px; border-radius: 14px; border-color: var(--td-line-strong); box-shadow: 0 12px 30px -12px var(--td-shadow); }
+.td-fs.td-touch .td-zoom .td-btn { min-height: 44px; border-radius: 11px; }
+.td-fs.td-touch .td-zoom .td-zb:not(.td-fitb) { width: 44px; }
+.td-fs.td-touch .td-pct { width: 64px; min-width: 50px; min-height: 40px; font-size: 16px; }
+.td-fs.td-touch .td-fs-tip { top: 80px; bottom: auto; left: 50%; width: max-content; max-width: calc(100% - 28px); transform: translateX(-50%); text-align: center; font-size: 13px; }
+.td-fs.td-touch .td-detail { max-height: calc(100% - 96px); }
+.td-touch .td-edge .td-hit { stroke-width: 28 !important; }
+.td-touch .td-elab { pointer-events: auto; cursor: pointer; }
+@media (max-width: 560px) {
+  .td-fs.td-touch .td-fs-top { flex-wrap: wrap; }
+  .td-fs.td-touch .td-fs-chips { order: 3; flex-basis: 100%; }
+  .td-fs.td-touch .td-fs-tools { margin-left: auto; }
+  /* a phone: the chips stay one line, by their numbers when they do not fit, the title naming the story
+     chosen (design-view.js); a line that still scrolls fades at the edge where more chips wait */
+  .td-fs.td-touch .td-chips { flex-wrap: nowrap !important; overflow-x: auto !important; }
+  .td-fs.td-chips-num .td-chip:not(.td-all) { min-width: 44px; justify-content: center; gap: 0; padding: 5px; font-size: 0; }
+  .td-fs-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .td-fs.td-chips-num .td-fs-title { flex: 1 1 0; line-height: 1.25; }
+  .td-fs-title .td-badge { background: var(--td-orange); color: var(--td-purple); }
+}
+@media (max-width: 400px) { .td-fs.td-touch .td-fitb span { display: none; } }
+@media (max-height: 500px) {
+  .td-fs.td-touch .td-fs-title { display: none; }
+  .td-fs.td-touch .td-fs-top { padding-block: 5px; }
+  /* a phone on its side: small controls close to the edge, the legend and the steps as icons, no hint */
+  .td-fs.td-touch .td-btn, .td-fs.td-touch .td-zoom .td-btn { min-height: 40px; }
+  .td-fs.td-touch .td-zoom { padding: 2px; }
+  .td-fs.td-touch .td-fitb { width: 40px; padding: 0; }
+  .td-fs.td-touch .td-fitb span { display: none !important; }
+  .td-fs.td-touch .td-zoom .td-zb:not(.td-fitb) { width: 40px; }
+  .td-fs.td-touch .td-fs-dock .td-sideb { width: 40px; padding: 0; }
+  .td-fs.td-touch .td-fs-dock .td-sideb span { display: none; }
+  .td-fs.td-touch .td-fs-tip { display: none; }
+}
+@media (max-height: 500px) and (min-width: 601px) {
+  .td-fs.td-touch .td-detail { top: 8px; right: 8px; bottom: 8px; width: min(420px, 55%); max-height: none; }
+}
+
+/* on a narrow touch screen the details and the legend are sheets from the bottom */
+@media (max-width: 600px) {
+  .td-fs.td-touch .td-detail { top: auto; right: 0; bottom: 0; left: 0; z-index: 3; width: auto; max-height: 60%; padding: 26px 18px 20px; border-width: 1px 0 0; border-radius: 18px 18px 0 0; box-shadow: 0 -18px 40px -20px var(--td-shadow); }
+  .td-fs.td-touch .td-detail::before { content: ""; position: absolute; top: 9px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--td-line-strong); }
+  .td-fs.td-touch .td-dl { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .td-fs.td-touch .td-dl dd { margin-bottom: 8px; }
+  .td-fs.td-touch .td-fs-side { position: absolute; z-index: 4; top: auto; right: 0; bottom: 0; left: 0; width: auto; max-height: 75%; padding: 0 18px 20px; border-right: 0; border-top: 1px solid var(--td-line); border-radius: 18px 18px 0 0; box-shadow: 0 -18px 40px -20px var(--td-shadow); }
+  .td-fs.td-touch .td-side-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; position: sticky; top: 0; z-index: 1; margin: 0 -18px; padding: 8px 10px 8px 18px; border-bottom: 1px solid var(--td-line); background: var(--td-tint-2); }
+  .td-fs.td-touch .td-side-h h3 { margin: 0; font: 600 16px var(--td-font); color: var(--td-heading); }
+  .td-fs.td-touch .td-side-x { width: 44px; padding: 0; border-color: transparent; background: transparent; color: var(--td-ink-2); }
+}
