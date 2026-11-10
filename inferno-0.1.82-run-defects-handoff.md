@@ -36,3 +36,21 @@ What is wrong. Two things in `evals/review-loop/`, both seen on the first item t
 Evidence. Skoft_CRA, intent `the-app-shows-its-licence-its-notices-and-its-data-sources`, item `r4a-about-opens-the-licences-and-credits-the-data-sources`, review records `d8f1d2131` and `2a42e8220` on its intent branch. Its first round was written by a reviewer dispatched before the reinstall, so the item is no clean measure of the new flow either way.
 
 How to fix. Read both lenses: rounds, fix rounds and findings by weight for `reviews/quality/` beside the contract file, and one total per item. Count a mutant once: key it by criterion, file, line, find and replace, and count a later listing only when its verdict changed, or have the runner mark in the review file which mutants it ran in this record. Until then the row "mutants per acceptance criterion" reads too high on the new flow.
+
+## 5. A proposal that never ran and whose code moved to another file locks a clean intent review
+
+What is wrong. Read from the scripts, with the first half seen on the host and the second half not yet run there.
+
+- At the item. A correction between two rounds moves the line a mutant names into another file. The round 2 review is a delta review, and `refuseNew` in `S/run-review-file.cjs` (:275) lets it hold only what the last review held, where `sameMutant` (:241) compares the file. So the reviewer cannot name the new place. `locate` in `S/run-mutant-runs.cjs` (:84) follows a line inside its own file only. When the mutant never ran, which is every mutant of an item with two lenses (section 3), the dead entry stays in the item review as a proposal without a verdict.
+- At the intent review. `intentMutants` in `S/run-review-mutants.cjs` (:155) takes that entry up as owed (`owedProposals`, `S/run-mutant-coverage.cjs` :55). A clean record that proposes nothing for the criterion counts the entry as caught before it runs, runs it, gets `caught: none` from `locate`, finds the gap afterwards, puts the review file back and refuses with "verdict clean while ... owes a caught mutant". Nothing is recorded, so the `none` is lost. The refusal says to propose one mutant for the criterion. A record that does is refused by `refuseSecond` (:143), "which has a mutant this record runs", because the dead entry is still held as owed. The two refusals send the reviewer back and forth.
+
+The ways out today are a pin, which fits only a criterion whose test pins reader-facing copy verbatim, or a record that is not clean: the reviewer writes the unrunnable mutants as a finding of its own, the record lands with verdict `fix` and keeps the entries as `caught: none`, and the next intent review may then propose at the new place, because `held` leaves out an entry that reads `none`.
+
+Evidence. Skoft_CRA, intent `the-article-14-filings-are-due-on-time-and-complete`, item `a14-a-found-vulnerability-reads-right-on-its-case`. Its review records `a4643d3de` and `97815ac49` hold mutants for criteria 1 and 3 at `src/lib/vuln/reporting-case/CaseCard.svelte:79` (find `Boolean(id)`) and `src/lib/vuln/OwedBanner.svelte:82` (find `ids.join(', ')`), neither with a verdict. The correction of the quality finding of round 1 moved both lines into `src/lib/vuln/reporting-case/case-findings.ts` (:67 and :72), and neither file holds its find any more.
+
+How to fix. Three changes, the first one enough to end the lock.
+
+- In `intentMutants`, place every owed proposal with `locate` before `refuseSecond` and before the first gap check. One that cannot be placed is kept as `caught: none` with its why, is left out of `held`, and is not counted as caught. Then the first refusal already names the criterion, and the reviewer's own proposal for it is accepted in the same record.
+- Let `locate` look further than the entry's own file: when that file no longer holds the find, search the files the item changed since the review that proposed it, and take the one line that holds it once.
+- A test: an item review records a proposal that never ran, a later commit moves its line to another file, and the intent review that proposes one mutant for that criterion at the new place records clean.
+
