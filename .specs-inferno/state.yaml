@@ -10,9 +10,7 @@ workspace:
 intents:
   - id: integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblings-verify-item-waits-only-on-overlap-and-a-run-branch-keeps-its-config
     title: "Integrate checks what a base commit changed and lands beside busy siblings, verify-item waits only on overlap, and a run branch keeps its config"
-    status: in_progress
-    claimed_at: 2026-11-09T19:45:52Z
-    claimed_by: inferno-intent/integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblings-verify-item-waits-only-on-overlap-and-a-run-branch-keeps-its-config-20261109T194552Z
+    status: awaiting-manual
     created: 2026-11-09
     base_branch: main
     depends_on_intents: []
@@ -24,6 +22,7 @@ intents:
       DECISIONS. Integrate inherits the lanes-only since rule of 97e34e7 and runs every scoped check when nothing gives a diff; it refuses only dirt inside the scopes of the checks it runs, the items' own files and the ledger files; the gate keeps its whole-tree refusal; an unexplained change beside a disjoint open dispatch waits for it; the run config lives in cacheDir/<branch>/run-config.json for intent run branches only, read by worktree, integrate, gate, green, ship and the lane accepts; no flow-side reservation refusal.
       CHAIN. The dirt item follows the anchor item and the ledger item; attribution and the config record start at once; run-integrate.cjs and run.cjs overlaps serialize in the orchestrator. Every edit sits in the orchestrate scripts dir, no agent or skill text.
       INSTALLED COPY. None in this repo; the drift test installs into a sandbox. TESTER. None. LOOK. None.
+      STOPPED. The run was stopped on the owner's order on 2026-11-10, and its claim was released with unclaim-intent. The three open items were finished by hand on the inferno-improvement branch, outside the runner: the base item's correction in d135d299 and ca64da08, the config item's correction in 4446e8b2, and the fifth item in 182cbc12 with its tests in 4e2ad0e7. Each was checked with its tests and with line breaks that turned a test red, and the two corrections were re-read cold, but none of those reviews went through the runner. The item states below are the runner's last record: two items completed, the base item and the config item pending with review fix, and the fifth item pending with no review. The human step that remains: on a machine that can integrate this intent, record a review of each open item with run.cjs review --item, land each with run.cjs integrate --item, then run close-intent and archive-intent.
     work_items:
       - id: ri-integrate-on-the-base-diffs-from-since-or-origin
         title: "Integrate on the base branch diffs from --since or origin, so a commit there selects its scoped checks"
