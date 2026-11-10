@@ -10,12 +10,12 @@
  */
 
 const {
-  FINDING_KEYS, RECORDED_KEYS, bad, entries, isMap, readDoc, recordedReviewer, relativePath, verdictParts,
+  FINDING_KEYS, RECORDED_KEYS, bad, entries, isMap, pinsOf, readDoc, recordedReviewer, relativePath, verdictParts,
 } = require('./run-review-file.cjs');
 const { gapRefusal, mutantGaps } = require('./run-mutant-coverage.cjs');
 const { SAME_INTENT, deltaProblem } = require('./run-review-delta.cjs');
 
-const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants'];
+const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants', 'pins'];
 /** An intent review also records the hash that leaves out the kb the base synced (review.outside). */
 const INTENT_RECORDED = [...RECORDED_KEYS, 'tree_outside'];
 const CRITERION_KEYS = ['criterion', 'proof', 'where'];
@@ -58,7 +58,8 @@ function scannerOf(rel, doc, scanIds) {
  * Read and validate the intent review. `items` are the ids of the intent's work items,
  * `scanIds` the ids of the collected scan's lines (none when no scan ran). `recorded` is
  * true for a file run.cjs already recorded, which carries the tree and commit it added.
- * `proofs` holds what each item owes in mutants (run-mutant-coverage.cjs itemProofs).
+ * `proofs` holds what each item owes in mutants or pins (run-mutant-coverage.cjs itemProofs). A
+ * pin's text is checked against the tree when the review is recorded (run-review-mutants.cjs).
  */
 function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] }) {
   const doc = readDoc(tree, rel);
@@ -80,10 +81,11 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
   const delta = recorded ? null : deltaProblem(tree, rel, findings, SAME_INTENT);
   if (delta) throw bad(rel, delta);
   const scanner = scannerOf(rel, doc, scanIds);
-  const gaps = doc.verdict === 'clean' ? mutantGaps(proofs, mutants) : [];
+  const pins = pinsOf(rel, doc);
+  const gaps = doc.verdict === 'clean' ? mutantGaps(proofs, mutants, pins) : [];
   if (gaps.length > 0) throw bad(rel, gapRefusal(gaps));
   return {
-    verdict: doc.verdict, criteria, findings, mutants, survivors, scanner,
+    verdict: doc.verdict, criteria, findings, mutants, survivors, pins, scanner,
     tree: typeof doc.tree === 'string' ? doc.tree : null,
     tree_outside: typeof doc.tree_outside === 'string' ? doc.tree_outside : null,
     commit: typeof doc.commit === 'string' ? doc.commit : null,

@@ -158,11 +158,13 @@ describe('inferno flow', () => {
     expect(top(blocks[0])).toEqual(item.ITEM_KEYS);
     expect(nested(blocks[0], 'findings')).toEqual([...item.FINDING_KEYS, 'repeat']);
     expect(nested(blocks[0], 'mutants')).toEqual(item.MUTANT_KEYS);
+    expect(nested(blocks[0], 'pins')).toEqual(item.PIN_KEYS);
     expect(top(blocks[1])).toEqual(intent.INTENT_KEYS);
     expect(nested(blocks[1], 'criteria')).toEqual([...intent.CRITERION_KEYS, 'evidence']);
     expect(nested(blocks[1], 'findings')).toEqual([...item.FINDING_KEYS, 'owner']);
     expect(nested(blocks[1], 'scanner')).toEqual(intent.SCANNER_KEYS);
     expect(nested(blocks[1], 'mutants')).toEqual(item.MUTANT_KEYS);
+    expect(nested(blocks[1], 'pins')).toEqual(item.PIN_KEYS);
   });
 
   // The item review's dispatch names under `proof` what verify-item ran (run-review.cjs). The
@@ -184,6 +186,25 @@ describe('inferno flow', () => {
     expect(text).not.toMatch(/run the thing|find the test that proves it and run it/);
     const review = readFileSync(path.join(INFERNO, 'agents/orchestrator/skills/orchestrate/scripts/run-review.cjs'), 'utf8');
     expect(review).toContain('`  proof ${named}`');
+  });
+
+  // A criterion whose test pins reader-facing copy verbatim is held by a pin the reviewer read, which
+  // the runner checks (run-review-pins.cjs); every other criterion with a test keeps its mutant.
+  it.each(['agents/reviewer/agent.md', 'commands/inferno-reviewer.md'])('%s holds a literal pin of copy by reading it', (rel) => {
+    const text = readFileSync(path.join(INFERNO, rel), 'utf8');
+    for (const sentence of [
+      'A criterion whose test pins reader-facing copy verbatim gets no mutant: read the pin and list it under `pins`; the runner checks its text.',
+      'A pattern, a count or a computed value keeps its mutant.',
+      'Every criterion with a test needs a caught mutant or a checked pin, in its item review or the intent review.',
+      'In item mode propose no mutant or pin and leave both out',
+      'Propose a mutant or a pin as in item mode',
+    ]) expect(text).toContain(sentence);
+    expect(text).not.toMatch(/needs a caught mutant, in its item review/);
+  });
+
+  it('the Codex reviewer skill proposes pins beside mutants', () => {
+    const skill = readFileSync(path.join(INFERNO, 'codex/skills/specsmd-inferno-reviewer/SKILL.md'), 'utf8');
+    expect(skill).toContain('you propose mutants and pins; the runner runs or checks them on record.');
   });
 
   it('the Codex reviewer skill never reruns the proof checks', () => {

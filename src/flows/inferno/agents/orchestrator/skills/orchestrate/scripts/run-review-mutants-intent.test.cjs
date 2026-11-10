@@ -89,7 +89,7 @@ test("the intent reviewer proposes for a criterion still without a mutant, and t
 
   const refused = intentReview(fixture, tree, "verdict: clean\n");
   assert.equal(refused.code, 2, shown(refused));
-  assert.match(refused.err, /a-one owes a caught mutant for criteria 2 "a2 reads two". Propose one mutant for each under mutants, its criterion written <item>:<n>; the runner runs it/);
+  assert.match(refused.err, /a-one owes a caught mutant or a checked pin for criteria 2 "a2 reads two". Propose one mutant for each under mutants, its criterion written <item>:<n>, or a pin under pins where its test pins reader-facing copy verbatim; the runner runs or checks each/);
   assert.deepEqual(runs(fixture), []);
 
   write(tree, INTENT_REVIEW, `verdict: clean\nmutants:\n${proposal("a-one:2", { line: 2, find: "a2 = 2", replace: "a2 = 8", expect: "checks/a2.expect" })}`);
@@ -129,7 +129,7 @@ test("a proposal that reads no verdict leaves the criterion owed and the reviewe
   const result = intentReview(fixture, tree, body);
 
   assert.equal(result.code, 2, shown(result));
-  assert.match(result.err, /a-one owes a caught mutant for criteria 2/);
+  assert.match(result.err, /a-one owes a caught mutant or a checked pin for criteria 2/);
   assert.equal(read(tree, INTENT_REVIEW), body);
   assert.equal(read(tree, "src/a.ts"), "export const a = 1;\nexport const a2 = 2;\n");
 });
@@ -146,7 +146,7 @@ test("a clean intent review that leaves a criterion without any mutant is refuse
   const result = intentReview(fixture, tree, "verdict: clean\n");
 
   assert.equal(result.code, 2, shown(result));
-  assert.match(result.err, /a-one owes a caught mutant for criteria 2 "a2 reads two". Propose one mutant for each/);
+  assert.match(result.err, /a-one owes a caught mutant or a checked pin for criteria 2 "a2 reads two". Propose one mutant for each/);
   assert.deepEqual(runs(fixture), [], "criterion 1's owed proposal did not run either");
   assert.equal(read(tree, INTENT_REVIEW), "verdict: clean\n");
   assert.equal(read(tree, REVIEW), item);
