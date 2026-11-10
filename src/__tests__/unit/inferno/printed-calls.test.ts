@@ -167,6 +167,7 @@ describe('printed calls', () => {
     expect(flagged('const w = `node ${RUNNER_PATH} ${rest}`;')).not.toEqual([]);
     expect(flagged('throw new E(`Close it with: close-intent --intent ${id}`);')).not.toEqual([]);
     expect(flagged("throw new E('mark it with complete-item');")).not.toEqual([]);
+    expect(flagged('out.push(`then review --item ${id} --reviewer <agent-id> --quality-reviewer <quality-agent-id>`);')).not.toEqual([]);
     expect(flagged("const w = require('./state-transition.cjs');")).toEqual([]);
     expect(flagged("throw new E('complete-item requires --intent and --item');")).toEqual([]);
     expect(flagged("if (command === 'complete-item') run();")).toEqual([]);

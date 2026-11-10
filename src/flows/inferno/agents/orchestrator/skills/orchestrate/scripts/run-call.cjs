@@ -75,9 +75,11 @@ const itemReviewCall = (tree, id, intent = null) => runCall('review', tree, inte
 
 /**
  * Record the item review its reviewer wrote, under that reviewer's agent id, which only the
- * host knows; of `intent` when it is not the caller's.
+ * host knows; of `intent` when it is not the caller's. With `quality` the quality lens wrote
+ * its own file beside it, recorded under its own reviewer's id.
  */
-const itemRecordCall = (tree, id, intent = null) => runCall('review', tree, intent, ['--item', id, '--reviewer', '<agent-id>']);
+const itemRecordCall = (tree, id, intent = null, quality = false) => runCall('review', tree, intent,
+  ['--item', id, '--reviewer', '<agent-id>', ...(quality ? ['--quality-reviewer', '<quality-agent-id>'] : [])]);
 
 /** The check and the proof of one item, or of the batch `ids` names, as verify-item checks it. */
 const verifyItemCall = (tree, ids) => runCall('verify-item', tree, null, ids.length > 1 ? ['--items', ids.join(',')] : [ids[0]]);

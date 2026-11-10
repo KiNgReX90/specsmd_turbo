@@ -30,19 +30,27 @@ const LAST_MISS = 4;
  * The key of each actor's `roles` entry on each host: the one the installer renders that
  * role's pins from. The host dispatches the agent the key names, `specsmd-inferno-<key>` on
  * Claude and `specsmd_inferno_<key>` on Codex, the agents the flow's own files define. The
- * reviewer's and the scanner's agents arrive with their roles.
+ * reviewer's and the scanner's agents arrive with their roles, and so does `quality`, the
+ * quality lens beside the contract review of an item (run-review-quality.cjs).
  */
 const ROLES = {
   claude: {
     cheap: 'builder-cheap', strong: 'builder', escalate: 'builder-escalate', oracle: 'oracle', reviewer: 'reviewer', scanner: 'scanner',
+    quality: 'reviewer-quality',
   },
   codex: {
     cheap: 'builder_cheap', strong: 'builder_strong', escalate: 'builder_escalate', oracle: 'oracle', reviewer: 'reviewer', scanner: 'scanner',
+    quality: 'reviewer_quality',
   },
 };
 
-/** The config key that pins an actor's model on Claude ahead of its role entry. */
-const PINS = { reviewer: (config) => config.review && config.review.model, scanner: (config) => config.scan && config.scan.model };
+/**
+ * The config key that pins an actor's model on Claude ahead of its role entry. The quality lens
+ * has none: `review.model` is the contract reviewer's, so its role entry or its own pin decides.
+ */
+const PINS = {
+  reviewer: (config) => config.review && config.review.model, scanner: (config) => config.scan && config.scan.model, quality: () => null,
+};
 
 /** The tier that builds an item first. Complexity alone decides it. */
 function tierOf(item) {
@@ -54,7 +62,7 @@ function tierOf(item) {
  * for that role, since the installer pins the role's model on exactly that agent. On Codex the
  * model is the role entry's alone, because the spawned agent's pin wins. On Claude it is
  * `models.<tier>`, `review.model` for the reviewer or `scan.model` for the scanner, before the
- * role entry's. The user is no agent: both are null.
+ * role entry's; the quality lens's is its role entry's. The user is no agent: both are null.
  */
 function hostActor(actor, config = {}) {
   const host = config.host === 'codex' ? 'codex' : 'claude';
