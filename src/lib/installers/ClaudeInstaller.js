@@ -4,6 +4,20 @@ const path = require('path');
 const CLIUtils = require('../cli-utils');
 const { theme } = CLIUtils;
 
+// Flows whose commands folder holds both: the commands a person types, and the
+// subagents the flow dispatches. A file with a `name:` in its frontmatter is a
+// subagent and goes to .claude/agents only; any other file is a command and goes
+// to .claude/commands only. Other flows install every file as both.
+const SPLIT_FLOWS = ['aidlc-turbo'];
+
+/** True when the file's frontmatter has a `name:`: a subagent, not a command. */
+function isSubagent(content) {
+    const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+    return Boolean(m) && /^name:/m.test(m[1]);
+}
+
+const splits = (flowPath) => SPLIT_FLOWS.includes(path.basename(flowPath));
+
 class ClaudeInstaller extends ToolInstaller {
     get key() {
         return 'claude';
@@ -23,6 +37,11 @@ class ClaudeInstaller extends ToolInstaller {
 
     get detectPath() {
         return '.claude';
+    }
+
+    /** A subagent of a split flow is never a command. */
+    installsAsCommand(flowPath, content) {
+        return !(splits(flowPath) && isSubagent(content));
     }
 
     /**
@@ -52,7 +71,8 @@ class ClaudeInstaller extends ToolInstaller {
 
     /**
      * Install agents to .claude/agents/
-     * Uses the commands folder as source (same files serve as both commands and agents)
+     * Uses the commands folder as source (same files serve as both commands and
+     * agents, except in a split flow, where only the subagents are agents)
      */
     async installAgents(flowPath, config) {
         const targetAgentsDir = this.agentsDir;
@@ -78,6 +98,7 @@ class ClaudeInstaller extends ToolInstaller {
                     const targetPath = path.join(targetAgentsDir, targetFileName);
 
                     const content = await fs.readFile(sourcePath, 'utf8');
+                    if (splits(flowPath) && !isSubagent(content)) continue;
                     await fs.outputFile(targetPath, content, 'utf8');
                     installedFiles.push(targetFileName);
                 } catch (err) {
@@ -95,3 +116,4 @@ class ClaudeInstaller extends ToolInstaller {
 }
 
 module.exports = ClaudeInstaller;
+module.exports.isSubagent = isSubagent;

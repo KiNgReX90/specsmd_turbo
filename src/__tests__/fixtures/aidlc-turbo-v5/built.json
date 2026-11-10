@@ -1,0 +1,1471 @@
+{
+  "title": "Pay with a gift card",
+  "phase": "construction",
+  "lang": "en",
+  "intentBranch": "shop/gift-cards/intent",
+  "mr": "https://gitlab.example.com/acme/shop/-/merge_requests/40",
+  "mrN": 40,
+  "stories": [
+    {
+      "id": "001",
+      "n": 1,
+      "title": "Check the balance of a gift card",
+      "short": "Gift card balance",
+      "what": "At checkout the customer enters a gift card code and sees its balance.",
+      "files": 6,
+      "tests": 1,
+      "commits": 2,
+      "first": "2026-11-02T09:00:00+01:00",
+      "merged": "2026-11-03T15:00:00+01:00",
+      "branch": "shop/gift-cards/001-gift-card-balance",
+      "url": "https://gitlab.example.com/acme/shop/-/merge_requests/41",
+      "mr": 41
+    },
+    {
+      "id": "002",
+      "n": 2,
+      "title": "Pay part of an order with a gift card",
+      "short": "Pay with gift card",
+      "what": "The order books the gift card part and charges only the rest to the payment provider.",
+      "files": 4,
+      "tests": 1,
+      "commits": 3,
+      "first": "2026-11-04T10:00:00+01:00",
+      "merged": "2026-11-05T16:30:00+01:00",
+      "branch": "shop/gift-cards/002-pay-with-gift-card",
+      "url": "https://gitlab.example.com/acme/shop/-/merge_requests/42",
+      "mr": 42
+    },
+    {
+      "id": "003",
+      "n": 3,
+      "title": "Show the gift card on the order status page",
+      "short": "Gift card on status",
+      "what": "The order status page shows how much of the order the gift card paid.",
+      "files": 3,
+      "tests": 1,
+      "commits": 1,
+      "first": "2026-11-06T09:30:00+01:00",
+      "merged": "2026-11-06T14:00:00+01:00",
+      "branch": "shop/gift-cards/003-gift-card-on-order-status",
+      "url": "https://gitlab.example.com/acme/shop/-/merge_requests/43",
+      "mr": 43
+    }
+  ],
+  "parts": {
+    "checkout-page": {
+      "id": "checkout-page",
+      "name": "shop-checkout-page",
+      "kind": "web component",
+      "sub": "the checkout",
+      "status": "changed",
+      "path": "shop-ui/checkout/shop-checkout-page.js",
+      "what": "The checkout page of the shop.",
+      "near": [],
+      "stories": [
+        "002"
+      ],
+      "layer": "screen",
+      "module": "ui",
+      "lines": "1-120",
+      "build": {
+        "state": "as_planned",
+        "story": "002",
+        "why": null
+      }
+    },
+    "giftcard-field": {
+      "id": "giftcard-field",
+      "name": "shop-giftcard-field",
+      "kind": "web component",
+      "sub": "code and balance",
+      "status": "new",
+      "path": "shop-ui/checkout/shop-giftcard-field.js",
+      "what": "The field where the customer enters a gift card code and sees its balance.",
+      "near": [],
+      "stories": [
+        "001"
+      ],
+      "layer": "screen",
+      "module": "ui",
+      "lines": null,
+      "build": {
+        "state": "as_planned",
+        "story": "001",
+        "why": null
+      }
+    },
+    "status-page": {
+      "id": "status-page",
+      "name": "shop-order-status-page",
+      "kind": "web component",
+      "sub": "the order status",
+      "status": "changed",
+      "path": "shop-ui/orders/shop-order-status-page.js",
+      "what": "The page that shows the status of an order.",
+      "near": [],
+      "stories": [
+        "003"
+      ],
+      "layer": "screen",
+      "module": "ui",
+      "lines": "1-90",
+      "build": {
+        "state": "as_planned",
+        "story": "003",
+        "why": null
+      }
+    },
+    "giftcard-controller": {
+      "id": "giftcard-controller",
+      "name": "GiftCardController",
+      "kind": "class",
+      "sub": "the balance endpoint",
+      "status": "new",
+      "path": "shop-server/src/main/java/com/acme/shop/giftcards/GiftCardController.java",
+      "what": "Answers the balance of a gift card code.",
+      "near": [],
+      "stories": [
+        "001"
+      ],
+      "layer": "server",
+      "module": "server",
+      "lines": null,
+      "build": {
+        "state": "as_planned",
+        "story": "001",
+        "why": null
+      }
+    },
+    "giftcard-service": {
+      "id": "giftcard-service",
+      "name": "GiftCardService",
+      "kind": "class",
+      "sub": "balance and booking",
+      "status": "new",
+      "path": "shop-server/src/main/java/com/acme/shop/giftcards/GiftCardService.java",
+      "what": "Reads the balance of a gift card and books an amount on it.",
+      "near": [
+        "GiftCardServiceTest"
+      ],
+      "stories": [
+        "001",
+        "002"
+      ],
+      "layer": "server",
+      "module": "server",
+      "lines": null,
+      "build": {
+        "state": "different",
+        "story": "001",
+        "story_name": "1. Check the balance of a gift card",
+        "plan": "Reads the balance in one query.",
+        "built": "Reads the balance through `GiftCardCache`.",
+        "why": "The table is read on every checkout."
+      }
+    },
+    "order-service": {
+      "id": "order-service",
+      "name": "OrderService",
+      "kind": "class",
+      "sub": "places an order",
+      "status": "changed",
+      "path": "shop-server/src/main/java/com/acme/shop/orders/OrderService.java",
+      "what": "Places an order and takes the payment.",
+      "near": [],
+      "stories": [
+        "002"
+      ],
+      "layer": "server",
+      "module": "server",
+      "lines": "40-210",
+      "build": {
+        "state": "as_planned",
+        "story": "002",
+        "why": null
+      }
+    },
+    "order-status-api": {
+      "id": "order-status-api",
+      "name": "OrderStatusResource",
+      "kind": "endpoint",
+      "sub": "the status of an order",
+      "status": "changed",
+      "path": "shop-server/src/main/java/com/acme/shop/orders/OrderStatusResource.java",
+      "what": "Returns the status of an order to the status page.",
+      "near": [],
+      "stories": [
+        "003"
+      ],
+      "layer": "server",
+      "module": "server",
+      "lines": "1-80",
+      "build": {
+        "state": "as_planned",
+        "story": "003",
+        "why": null
+      }
+    },
+    "payment-client": {
+      "id": "payment-client",
+      "name": "PaymentClient",
+      "kind": "class",
+      "sub": "talks to the provider",
+      "status": "existing",
+      "path": "shop-server/src/main/java/com/acme/shop/payments/PaymentClient.java",
+      "what": "Charges an amount at the payment provider.",
+      "near": [],
+      "stories": [],
+      "layer": "server",
+      "module": "server",
+      "lines": "1-140",
+      "build": {
+        "state": "as_planned",
+        "story": "001",
+        "why": null
+      }
+    },
+    "giftcards-table": {
+      "id": "giftcards-table",
+      "name": "GIFT_CARDS",
+      "kind": "table",
+      "sub": "every gift card",
+      "status": "new",
+      "path": "shop-db/tables/gift_cards.sql",
+      "what": "Holds every gift card with its code and balance.",
+      "near": [],
+      "stories": [
+        "001"
+      ],
+      "layer": "database",
+      "module": "db",
+      "lines": null,
+      "build": {
+        "state": "as_planned",
+        "story": "001",
+        "why": null
+      }
+    },
+    "orders-table": {
+      "id": "orders-table",
+      "name": "ORDERS",
+      "kind": "table",
+      "sub": "every order",
+      "status": "changed",
+      "path": "shop-db/tables/orders.sql",
+      "what": "Holds every order; gets the gift card part of the payment.",
+      "near": [],
+      "stories": [
+        "002"
+      ],
+      "layer": "database",
+      "module": "db",
+      "lines": "1-60"
+    },
+    "migration": {
+      "id": "migration",
+      "name": "V2026_11_01__gift_cards.sql",
+      "kind": "migration",
+      "sub": "creates GIFT_CARDS",
+      "status": "new",
+      "path": "shop-db/migrations/V2026_11_01__gift_cards.sql",
+      "what": "Creates the gift card table and its index.",
+      "near": [],
+      "stories": [
+        "001"
+      ],
+      "layer": "database",
+      "module": "db",
+      "lines": null,
+      "build": {
+        "state": "gone",
+        "story": "001",
+        "story_name": "1. Check the balance of a gift card",
+        "plan": "Creates the table and its index.",
+        "built": null,
+        "why": "The table script creates the index too."
+      }
+    },
+    "payment-api": {
+      "id": "payment-api",
+      "name": "Payment API",
+      "kind": "endpoint",
+      "sub": "charges a card",
+      "status": "existing",
+      "path": "payment-provider/api/charges",
+      "what": "The payment provider's endpoint that charges a card.",
+      "near": [],
+      "stories": [],
+      "layer": "external",
+      "module": "pay",
+      "lines": "1-40",
+      "build": {
+        "state": "as_planned",
+        "story": "001",
+        "why": null
+      }
+    },
+    "giftcard-cache": {
+      "id": "giftcard-cache",
+      "name": "GiftCardCache",
+      "kind": "class",
+      "sub": "caches balances",
+      "status": "new",
+      "path": "shop-server/src/main/java/com/acme/shop/giftcards/GiftCardCache.java",
+      "what": "Keeps the balances read in the last minute.",
+      "near": [],
+      "stories": [
+        "001"
+      ],
+      "layer": "server",
+      "module": "server",
+      "lines": null,
+      "build": {
+        "state": "added",
+        "story": "001",
+        "story_name": "1. Check the balance of a gift card",
+        "plan": null,
+        "built": "Keeps the balances read in the last minute.",
+        "why": "Checkout reads a balance on every key press."
+      }
+    }
+  },
+  "links": [
+    {
+      "id": "checkout-page-giftcard-field",
+      "from": "checkout-page",
+      "to": "giftcard-field",
+      "kind": "calls",
+      "label": "shows the gift card field",
+      "code": null,
+      "step": "The checkout shows the gift card field.",
+      "intent": true,
+      "stories": [
+        "001"
+      ]
+    },
+    {
+      "id": "giftcard-field-giftcard-controller",
+      "from": "giftcard-field",
+      "to": "giftcard-controller",
+      "kind": "calls",
+      "label": "asks the balance",
+      "code": "POST /giftcards/balance",
+      "step": "The field asks the server for the balance.",
+      "intent": true,
+      "stories": [
+        "001"
+      ]
+    },
+    {
+      "id": "giftcard-controller-giftcard-service",
+      "from": "giftcard-controller",
+      "to": "giftcard-service",
+      "kind": "calls",
+      "label": "reads the balance",
+      "code": null,
+      "step": "The controller reads the balance.",
+      "intent": true,
+      "stories": [
+        "001"
+      ]
+    },
+    {
+      "id": "giftcard-service-giftcards-table",
+      "from": "giftcard-service",
+      "to": "giftcards-table",
+      "kind": "calls",
+      "label": "reads and books the balance",
+      "code": null,
+      "step": "The service reads and books the balance.",
+      "intent": true,
+      "stories": [
+        "001"
+      ]
+    },
+    {
+      "id": "checkout-page-order-service",
+      "from": "checkout-page",
+      "to": "order-service",
+      "kind": "calls",
+      "label": "places the order",
+      "code": "POST /orders",
+      "step": "The checkout places the order with the gift card.",
+      "intent": true,
+      "stories": [
+        "002"
+      ]
+    },
+    {
+      "id": "order-service-giftcard-service",
+      "from": "order-service",
+      "to": "giftcard-service",
+      "kind": "calls",
+      "label": "books the gift card part",
+      "code": null,
+      "step": "The order books the gift card part.",
+      "intent": true,
+      "stories": [
+        "002"
+      ]
+    },
+    {
+      "id": "order-service-payment-client",
+      "from": "order-service",
+      "to": "payment-client",
+      "kind": "calls",
+      "label": "charges the rest",
+      "code": null,
+      "step": "The order charges the rest.",
+      "intent": true,
+      "stories": [
+        "002"
+      ]
+    },
+    {
+      "id": "payment-client-payment-api",
+      "from": "payment-client",
+      "to": "payment-api",
+      "kind": "calls",
+      "label": "charges the card",
+      "code": null,
+      "step": "The client charges the card at the provider.",
+      "intent": false,
+      "stories": [
+        "002"
+      ]
+    },
+    {
+      "id": "order-service-orders-table",
+      "from": "order-service",
+      "to": "orders-table",
+      "kind": "calls",
+      "label": "stores the payment split",
+      "code": null,
+      "step": "The order stores how it was paid.",
+      "intent": true,
+      "stories": [
+        "002"
+      ]
+    },
+    {
+      "id": "status-page-order-status-api",
+      "from": "status-page",
+      "to": "order-status-api",
+      "kind": "calls",
+      "label": "reads the status",
+      "code": "GET /orders/:id/status",
+      "step": "The status page reads the order.",
+      "intent": true,
+      "stories": [
+        "003"
+      ]
+    },
+    {
+      "id": "order-status-api-order-service",
+      "from": "order-status-api",
+      "to": "order-service",
+      "kind": "calls",
+      "label": "reads the order",
+      "code": null,
+      "step": "The endpoint reads the order with its split.",
+      "intent": true,
+      "stories": [
+        "003"
+      ]
+    }
+  ],
+  "persons": {
+    "p-customer": {
+      "id": "p-customer",
+      "name": "Customer",
+      "kind": "person",
+      "desc": "Buys in the shop and pays with a card or a gift card."
+    },
+    "p-support": {
+      "id": "p-support",
+      "name": "Support agent",
+      "kind": "person",
+      "desc": "Answers questions about orders."
+    }
+  },
+  "systems": {
+    "s-shop": {
+      "id": "s-shop",
+      "name": "Acme Shop",
+      "kind": "system",
+      "tech": "Java and web components",
+      "desc": "The webshop where customers order and pay.",
+      "status": "changed",
+      "stories": [
+        "001",
+        "002",
+        "003"
+      ]
+    },
+    "s-pay": {
+      "id": "s-pay",
+      "name": "Payment provider",
+      "kind": "system",
+      "ext": true,
+      "tech": "REST",
+      "desc": "Charges cards for the shop.",
+      "status": "existing",
+      "stories": []
+    },
+    "s-mail": {
+      "id": "s-mail",
+      "name": "Mail service",
+      "kind": "system",
+      "ext": true,
+      "desc": "Sends the receipts.",
+      "status": "existing",
+      "stories": []
+    }
+  },
+  "containers": {
+    "c-web": {
+      "id": "c-web",
+      "name": "Shop web app",
+      "kind": "container",
+      "system": "s-shop",
+      "tech": "Web components",
+      "desc": "The pages customers and support agents use.",
+      "status": "changed",
+      "stories": [
+        "001",
+        "002",
+        "003"
+      ],
+      "zoom": "c-web"
+    },
+    "c-server": {
+      "id": "c-server",
+      "name": "Shop server",
+      "kind": "container",
+      "system": "s-shop",
+      "tech": "Java",
+      "desc": "Places orders, takes payments and keeps gift cards.",
+      "status": "changed",
+      "stories": [
+        "001",
+        "002",
+        "003"
+      ],
+      "zoom": "c-server"
+    },
+    "c-db": {
+      "id": "c-db",
+      "name": "Shop database",
+      "kind": "db",
+      "system": "s-shop",
+      "tech": "PostgreSQL",
+      "desc": "Orders, payments and gift cards.",
+      "status": "changed",
+      "stories": [
+        "001",
+        "002"
+      ],
+      "zoom": "c-db"
+    }
+  },
+  "components": {
+    "k-checkout": {
+      "id": "k-checkout",
+      "c": "c-web",
+      "name": "Checkout",
+      "kind": "component",
+      "tech": "Web components",
+      "desc": "The checkout with the gift card field.",
+      "icon": "screen",
+      "parts": [
+        "checkout-page",
+        "giftcard-field"
+      ],
+      "status": "changed",
+      "stories": [
+        "001",
+        "002"
+      ]
+    },
+    "k-status": {
+      "id": "k-status",
+      "c": "c-web",
+      "name": "Order status",
+      "kind": "component",
+      "tech": "Web components",
+      "desc": "The page with the status of an order.",
+      "icon": "screen",
+      "parts": [
+        "status-page"
+      ],
+      "status": "changed",
+      "stories": [
+        "003"
+      ]
+    },
+    "k-giftcards": {
+      "id": "k-giftcards",
+      "c": "c-server",
+      "name": "Gift cards",
+      "kind": "component",
+      "tech": "Spring",
+      "desc": "The balance and the booking of gift cards.",
+      "parts": [
+        "giftcard-controller",
+        "giftcard-service",
+        "giftcard-cache"
+      ],
+      "status": "new",
+      "stories": [
+        "001",
+        "002"
+      ]
+    },
+    "k-orders": {
+      "id": "k-orders",
+      "c": "c-server",
+      "name": "Orders",
+      "kind": "component",
+      "tech": "Spring",
+      "desc": "Places orders and splits their payment.",
+      "parts": [
+        "order-service",
+        "order-status-api"
+      ],
+      "status": "changed",
+      "stories": [
+        "002",
+        "003"
+      ]
+    },
+    "k-payments": {
+      "id": "k-payments",
+      "c": "c-server",
+      "name": "Payments",
+      "kind": "component",
+      "tech": "Spring",
+      "desc": "Talks to the payment provider.",
+      "parts": [
+        "payment-client"
+      ],
+      "status": "existing",
+      "stories": []
+    },
+    "k-tables": {
+      "id": "k-tables",
+      "c": "c-db",
+      "name": "Order tables",
+      "kind": "component",
+      "tech": "SQL",
+      "desc": "The tables of orders and gift cards.",
+      "icon": "table",
+      "parts": [
+        "giftcards-table",
+        "orders-table",
+        "migration"
+      ],
+      "status": "changed",
+      "stories": [
+        "001",
+        "002"
+      ]
+    }
+  },
+  "outside": {
+    "payment-api": "s-pay"
+  },
+  "views": {
+    "context": {
+      "title": "System context",
+      "level": 1,
+      "nodes": [
+        {
+          "id": "p-customer",
+          "name": "Customer",
+          "kind": "person",
+          "desc": "Buys in the shop and pays with a card or a gift card."
+        },
+        {
+          "id": "p-support",
+          "name": "Support agent",
+          "kind": "person",
+          "desc": "Answers questions about orders."
+        },
+        {
+          "id": "s-shop",
+          "name": "Acme Shop",
+          "kind": "system",
+          "tech": "Java and web components",
+          "desc": "The webshop where customers order and pay.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002",
+            "003"
+          ]
+        },
+        {
+          "id": "s-pay",
+          "name": "Payment provider",
+          "kind": "system",
+          "ext": true,
+          "tech": "REST",
+          "desc": "Charges cards for the shop.",
+          "status": "existing",
+          "stories": []
+        },
+        {
+          "id": "s-mail",
+          "name": "Mail service",
+          "kind": "system",
+          "ext": true,
+          "desc": "Sends the receipts.",
+          "status": "existing",
+          "stories": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "p-customer",
+          "to": "s-shop",
+          "label": "Orders and pays",
+          "intent": true,
+          "ends": false
+        },
+        {
+          "from": "p-support",
+          "to": "s-shop",
+          "label": "Looks up an order",
+          "intent": false,
+          "ends": false
+        },
+        {
+          "from": "s-shop",
+          "to": "s-pay",
+          "label": "Charges the rest · Checks old vouchers · and 1 more",
+          "intent": true,
+          "tech": "REST",
+          "ends": true,
+          "labels": [
+            "charges the card"
+          ],
+          "calls": [
+            {
+              "from": "PaymentClient",
+              "to": "Payment API",
+              "label": "charges the card"
+            }
+          ]
+        },
+        {
+          "from": "s-shop",
+          "to": "s-mail",
+          "label": "Sends the receipt",
+          "intent": false,
+          "tech": "SMTP",
+          "ends": false
+        }
+      ]
+    },
+    "containers": {
+      "title": "Containers",
+      "level": 2,
+      "boundary": {
+        "id": "s-shop",
+        "name": "Acme Shop",
+        "tech": "Java and web components",
+        "children": [
+          "c-web",
+          "c-server",
+          "c-db"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "p-customer",
+          "name": "Customer",
+          "kind": "person",
+          "desc": "Buys in the shop and pays with a card or a gift card."
+        },
+        {
+          "id": "p-support",
+          "name": "Support agent",
+          "kind": "person",
+          "desc": "Answers questions about orders."
+        },
+        {
+          "id": "c-web",
+          "name": "Shop web app",
+          "kind": "container",
+          "system": "s-shop",
+          "tech": "Web components",
+          "desc": "The pages customers and support agents use.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002",
+            "003"
+          ],
+          "zoom": "c-web"
+        },
+        {
+          "id": "c-server",
+          "name": "Shop server",
+          "kind": "container",
+          "system": "s-shop",
+          "tech": "Java",
+          "desc": "Places orders, takes payments and keeps gift cards.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002",
+            "003"
+          ],
+          "zoom": "c-server"
+        },
+        {
+          "id": "c-db",
+          "name": "Shop database",
+          "kind": "db",
+          "system": "s-shop",
+          "tech": "PostgreSQL",
+          "desc": "Orders, payments and gift cards.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002"
+          ],
+          "zoom": "c-db"
+        },
+        {
+          "id": "s-pay",
+          "name": "Payment provider",
+          "kind": "system",
+          "ext": true,
+          "tech": "REST",
+          "desc": "Charges cards for the shop.",
+          "status": "existing",
+          "stories": []
+        },
+        {
+          "id": "s-mail",
+          "name": "Mail service",
+          "kind": "system",
+          "ext": true,
+          "desc": "Sends the receipts.",
+          "status": "existing",
+          "stories": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "p-customer",
+          "to": "c-web",
+          "label": "orders and pays",
+          "intent": true,
+          "ends": false
+        },
+        {
+          "from": "p-support",
+          "to": "c-web",
+          "label": "looks up an order",
+          "intent": false,
+          "ends": false
+        },
+        {
+          "from": "c-web",
+          "to": "c-server",
+          "label": "calls",
+          "intent": true,
+          "tech": "REST",
+          "ends": false,
+          "labels": [
+            "asks the balance",
+            "places the order",
+            "reads the status"
+          ],
+          "calls": [
+            {
+              "from": "shop-giftcard-field",
+              "to": "GiftCardController",
+              "label": "asks the balance",
+              "code": "POST /giftcards/balance"
+            },
+            {
+              "from": "shop-checkout-page",
+              "to": "OrderService",
+              "label": "places the order",
+              "code": "POST /orders"
+            },
+            {
+              "from": "shop-order-status-page",
+              "to": "OrderStatusResource",
+              "label": "reads the status",
+              "code": "GET /orders/:id/status"
+            }
+          ]
+        },
+        {
+          "from": "c-server",
+          "to": "c-db",
+          "label": "reads and writes",
+          "intent": true,
+          "tech": "SQL",
+          "ends": false,
+          "labels": [
+            "reads and books the balance",
+            "stores the payment split"
+          ],
+          "calls": [
+            {
+              "from": "GiftCardService",
+              "to": "GIFT_CARDS",
+              "label": "reads and books the balance"
+            },
+            {
+              "from": "OrderService",
+              "to": "ORDERS",
+              "label": "stores the payment split"
+            }
+          ]
+        },
+        {
+          "from": "c-server",
+          "to": "s-pay",
+          "label": "charges the rest",
+          "intent": true,
+          "tech": "REST",
+          "ends": true,
+          "labels": [
+            "charges the card"
+          ],
+          "calls": [
+            {
+              "from": "PaymentClient",
+              "to": "Payment API",
+              "label": "charges the card"
+            }
+          ]
+        },
+        {
+          "from": "c-server",
+          "to": "s-mail",
+          "label": "sends the receipt",
+          "intent": false,
+          "tech": "SMTP",
+          "ends": false
+        }
+      ]
+    },
+    "c-web": {
+      "title": "Components of Shop web app",
+      "level": 3,
+      "of": "c-web",
+      "boundary": {
+        "id": "c-web",
+        "name": "Shop web app",
+        "tech": "Web components",
+        "children": [
+          "k-checkout",
+          "k-status"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "k-checkout",
+          "c": "c-web",
+          "name": "Checkout",
+          "kind": "component",
+          "tech": "Web components",
+          "desc": "The checkout with the gift card field.",
+          "icon": "screen",
+          "parts": [
+            "checkout-page",
+            "giftcard-field"
+          ],
+          "status": "changed",
+          "stories": [
+            "001",
+            "002"
+          ]
+        },
+        {
+          "id": "k-status",
+          "c": "c-web",
+          "name": "Order status",
+          "kind": "component",
+          "tech": "Web components",
+          "desc": "The page with the status of an order.",
+          "icon": "screen",
+          "parts": [
+            "status-page"
+          ],
+          "status": "changed",
+          "stories": [
+            "003"
+          ]
+        },
+        {
+          "id": "c-server",
+          "name": "Shop server",
+          "kind": "container",
+          "system": "s-shop",
+          "tech": "Java",
+          "desc": "Places orders, takes payments and keeps gift cards.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002",
+            "003"
+          ],
+          "zoom": "c-server"
+        }
+      ],
+      "edges": [
+        {
+          "from": "k-checkout",
+          "to": "c-server",
+          "label": "Asks the balance · Places the order",
+          "intent": true,
+          "tech": "REST",
+          "ends": false,
+          "labels": [
+            "asks the balance",
+            "places the order"
+          ],
+          "calls": [
+            {
+              "from": "shop-giftcard-field",
+              "to": "GiftCardController",
+              "label": "asks the balance",
+              "code": "POST /giftcards/balance"
+            },
+            {
+              "from": "shop-checkout-page",
+              "to": "OrderService",
+              "label": "places the order",
+              "code": "POST /orders"
+            }
+          ],
+          "quiet": true
+        },
+        {
+          "from": "k-status",
+          "to": "c-server",
+          "label": "Reads the status",
+          "intent": true,
+          "tech": "REST",
+          "ends": false,
+          "labels": [
+            "reads the status"
+          ],
+          "calls": [
+            {
+              "from": "shop-order-status-page",
+              "to": "OrderStatusResource",
+              "label": "reads the status",
+              "code": "GET /orders/:id/status"
+            }
+          ],
+          "quiet": true
+        }
+      ]
+    },
+    "c-server": {
+      "title": "Components of Shop server",
+      "level": 3,
+      "of": "c-server",
+      "boundary": {
+        "id": "c-server",
+        "name": "Shop server",
+        "tech": "Java",
+        "children": [
+          "k-giftcards",
+          "k-orders",
+          "k-payments"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "k-giftcards",
+          "c": "c-server",
+          "name": "Gift cards",
+          "kind": "component",
+          "tech": "Spring",
+          "desc": "The balance and the booking of gift cards.",
+          "parts": [
+            "giftcard-controller",
+            "giftcard-service",
+            "giftcard-cache"
+          ],
+          "status": "new",
+          "stories": [
+            "001",
+            "002"
+          ]
+        },
+        {
+          "id": "k-orders",
+          "c": "c-server",
+          "name": "Orders",
+          "kind": "component",
+          "tech": "Spring",
+          "desc": "Places orders and splits their payment.",
+          "parts": [
+            "order-service",
+            "order-status-api"
+          ],
+          "status": "changed",
+          "stories": [
+            "002",
+            "003"
+          ]
+        },
+        {
+          "id": "k-payments",
+          "c": "c-server",
+          "name": "Payments",
+          "kind": "component",
+          "tech": "Spring",
+          "desc": "Talks to the payment provider.",
+          "parts": [
+            "payment-client"
+          ],
+          "status": "existing",
+          "stories": []
+        },
+        {
+          "id": "c-web",
+          "name": "Shop web app",
+          "kind": "container",
+          "system": "s-shop",
+          "tech": "Web components",
+          "desc": "The pages customers and support agents use.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002",
+            "003"
+          ],
+          "zoom": "c-web"
+        },
+        {
+          "id": "c-db",
+          "name": "Shop database",
+          "kind": "db",
+          "system": "s-shop",
+          "tech": "PostgreSQL",
+          "desc": "Orders, payments and gift cards.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002"
+          ],
+          "zoom": "c-db"
+        },
+        {
+          "id": "s-pay",
+          "name": "Payment provider",
+          "kind": "system",
+          "ext": true,
+          "tech": "REST",
+          "desc": "Charges cards for the shop.",
+          "status": "existing",
+          "stories": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "k-orders",
+          "to": "s-pay",
+          "label": "checks old vouchers",
+          "intent": false,
+          "tech": "REST",
+          "ends": true,
+          "quiet": false
+        },
+        {
+          "from": "c-web",
+          "to": "k-giftcards",
+          "label": "Asks the balance",
+          "intent": true,
+          "tech": "REST",
+          "ends": false,
+          "labels": [
+            "asks the balance"
+          ],
+          "calls": [
+            {
+              "from": "shop-giftcard-field",
+              "to": "GiftCardController",
+              "label": "asks the balance",
+              "code": "POST /giftcards/balance"
+            }
+          ],
+          "quiet": true
+        },
+        {
+          "from": "k-giftcards",
+          "to": "c-db",
+          "label": "Reads and books the balance",
+          "intent": true,
+          "tech": "SQL",
+          "ends": false,
+          "labels": [
+            "reads and books the balance"
+          ],
+          "calls": [
+            {
+              "from": "GiftCardService",
+              "to": "GIFT_CARDS",
+              "label": "reads and books the balance"
+            }
+          ],
+          "quiet": true
+        },
+        {
+          "from": "c-web",
+          "to": "k-orders",
+          "label": "Places the order · Reads the status",
+          "intent": true,
+          "tech": "REST",
+          "ends": false,
+          "labels": [
+            "places the order",
+            "reads the status"
+          ],
+          "calls": [
+            {
+              "from": "shop-checkout-page",
+              "to": "OrderService",
+              "label": "places the order",
+              "code": "POST /orders"
+            },
+            {
+              "from": "shop-order-status-page",
+              "to": "OrderStatusResource",
+              "label": "reads the status",
+              "code": "GET /orders/:id/status"
+            }
+          ],
+          "quiet": true
+        },
+        {
+          "from": "k-orders",
+          "to": "k-giftcards",
+          "label": "Books the gift card part",
+          "intent": true,
+          "ends": false,
+          "labels": [
+            "books the gift card part"
+          ],
+          "calls": [
+            {
+              "from": "OrderService",
+              "to": "GiftCardService",
+              "label": "books the gift card part"
+            }
+          ],
+          "quiet": false
+        },
+        {
+          "from": "k-orders",
+          "to": "k-payments",
+          "label": "Charges the rest",
+          "intent": true,
+          "ends": false,
+          "labels": [
+            "charges the rest"
+          ],
+          "calls": [
+            {
+              "from": "OrderService",
+              "to": "PaymentClient",
+              "label": "charges the rest"
+            }
+          ],
+          "quiet": false
+        },
+        {
+          "from": "k-payments",
+          "to": "s-pay",
+          "label": "Charges the card",
+          "intent": false,
+          "tech": "REST",
+          "ends": true,
+          "labels": [
+            "charges the card"
+          ],
+          "calls": [
+            {
+              "from": "PaymentClient",
+              "to": "Payment API",
+              "label": "charges the card"
+            }
+          ],
+          "quiet": false
+        },
+        {
+          "from": "k-orders",
+          "to": "c-db",
+          "label": "Stores the payment split",
+          "intent": true,
+          "tech": "SQL",
+          "ends": false,
+          "labels": [
+            "stores the payment split"
+          ],
+          "calls": [
+            {
+              "from": "OrderService",
+              "to": "ORDERS",
+              "label": "stores the payment split"
+            }
+          ],
+          "quiet": true
+        }
+      ]
+    },
+    "c-db": {
+      "title": "Components of Shop database",
+      "level": 3,
+      "of": "c-db",
+      "boundary": {
+        "id": "c-db",
+        "name": "Shop database",
+        "tech": "PostgreSQL",
+        "children": [
+          "k-tables"
+        ]
+      },
+      "nodes": [
+        {
+          "id": "k-tables",
+          "c": "c-db",
+          "name": "Order tables",
+          "kind": "component",
+          "tech": "SQL",
+          "desc": "The tables of orders and gift cards.",
+          "icon": "table",
+          "parts": [
+            "giftcards-table",
+            "orders-table",
+            "migration"
+          ],
+          "status": "changed",
+          "stories": [
+            "001",
+            "002"
+          ]
+        },
+        {
+          "id": "c-server",
+          "name": "Shop server",
+          "kind": "container",
+          "system": "s-shop",
+          "tech": "Java",
+          "desc": "Places orders, takes payments and keeps gift cards.",
+          "status": "changed",
+          "stories": [
+            "001",
+            "002",
+            "003"
+          ],
+          "zoom": "c-server"
+        }
+      ],
+      "edges": [
+        {
+          "from": "c-server",
+          "to": "k-tables",
+          "label": "Reads and books the balance · Stores the payment split",
+          "intent": true,
+          "tech": "SQL",
+          "ends": false,
+          "labels": [
+            "reads and books the balance",
+            "stores the payment split"
+          ],
+          "calls": [
+            {
+              "from": "GiftCardService",
+              "to": "GIFT_CARDS",
+              "label": "reads and books the balance"
+            },
+            {
+              "from": "OrderService",
+              "to": "ORDERS",
+              "label": "stores the payment split"
+            }
+          ],
+          "quiet": true
+        }
+      ]
+    }
+  },
+  "build": {
+    "stories": [
+      {
+        "id": "001",
+        "n": 1,
+        "built": "The checkout shows the balance of a gift card.",
+        "different": [
+          {
+            "id": "giftcard-service",
+            "name": "GiftCardService",
+            "path": "shop-server/src/main/java/com/acme/shop/giftcards/GiftCardService.java",
+            "plan": "Reads the balance in one query.",
+            "built": "Reads the balance through `GiftCardCache`.",
+            "why": "The table is read on every checkout."
+          }
+        ],
+        "extra": [
+          {
+            "file": "shop-server/src/main/java/com/acme/shop/giftcards/GiftCardCache.java",
+            "name": "GiftCardCache.java",
+            "built": "Keeps the balances read in the last minute.",
+            "why": "Checkout reads a balance on every key press."
+          }
+        ],
+        "gone": [
+          {
+            "id": "migration",
+            "name": "V2026_11_01__gift_cards.sql",
+            "path": "shop-db/migrations/V2026_11_01__gift_cards.sql",
+            "plan": "Creates the table and its index.",
+            "why": "The table script creates the index too."
+          }
+        ]
+      },
+      {
+        "id": "002",
+        "n": 2,
+        "built": "An order books the gift card part and charges the rest.",
+        "different": [
+          {
+            "id": "orders-table",
+            "name": "ORDERS",
+            "path": "shop-db/tables/orders.sql",
+            "plan": "One column for the gift card part.",
+            "built": "Two columns: the gift card code and its amount.",
+            "why": null
+          }
+        ],
+        "extra": [],
+        "gone": []
+      },
+      {
+        "id": "003",
+        "n": 3,
+        "built": "The order status page shows the gift card part.",
+        "different": [],
+        "extra": [],
+        "gone": []
+      }
+    ],
+    "different": 2,
+    "extra": 1,
+    "gone": 1
+  }
+}

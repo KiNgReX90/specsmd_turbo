@@ -1,0 +1,12 @@
+/* AI-DLC Turbo - Code Scaffold: the details element by element (design-browse.js): the walk under them, to the
+   element or the step before or after it. After the style of the details and the touch sizes it sets apart, before
+   the Maquette look. */
+/* Previous, where the element or the step is, next: two chevrons close around "n of N", as the walk of the steps
+   over the drawing; the count keeps its place in the middle where one of them is missing at an end. It stands under
+   the body of the details, outside what scrolls (design-about.css) */
+.td-walk .td-walkn { grid-column: 2; font-size: 13px; color: var(--td-ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-walk.td-browse { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px; }
+.td-walk.td-browse .td-walkb { width: 36px; min-height: 36px; padding: 0; border-radius: 50%; }
+.td-walk.td-browse .td-walkb.td-prev { justify-self: end; }
+.td-walk.td-browse .td-walkb.td-next { justify-self: start; }
+:is(.td-pv, .td-touch) .td-walk.td-browse .td-walkb { width: 44px; min-height: 44px; }

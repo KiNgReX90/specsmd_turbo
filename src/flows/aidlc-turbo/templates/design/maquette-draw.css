@@ -1,0 +1,155 @@
+/* Maquette, the drawing's view (Code Scaffold, after the build Code): the Code Scaffold as a scale model on the cutting mat. A lane is a plate,
+   a part a block on a plinth in the colour of its module, every control a key. maquette-draw.js adds the
+   plates' edges (mq-lside, mq-pcast), the parts' plinths and shadows (mq-base) and the pointer's light. */
+body.mq {
+  --td-lane-1: #FFFBEA; --td-lane-2: #FFF5EF; --td-lane-3: #FFF2FA;
+  --mq-plate-side: #E0DCEA; --mq-plate-cast: rgb(28 18 48 / .2); --mq-part-cast: rgb(28 18 48 / .34);
+  --mq-ctl: #FFFFFF;
+  --mq-hover: rgb(28 18 48 / .06); --mq-pill-drop: 0 1px 0 rgb(0 0 0 / .14);
+  --mq-gone-pill-line: #8C8C96; --mq-gone-pill-ink: #4A4A55; --mq-only-on: #D700D7;
+}
+
+/* ---------- the mat the model stands on ---------- */
+.mq .td-dz, .mq .td-fs-view {
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--mq-grid-2) 1px, transparent 1px), linear-gradient(90deg, var(--mq-grid-2) 1px, transparent 1px),
+    linear-gradient(var(--mq-grid) 1px, transparent 1px), linear-gradient(90deg, var(--mq-grid) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+}
+.mq .td-dz { border-radius: 14px; box-shadow: inset 0 1px 3px rgb(28 18 48 / .1); }
+.mq .td-lane { stroke: var(--mq-edge); stroke-width: 1; }
+.mq .td-svg .mq-lside { fill: var(--mq-plate-side); stroke: none; }
+.mq .td-svg .mq-pcast { fill: var(--mq-plate-cast); stroke: none; }
+.mq .td-lane-t { font-family: var(--mq-display); font-stretch: 112%; font-weight: 800; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; fill: var(--td-ink-2); }
+
+/* ---------- a part: a block on its plinth ---------- */
+.mq .td-svg .mq-plinth { fill: var(--td-old-line); stroke: var(--td-old-line); stroke-width: 1; }
+.mq .td-svg .mq-mc0 .mq-plinth { fill: var(--td-mc0-line); stroke: var(--mq-plinth-edge, var(--td-mc0-ink)); }
+.mq .td-svg .mq-mc1 .mq-plinth { fill: var(--td-mc1-line); stroke: var(--mq-plinth-edge, var(--td-mc1-ink)); }
+.mq .td-svg .mq-mc2 .mq-plinth { fill: var(--td-mc2-line); stroke: var(--mq-plinth-edge, var(--td-mc2-ink)); }
+.mq .td-svg .mq-mc3 .mq-plinth { fill: var(--td-mc3-line); stroke: var(--mq-plinth-edge, var(--td-mc3-ink)); }
+.mq .td-svg .mq-mc4 .mq-plinth { fill: var(--td-mc4-line); stroke: var(--mq-plinth-edge, var(--td-mc4-ink)); }
+.mq .td-svg .mq-mc5 .mq-plinth { fill: var(--td-mc5-line); stroke: var(--mq-plinth-edge, var(--td-mc5-ink)); }
+.mq .td-svg .mq-cast { fill: var(--mq-part-cast); stroke: none; transform-box: fill-box; transform-origin: 50% 50%; transition: transform 260ms var(--mq-out), opacity 260ms var(--mq-out); }
+.mq .td-svg .td-bs-gone .mq-base { display: none; }
+.mq .td-svg .td-node, .mq .td-svg .td-node + .td-mtag { transition: opacity 200ms var(--td-ease), transform 260ms var(--mq-out); }
+/* picked: the part comes up off its plate, its shadow stays below and spreads. Only the part chosen lifts: a part
+   that jumped under the pointer would slip out from under it and flicker at its edge */
+.mq .td-svg .td-node.td-sel, .mq .td-svg .td-node.td-sel + .td-mtag { transform: translateY(-4px); }
+.mq .td-svg .td-node.td-sel .mq-cast { transform: translateY(4px) scale(1.05); opacity: .62; }
+.mq .td-svg .td-node.td-sel .mq-plinth { fill: var(--mq-sel-side); stroke: var(--orange); }
+/* the part chosen stays whole while another story is picked: dimmed it would be a smear of orange */
+.mq .td-dz.td-focus .td-node.td-sel:not(.td-in), .mq .td-dz.td-focus .td-node.td-sel:not(.td-in) + .td-mtag { opacity: 1; }
+/* a part dimmed (off the step held and not hovered, or out of the story chosen) fades into its plate: a new part
+   first trades its solid violet for paper, as a part that changes; a third of solid violet stays a lilac slab, louder
+   than the parts lit. Its border stays: after the build an added part keeps its dashed green */
+.mq :is(.td-trace .td-node:not(.td-hot, .td-lit), .td-focus .td-node:not(.td-in)).td-st-new:not(.td-sel) .td-fill { fill: var(--td-surface); }
+.mq :is(.td-trace .td-node:not(.td-hot, .td-lit), .td-focus .td-node:not(.td-in)).td-st-new:not(.td-sel) .td-pk-r { fill: var(--td-chip-mod-bg); }
+.mq :is(.td-trace .td-node:not(.td-hot, .td-lit), .td-focus .td-node:not(.td-in)).td-st-new:not(.td-sel) .td-pk-t { fill: var(--td-accent); }
+.mq :is(.td-trace .td-node:not(.td-hot, .td-lit), .td-focus .td-node:not(.td-in)).td-st-new:not(.td-sel) .td-nm { fill: var(--td-ink); }
+.mq :is(.td-trace .td-node:not(.td-hot, .td-lit), .td-focus .td-node:not(.td-in)).td-st-new:not(.td-sel) .td-sb { fill: var(--td-ink-2); }
+/* a part the playing steps call: it hops on its plate */
+@keyframes mq-hop { 0% { transform: none; } 32% { transform: translateY(-8px); } 100% { transform: none; } }
+.mq .td-svg .td-node.td-pulse { animation: mq-hop 760ms var(--mq-out); }
+.mq .td-svg .td-node.td-pulse + .td-mtag { animation: mq-hop 760ms var(--mq-out); }
+.mq .td-dot-c { fill: var(--yellow); stroke: var(--orange); stroke-width: 3; }
+.mq .td-dot-h { fill: var(--orange); opacity: .4; }
+/* the plates of the labels and the coins of the steps */
+.mq .td-svg .mq-pside { fill: var(--td-line-strong); stroke: none; }
+.mq .td-svg .td-plate { stroke: var(--mq-edge); }
+.mq .td-svg .td-step .mq-cside { fill: var(--mq-coin); stroke: none; }
+.mq .td-svg .td-elab-q .td-step .mq-cside { fill: var(--td-edge-q); }
+.mq .td-svg.td-trace .td-elab.td-hot .td-step .mq-cside { fill: var(--mq-coin-on); }
+.mq .td-svg .td-elab { transform-box: fill-box; transform-origin: 50% 50%; }
+.mq .td-svg .td-mtag .td-mt-r { filter: none; }
+
+/* ---------- the keys over and beside the drawing ---------- */
+/* every key: a side and a drop; weak on purpose (:where), so a key with a look of its own keeps it */
+.mq .td-btn:where(:not(.td-steps-rail, .td-dpane-rail, .td-side-x, .td-zb, .td-play, .td-pv-open)) {
+  border-color: var(--mq-edge);
+  box-shadow: 0 2px 0 var(--mq-side), 0 3px 0 var(--mq-side-2), 0 8px 12px -8px var(--mq-drop);
+  transition: transform 180ms var(--mq-out), box-shadow 180ms var(--mq-out), background-color 160ms var(--mq-out), border-color 160ms var(--mq-out), filter 160ms;
+}
+.mq .td-btn:where(:not(.td-steps-rail, .td-dpane-rail, .td-side-x, .td-zb, .td-play, .td-pv-open)):not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 2px 0 var(--mq-side), 0 3px 0 var(--mq-side-2), 0 14px 18px -10px var(--mq-drop); }
+.mq .td-btn:where(:not(.td-steps-rail, .td-dpane-rail, .td-side-x, .td-zb, .td-play, .td-pv-open)):not(:disabled):active { transform: translateY(1px); box-shadow: 0 1px 0 var(--mq-side), 0 1px 0 var(--mq-side-2); transition-duration: 70ms; }
+.mq .td-btn.td-play, .mq :is(.td-small, .td-tiny) .td-ctl-l .td-fsb, .mq :is(.td-small, .td-tiny) .td-tbar .td-fsb, .mq .td-pv .td-pv-open {
+  border-color: #D9603A; background: linear-gradient(180deg, #FFAF5F, var(--orange)); color: #1C1230;
+  box-shadow: 0 2px 0 var(--mq-key-on-side), 0 3px 0 var(--mq-key-on-side-2), 0 10px 16px -8px var(--mq-key-drop) !important;
+  transition: transform 180ms var(--mq-out), filter 160ms;
+}
+.mq .td-btn.td-play:hover, .mq :is(.td-small, .td-tiny) :is(.td-ctl-l, .td-tbar) .td-fsb:hover { filter: brightness(1.05); }
+.mq .td-btn.td-play.td-playing { transform: translateY(2px); box-shadow: 0 0 0 var(--mq-key-on-side), 0 1px 0 var(--mq-key-on-side-2), 0 2px 6px -2px var(--mq-key-drop), inset 0 2px 4px rgb(0 0 0 / .2) !important; }
+.mq .td-ctl .td-steps-nav, .mq .td-ctl-l .td-fsb, .mq .td-ctl-l .td-only {
+  border-color: var(--mq-edge); background: var(--mq-ctl); color: var(--td-ink);
+  box-shadow: inset 0 1px 0 var(--mq-hi), 0 3px 0 var(--mq-side), 0 4px 0 var(--mq-side-2), 0 16px 26px -14px var(--mq-drop);
+}
+.mq .td-ctl .td-steps-nav .td-btn:not(.td-play) { box-shadow: none; border-color: transparent; }
+.mq .td-ctl .td-steps-nav .td-btn:not(.td-play):not(:disabled):hover { background: var(--mq-hover); box-shadow: none; transform: none; }
+.mq .td-ctl .td-steps-nav .td-btn:not(.td-play):not(:disabled):active { box-shadow: none; }
+/* "Only new and changed" on: a magenta track with a white knob */
+.mq .td-only[aria-checked="true"] .td-only-k { border-color: var(--mq-only-on); background: var(--mq-only-on); }
+.mq .td-only[aria-checked="true"] .td-only-k::after { background: #FFFFFF; }
+/* a key that is on (Legend on full screen, the legend button): the orange key pressed in, as a chosen story chip */
+.mq .td-sideb[aria-pressed="true"], .mq .td-lgb[aria-expanded="true"],
+.mq .td-sideb[aria-pressed="true"]:hover, .mq .td-lgb[aria-expanded="true"]:hover {
+  transform: translateY(1px); border-color: var(--mq-key-on-side); background: var(--mq-key-on); color: var(--mq-key-on-ink);
+  box-shadow: 0 1px 0 var(--mq-key-on-side), 0 2px 0 var(--mq-key-on-side-2);
+}
+.mq .td-steps-at { font-family: var(--mq-display); font-stretch: 104%; font-weight: 700; }
+.mq .td-steps-keys kbd { box-shadow: 0 2px 0 var(--mq-side-2); border-bottom-width: 1px; }
+.mq .td-zoom { border-color: var(--mq-edge); box-shadow: 0 2px 0 var(--mq-side), 0 3px 0 var(--mq-side-2); }
+.mq .td-chip { position: relative; isolation: isolate; border-color: var(--mq-edge); background-color: var(--td-surface); box-shadow: 0 2px 0 var(--mq-side), 0 3px 0 var(--mq-side-2);
+  transition: transform 180ms var(--mq-out), box-shadow 180ms var(--mq-out), background-color 160ms, border-color 160ms; }
+.mq .td-chip:hover { transform: translateY(-2px); box-shadow: 0 2px 0 var(--mq-side), 0 3px 0 var(--mq-side-2), 0 12px 16px -10px var(--mq-drop); }
+.mq .td-chip.td-on, .mq .td-chip.td-on:hover { transform: translateY(1px); border-color: var(--mq-key-on-side); background-color: var(--mq-key-on); color: var(--mq-key-on-ink); box-shadow: 0 1px 0 var(--mq-key-on-side), 0 2px 0 var(--mq-key-on-side-2); }
+.mq .td-chip.td-on .td-badge { background: var(--purple); color: var(--yellow); }
+.mq .td-badge { box-shadow: 0 2px 0 var(--mq-coin); }
+/* the chips on the board (before the build) */
+.mq .mast-chips .td-chip { background-color: rgb(255 255 255 / .07); border-color: rgb(255 255 255 / .14); box-shadow: 0 2px 0 rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .08); }
+.mq .mast-chips .td-chip:hover { background-color: rgb(255 255 255 / .14); box-shadow: 0 2px 0 rgb(0 0 0 / .35), 0 12px 16px -10px rgb(0 0 0 / .5); }
+.mq .mast-chips .td-chip.td-on, .mq .mast-chips .td-chip.td-on:hover { background-color: var(--mq-key-on); border-color: var(--mq-key-on-side); color: var(--mq-key-on-ink); box-shadow: 0 1px 0 var(--mq-key-on-side-2); }
+.mq .mast-chips .td-chip.td-on .td-badge { background: var(--purple); color: var(--yellow); }
+.mq .mast-back { background-color: rgb(255 255 255 / .07); border-color: rgb(255 255 255 / .14); box-shadow: 0 2px 0 rgb(0 0 0 / .35), inset 0 1px 0 rgb(255 255 255 / .08); transition: background-color 160ms var(--mq-out), box-shadow 160ms var(--mq-out), transform 160ms var(--mq-out); }
+.mq .mast-back:hover { background-color: rgb(255 255 255 / .14); box-shadow: 0 2px 0 rgb(0 0 0 / .35), 0 12px 16px -10px rgb(0 0 0 / .5); }
+.mq .mast-back:active { transform: translateY(1px); box-shadow: 0 1px 0 rgb(0 0 0 / .35); }
+.mq .mast-back-t { font-family: var(--mq-display); font-stretch: 104%; font-weight: 700; letter-spacing: .005em; }
+
+/* ---------- the legend beside the drawing, and the details panel at its other side ---------- */
+.mq :is(.td-steps, .td-dpane) { border-color: var(--mq-edge); box-shadow: inset 0 1px 0 var(--mq-hi), 0 4px 0 var(--mq-side), 0 5px 0 var(--mq-side-2), 0 22px 30px -22px var(--mq-drop); }
+.mq :is(.td-steps-t, .td-dpane-t) { font-family: var(--mq-display); font-stretch: 110%; font-weight: 750; }
+.mq .td-sw-mods .td-mc0 { background: var(--td-mc0-line); }
+.mq .td-sw-mods .td-mc1 { background: var(--td-mc1-line); }
+.mq .td-sw-mods .td-mc2 { background: var(--td-mc2-line); }
+
+/* ---------- details, the bar, the notes ---------- */
+.mq .td-detail { border-color: var(--mq-edge); background: var(--td-surface); box-shadow: inset 0 1px 0 var(--mq-hi), 0 4px 0 var(--mq-side), 0 5px 0 var(--mq-side-2), 0 22px 30px -22px var(--mq-drop); }
+.mq .td-dhead h3 { font-family: var(--mq-display); font-weight: 600; letter-spacing: -.005em; }
+.mq .td-pill { box-shadow: var(--mq-pill-drop); }
+.mq .td-pill.td-changed { box-shadow: inset 0 0 0 1.5px var(--td-accent), var(--mq-pill-drop); }
+.mq .td-pill.td-built { box-shadow: inset 0 0 0 1.5px var(--td-built-line), var(--mq-pill-drop); }
+.mq .td-pill.td-open { box-shadow: inset 0 0 0 1.5px var(--td-zk-red), var(--mq-pill-drop); }
+.mq .td-pill.td-built-added { box-shadow: inset 0 0 0 1.5px var(--td-add-line), var(--mq-pill-drop); }
+/* drawn but not built: an empty dashed pill, so it never reads as "exists" */
+.mq .td-pill.td-built-gone { border: 1.5px dashed var(--mq-gone-pill-line); padding: .5px 8.5px; background: transparent; color: var(--mq-gone-pill-ink); box-shadow: none; }
+/* the card of a deviation in the details keeps its calm tint of design-about.css: no raised box of its own */
+.mq .td-tbar { border-color: var(--mq-edge); box-shadow: inset 0 1px 0 var(--mq-hi), 0 3px 0 var(--mq-side), 0 4px 0 var(--mq-side-2), 0 18px 26px -20px var(--mq-drop); }
+.mq .td-sb-t { font-family: var(--mq-display); font-stretch: 106%; font-weight: 750; }
+.mq .td-steer { border-color: var(--line-strong); }
+
+/* ---------- full screen: the model on the whole mat ---------- */
+.mq .td-fs-top { background: var(--td-surface); border-bottom-color: var(--mq-edge); box-shadow: 0 3px 0 var(--mq-side), 0 14px 24px -16px var(--mq-drop); position: relative; z-index: 3; }
+.mq .td-fs-title { font-family: var(--mq-display); font-stretch: 110%; font-weight: 800; }
+.mq .td-fs-side { background: var(--td-surface); }
+.mq .td-fs .td-detail { box-shadow: 0 4px 0 var(--mq-side), 0 5px 0 var(--mq-side-2), 0 30px 46px -20px var(--mq-drop); }
+.mq .td-fs .td-fdet { border-color: var(--mq-edge); box-shadow: 0 4px 0 var(--mq-side), 0 5px 0 var(--mq-side-2), 0 30px 46px -20px var(--mq-drop); }
+.mq .td-fs .td-fdet > .td-detail { box-shadow: none; }
+.mq .td-fs-tip { box-shadow: 0 2px 0 var(--mq-side), 0 10px 18px -12px var(--mq-drop); }
+/* the preview on a narrow page: the model under a pane, one key to open it */
+.mq .td-pv .td-dz { border: 1px solid var(--mq-edge); box-shadow: inset 0 2px 6px rgb(28 18 48 / .12), 0 3px 0 var(--mq-side); }
+.mq .td-pv .td-pv-open { font-family: var(--mq-display); font-stretch: 106%; font-weight: 800; }
+@media (hover: none) {
+  .mq .td-chip:hover { transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mq .td-svg .td-node.td-pulse, .mq .td-svg .td-node.td-pulse + .td-mtag { animation: none; }
+}

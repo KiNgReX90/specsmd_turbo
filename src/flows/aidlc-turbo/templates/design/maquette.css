@@ -1,0 +1,190 @@
+/* AI-DLC Turbo overview, "Maquette": the change as a scale model being put together.
+   The page is the cutting mat, the masthead the base board, every section a solid slab with an edge
+   and a shadow, every control a key that lifts under the pointer and presses in. Everything is scoped
+   to body.mq, the overview's own page: any other page that inlines these files keeps its own look.
+   Files: maquette.css (material, page, keys), maquette-func.css (the functional view), maquette-draw.css (the
+   drawing), maquette-built.css (after the build), maquette-motion.css (motion). */
+
+
+:root {
+  --mq-display: "Archivo", "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mq-out: cubic-bezier(.16, 1, .3, 1);
+  --mq-snap: cubic-bezier(.22, 1, .36, 1);
+}
+body.mq {
+  --bg: #FFFFFF;
+  --mq-grid: rgb(28 18 48 / .035); --mq-grid-2: rgb(28 18 48 / .06);
+  --mq-edge: rgb(28 18 48 / .11); --mq-hi: rgb(255 255 255 / .9);
+  --mq-side: #E3E1EE; --mq-side-2: #CFCCE0;
+  --mq-drop: rgb(28 18 48 / .30); --mq-drop-2: rgb(28 18 48 / .10);
+  --mast: #1C1230; --mq-board-side: #120A20; --mq-board-drop: rgb(18 10 32 / .42);
+  --mq-coin: #120A20; --mq-coin-on: #D9603A;
+  --mq-key-on: #FF875F; --mq-key-on-side: #D9603A; --mq-key-on-ink: #1C1230;
+  --mq-ink-mat: #4C4760;
+  --mq-led: #34D17F;
+  /* a lit piece: its side and its glow, and the side of a chosen (selection-coloured) piece */
+  --mq-on-side: #FFC2A8; --mq-sel-side: #FFAA88;
+  --mq-on-cast: rgb(255 135 95 / .38); --mq-on-drop: rgb(255 135 95 / .5);
+  --mq-key-on-side-2: #A8441F; --mq-key-drop: rgb(217 96 58 / .55);
+  --mq-k-d-line: transparent;
+}
+
+/* the depth of a piece, in three heights: at rest, lifted under the pointer, pressed in */
+body.mq {
+  --mq-rest: 0 2px 0 var(--mq-side), 0 3px 0 var(--mq-side-2), 0 8px 12px -8px var(--mq-drop);
+  --mq-up: 0 2px 0 var(--mq-side), 0 3px 0 var(--mq-side-2), 0 14px 20px -10px var(--mq-drop);
+  --mq-down: 0 1px 0 var(--mq-side), 0 1px 0 var(--mq-side-2), 0 2px 4px -2px var(--mq-drop);
+  --mq-slab: inset 0 1px 0 var(--mq-hi), 0 5px 0 var(--mq-side), 0 6px 0 var(--mq-side-2), 0 28px 44px -26px var(--mq-drop), 0 10px 16px -12px var(--mq-drop-2);
+}
+
+/* ---------- the cutting mat ---------- */
+body.mq {
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--mq-grid-2) 1px, transparent 1px), linear-gradient(90deg, var(--mq-grid-2) 1px, transparent 1px),
+    linear-gradient(var(--mq-grid) 1px, transparent 1px), linear-gradient(90deg, var(--mq-grid) 1px, transparent 1px);
+  background-size: 120px 120px, 120px 120px, 24px 24px, 24px 24px;
+  background-position: -1px -1px;
+}
+
+/* ---------- the base board: the masthead, the night sky the logo glows in, a low sun on the horizon ---------- */
+.mq .mast {
+  background-color: var(--mast);
+  background-image: radial-gradient(rgb(255 255 255 / .075) 1px, transparent 1.6px),
+    radial-gradient(55% 150% at 90% 140%, rgb(255 95 175 / .34), rgb(215 0 215 / .14) 45%, transparent 72%),
+    linear-gradient(180deg, #120A20, var(--mast));
+  background-size: 24px 24px, 100% 100%, 100% 100%;
+  background-position: 11px 11px, 0 0, 0 0;
+  background-repeat: repeat, no-repeat, no-repeat;
+  box-shadow: 0 10px 0 var(--mq-board-side), 0 34px 44px -22px var(--mq-board-drop);
+  margin-bottom: 10px;
+}
+.mq .logo { height: 30px; filter: drop-shadow(0 2px 0 rgb(0 0 0 / .28)); }
+/* the phase as a lit diode on the model */
+.mq .phase::before { width: 9px; height: 9px; background: radial-gradient(circle at 35% 35%, #D4FBE6, var(--mq-led) 55%, #12814A);
+  box-shadow: 0 0 0 3px rgb(52 209 127 / .18), 0 0 14px 2px rgb(52 209 127 / .55); }
+.mq .mast h1 {
+  max-width: none;
+  font-family: var(--mq-display); font-weight: 800; font-stretch: 108%;
+  line-height: 1.06; letter-spacing: -.022em;
+  text-shadow: 0 2px 0 rgb(0 0 0 / .22);
+  text-wrap: balance;
+}
+.mq .mq-w { display: inline-block; }
+.mq .summary { color: var(--on-dark-2); }
+
+/* ---------- switches: a track sunk in the board, a raised knob that slides to the choice ---------- */
+.mq .views {
+  position: relative; isolation: isolate;
+  background: rgb(0 0 0 / .22);
+  border-color: rgb(255 255 255 / .1);
+  box-shadow: inset 0 2px 5px rgb(0 0 0 / .35), 0 1px 0 rgb(255 255 255 / .08);
+}
+.mq .views button { position: relative; z-index: 1; transition: color 220ms var(--mq-out), transform 160ms var(--mq-out); }
+.mq .views button:active { transform: translateY(1px); }
+.mq .mq-knob {
+  position: absolute; z-index: 0; pointer-events: none;
+  border-radius: 999px; background: linear-gradient(180deg, #FFFFFF, #F3F2F8);
+  box-shadow: inset 0 -3px 0 #D9D7E6, inset 0 1px 0 #FFFFFF;
+  transition: clip-path 420ms var(--mq-out);
+}
+.mq .views.mq-has-knob button:is([aria-pressed="true"], [aria-selected="true"]) { background: transparent; color: var(--purple); }
+.mq .views button { font-family: var(--mq-display); font-stretch: 104%; font-weight: 700; letter-spacing: .005em; }
+/* Details and ? on the masthead (design-switches.js): sunk in the board as the switches, what is on raised as their knob */
+.mq :is(.dswitch, .help-btn) { background: rgb(0 0 0 / .22); border-color: rgb(255 255 255 / .1); box-shadow: inset 0 2px 5px rgb(0 0 0 / .35), 0 1px 0 rgb(255 255 255 / .08); }
+.mq :is(.dswitch, .help-btn):hover { border-color: rgb(255 255 255 / .3); }
+.mq .dswitch-k { background: rgb(0 0 0 / .3); box-shadow: inset 0 1px 3px rgb(0 0 0 / .4); }
+.mq .dswitch[aria-checked="true"] .dswitch-k, .mq .help-btn[aria-pressed="true"] {
+  background: linear-gradient(180deg, #FFFFFF, #F3F2F8); box-shadow: inset 0 -3px 0 #D9D7E6, inset 0 1px 0 #FFFFFF; color: var(--purple); }
+.mq .views { padding: 5px; }
+
+/* ---------- slabs: the sections ---------- */
+.mq .panel { border: 1px solid var(--mq-edge); border-radius: 16px; box-shadow: var(--mq-slab); }
+.mq .flowpanel, .mq.view-tech .td-panel { box-shadow: var(--mq-slab); }
+.mq section + section { margin-top: 40px; }
+.mq .sec-head { gap: 8px; margin-bottom: 24px; }
+.mq .sec-head h2 {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--mq-display); font-weight: 750; font-stretch: 110%; font-size: 1.38rem; letter-spacing: -.012em;
+}
+/* the mark of a section: a block of the model, in the colours of the logo's sun */
+.mq .sec-head h2::before, .mq .scope-row h2::before {
+  content: ""; flex: none; width: 20px; height: 22px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 22'%3E%3Cpath d='M10 1 19 6 10 11 1 6z' fill='%23FFD75F'/%3E%3Cpath d='M1 6 10 11V21L1 16z' fill='%23FF875F'/%3E%3Cpath d='M19 6 10 11V21L19 16z' fill='%23D9603A'/%3E%3Cpath d='M10 1 19 6 10 11 1 6z' fill='none' stroke='%23FFF6C2' stroke-width='.8' stroke-linejoin='round' opacity='.7'/%3E%3C/svg%3E") center / contain no-repeat;
+  filter: drop-shadow(0 3px 2px rgb(28 18 48 / .25));
+}
+.mq .explain { color: var(--ink); }
+
+/* ---------- keys: the story chips and every small control ---------- */
+.mq :is(.schip, .ent-chip, .code-item, .ib) {
+  position: relative; isolation: isolate;
+  border-color: var(--mq-edge); background-color: var(--surface);
+  box-shadow: var(--mq-rest);
+  transition: transform 200ms var(--mq-out), box-shadow 200ms var(--mq-out), background-color 200ms var(--mq-out), border-color 200ms var(--mq-out), color 200ms var(--mq-out);
+}
+.mq .schip { padding: 6px 15px 6px 6px; font-weight: 600; color: var(--ink); }
+.mq :is(.schip, .ent-chip, .code-item, .ib):hover { transform: translateY(-2px); box-shadow: var(--mq-up); border-color: var(--mq-edge); background-color: var(--surface); }
+.mq :is(.schip, .ent-chip, .code-item, .ib):active { transform: translateY(1px); box-shadow: var(--mq-down); transition-duration: 70ms; }
+.mq .ib:disabled { transform: none; box-shadow: none; }
+/* the chosen story: the key latched in, orange */
+.mq .schip.on, .mq .schip.on:hover { background-color: var(--mq-key-on); border-color: var(--mq-key-on-side); color: var(--mq-key-on-ink);
+  transform: translateY(1px); box-shadow: 0 1px 0 var(--mq-key-on-side), 0 2px 0 var(--mq-key-on-side-2), 0 6px 10px -6px var(--mq-key-drop); }
+.mq .schip.on .badge { background: var(--purple); color: var(--yellow); box-shadow: 0 2px 0 #0B0614; }
+
+
+/* ---------- coins: the story numbers ---------- */
+.mq .badge { box-shadow: 0 2px 0 var(--mq-coin); background-image: linear-gradient(160deg, rgb(255 255 255 / .16), transparent 55%); }
+.mq .badge.on, .mq :is(.ftl-b, .ftl-wl, .sl-head .sl-hn).on .badge { box-shadow: 0 2px 0 var(--mq-coin-on); }
+.mq .badge.lg { box-shadow: 0 3px 0 var(--mq-coin-on), 0 10px 16px -8px var(--mq-key-drop); }
+
+/* ---------- out of scope: the pieces that stay in the box ---------- */
+.mq .scope-row { gap: 12px 20px; padding: 6px 0 0; }
+.mq .scope-row h2 { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mq-display); font-stretch: 110%; font-size: 15px; font-weight: 750; color: var(--mq-ink-mat); }
+.mq .scope-row h2::before { width: 16px; height: 18px; filter: grayscale(1) opacity(.55); }
+.mq .scope-row ul { gap: 10px; }
+.mq .scope-row li {
+  position: relative; isolation: isolate;
+  border: 1.5px dashed color-mix(in srgb, var(--violet) 45%, var(--line-strong)); border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  color: var(--ink-2); font-weight: 500;
+  transition: transform 200ms var(--mq-out), box-shadow 200ms var(--mq-out), border-color 200ms var(--mq-out), background-color 200ms var(--mq-out);
+}
+.mq .scope-row li:hover { transform: translateY(-2px); border-style: solid; border-color: var(--mq-edge); background: var(--surface); box-shadow: var(--mq-up); }
+.mq footer { color: var(--mq-ink-mat); }
+
+/* ---------- the drawer: a slab that slides in from the right ---------- */
+.mq .drawer { border-left: 1px solid var(--mq-edge); box-shadow: -6px 0 0 var(--mq-side), -7px 0 0 var(--mq-side-2), -40px 0 60px -30px var(--mq-drop); transition: transform 420ms var(--mq-out); }
+.mq .dr-head { background: linear-gradient(180deg, var(--tint-2), var(--surface)); }
+.mq .dr-t h3 { font-family: var(--mq-display); font-stretch: 106%; font-weight: 750; letter-spacing: -.01em; }
+.mq .dr-h { font-family: var(--mq-display); font-stretch: 112%; font-size: 12px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--heading); }
+.mq .gwt { background: var(--surface); border: 1px solid var(--mq-edge); box-shadow: var(--mq-rest); }
+.mq .k { box-shadow: 0 1px 0 rgb(28 18 48 / .18); }
+/* the then-word: its fill, with an outline token (none on the white page) */
+.mq .k-d { box-shadow: inset 0 0 0 1px var(--mq-k-d-line), 0 1px 0 rgb(28 18 48 / .18); }
+.mq :is(.ent, .tc) { background: var(--surface); border-color: var(--mq-edge); box-shadow: var(--mq-rest); }
+.mq .ent.hit { background: var(--sel); border-color: var(--sel-line); }
+.mq .scrim { background: rgb(18 10 32 / .45); }
+
+/* ---------- the tooltip: a small purple plate ---------- */
+.mq .tip { border: 1px solid rgb(255 255 255 / .08); box-shadow: 0 3px 0 #120A20, 0 16px 30px -12px rgb(0 0 0 / .55); transition: opacity 160ms var(--mq-out), transform 220ms var(--mq-out); transform: translateY(6px); }
+.mq .tip.show { transform: none; }
+
+/* ---------- a phone ---------- */
+@media (max-width: 760px) {
+  .mq .panel { border-radius: 14px; }
+  .mq .sec-head h2 { font-size: 1.25rem; font-stretch: 104%; gap: 10px; }
+  .mq .scope-row { padding: 22px 16px 8px; border: 1px solid var(--mq-edge); border-radius: 14px; background: var(--surface); box-shadow: var(--mq-slab); }
+  .mq .scope-row h2 { font-size: 1.25rem; color: var(--heading); }
+  .mq .scope-row h2::before { width: 20px; height: 22px; filter: drop-shadow(0 3px 2px rgb(28 18 48 / .25)); }
+  .mq .scope-row li { border: 0; border-radius: 0; background: none; box-shadow: none; }
+  .mq .scope-row li + li { border-top: 1px solid var(--line); }
+  .mq .scope-row li:hover { transform: none; box-shadow: none; }
+  .mq .drawer { border-radius: 0; box-shadow: none; }
+}
+@media (hover: none) {
+  .mq :is(.schip, .ent-chip, .code-item, .ib, .scope-row li):hover { transform: none; box-shadow: var(--mq-rest); }
+  .mq .schip.on:hover { transform: translateY(1px); }
+}
+/* a finger: the story chips on the masthead (styled in design.css) are as high as every other tap target */
+@media (pointer: coarse) {
+  .mq .mast-chips .td-chip { min-height: 44px; }
+}

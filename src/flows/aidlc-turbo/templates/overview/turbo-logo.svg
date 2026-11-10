@@ -1,0 +1,21 @@
+<svg class="logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 32" width="150" height="32" role="img" aria-label="AI-DLC Turbo">
+  <defs>
+    <linearGradient id="tb-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFF5F"/><stop offset=".28" stop-color="#FFD75F"/><stop offset=".46" stop-color="#FFAF5F"/>
+      <stop offset=".64" stop-color="#FF875F"/><stop offset=".82" stop-color="#FF5FAF"/><stop offset="1" stop-color="#D700D7"/>
+    </linearGradient>
+    <linearGradient id="tb-word" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset=".3" stop-color="#D7D7FF"/><stop offset=".55" stop-color="#FFAFFF"/>
+      <stop offset=".8" stop-color="#FF5FFF"/><stop offset="1" stop-color="#FF00FF"/>
+    </linearGradient>
+    <mask id="tb-slits">
+      <rect width="32" height="32" fill="#fff"/>
+      <rect y="17" width="32" height="1.2" fill="#000"/><rect y="21.2" width="32" height="1.7" fill="#000"/><rect y="25.6" width="32" height="2.2" fill="#000"/>
+    </mask>
+    <clipPath id="tb-horizon"><rect width="32" height="30"/></clipPath>
+  </defs>
+  <g clip-path="url(#tb-horizon)" mask="url(#tb-slits)"><circle cx="15" cy="19" r="13" fill="url(#tb-sun)"/></g>
+  <text x="36" y="10" fill="#D7FFFF" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="7.6" font-weight="700" letter-spacing="2.4">A I - D L C</text>
+  <text x="34" y="29.5" fill="url(#tb-word)" font-family="Archivo, 'DM Sans', system-ui, sans-serif" font-size="20" font-weight="800" font-style="italic" letter-spacing=".5" transform="skewX(-8) translate(4 0)">TURBO</text>
+  <text x="140" y="7" fill="#FFFFFF" font-size="7">✦</text>
+</svg>

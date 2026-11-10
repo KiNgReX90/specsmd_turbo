@@ -1,0 +1,106 @@
+# The gift card intent of Acme Shop, an invented webshop, as plan writes it into record.yaml: the stories with
+# their plain texts, the Code Scaffold (technical_design.drawing) and the C4 model (technical_design.c4). A
+# customer pays part of an order with a gift card, and the order status page shows that part. The paths are
+# Acme Shop's, not files on disk. The v5 tests build the page model from it; built.json is that model after the
+# build, with the merge facts and the deviations of the build added.
+
+intent:
+  slug: gift-cards
+  title: Pay with a gift card
+  plain: >-
+    A customer can pay part of an order with an Acme Shop gift card. At checkout the shop shows the balance of
+    the card and books the amount; the rest goes to the payment provider. The order status page shows how much
+    the gift card paid.
+
+stories:
+  - id: "001"
+    slug: gift-card-balance
+    title: Check the balance of a gift card
+    short: Gift card balance
+    plain: At checkout the customer enters a gift card code and sees its balance.
+    drawing:
+      summary: The gift card field, its controller and the new table.
+      builds: { giftcard-field: adds the field, giftcard-controller: answers the balance, giftcard-service: reads the balance, giftcards-table: holds every card, migration: creates the table }
+      uses: [checkout-page]
+  - id: "002"
+    slug: pay-with-gift-card
+    title: Pay part of an order with a gift card
+    short: Pay with gift card
+    plain: The order books the gift card part and charges only the rest to the payment provider.
+    drawing:
+      summary: The order service splits the payment.
+      builds: { checkout-page: sends the gift card along, order-service: splits the payment, giftcard-service: books the amount, orders-table: stores the split }
+      uses: [payment-client, payment-api]
+  - id: "003"
+    slug: gift-card-on-order-status
+    title: Show the gift card on the order status page
+    short: Gift card on status
+    plain: The order status page shows how much of the order the gift card paid.
+    drawing:
+      summary: The status page reads the split.
+      builds: { status-page: shows the gift card part, order-status-api: returns the split }
+      uses: [order-service]
+
+technical_design:
+  drawing:
+    summary: A gift card field at checkout, a gift card service on the server, a new table, and the order status page.
+    modules:
+      - { id: ui, name: shop-ui, status: changed, what: The web components of the shop., path: shop-ui }
+      - { id: server, name: shop-server, status: changed, what: The server of the shop., path: shop-server }
+      - { id: db, name: shop-db, status: changed, what: The migrations of the shop database., path: shop-db }
+      - { id: pay, name: payment-provider, status: existing, repo: payments, what: The payment provider's public API., path: payment-provider }
+    parts:
+      - { id: checkout-page, name: shop-checkout-page, module: ui, layer: screen, status: changed, kind: web component, sub: the checkout, what: The checkout page of the shop., path: shop-ui/checkout/shop-checkout-page.js, lines: 1-120 }
+      - { id: giftcard-field, name: shop-giftcard-field, module: ui, layer: screen, status: new, kind: web component, sub: code and balance, what: The field where the customer enters a gift card code and sees its balance., path: shop-ui/checkout/shop-giftcard-field.js }
+      - { id: status-page, name: shop-order-status-page, module: ui, layer: screen, status: changed, kind: web component, sub: the order status, what: The page that shows the status of an order., path: shop-ui/orders/shop-order-status-page.js, lines: 1-90 }
+      - { id: giftcard-controller, name: GiftCardController, module: server, layer: server, status: new, kind: class, sub: the balance endpoint, what: Answers the balance of a gift card code., path: shop-server/src/main/java/com/acme/shop/giftcards/GiftCardController.java }
+      - { id: giftcard-service, name: GiftCardService, module: server, layer: server, status: new, kind: class, sub: balance and booking, what: Reads the balance of a gift card and books an amount on it., path: shop-server/src/main/java/com/acme/shop/giftcards/GiftCardService.java }
+      - { id: giftcard-test, name: GiftCardServiceTest, module: server, status: new, kind: class, near: giftcard-service, path: shop-server/src/test/java/com/acme/shop/giftcards/GiftCardServiceTest.java }
+      - { id: order-service, name: OrderService, module: server, layer: server, status: changed, kind: class, sub: places an order, what: Places an order and takes the payment., path: shop-server/src/main/java/com/acme/shop/orders/OrderService.java, lines: 40-210 }
+      - { id: order-status-api, name: OrderStatusResource, module: server, layer: server, status: changed, kind: endpoint, sub: the status of an order, what: Returns the status of an order to the status page., path: shop-server/src/main/java/com/acme/shop/orders/OrderStatusResource.java, lines: 1-80 }
+      - { id: payment-client, name: PaymentClient, module: server, layer: server, status: existing, kind: class, sub: talks to the provider, what: Charges an amount at the payment provider., path: shop-server/src/main/java/com/acme/shop/payments/PaymentClient.java, lines: 1-140 }
+      - { id: giftcards-table, name: GIFT_CARDS, module: db, layer: database, status: new, kind: table, sub: every gift card, what: Holds every gift card with its code and balance., path: shop-db/tables/gift_cards.sql }
+      - { id: orders-table, name: ORDERS, module: db, layer: database, status: changed, kind: table, sub: every order, what: Holds every order; gets the gift card part of the payment., path: shop-db/tables/orders.sql, lines: 1-60 }
+      - { id: migration, name: V2026_11_01__gift_cards.sql, module: db, layer: database, status: new, kind: migration, sub: creates GIFT_CARDS, what: Creates the gift card table and its index., path: shop-db/migrations/V2026_11_01__gift_cards.sql }
+      - { id: payment-api, name: Payment API, module: pay, layer: external, status: existing, kind: endpoint, sub: charges a card, what: The payment provider's endpoint that charges a card., path: payment-provider/api/charges, lines: 1-40 }
+    links:
+      - { from: checkout-page, to: giftcard-field, label: shows the gift card field, step: The checkout shows the gift card field. }
+      - { from: giftcard-field, to: giftcard-controller, label: asks the balance, step: The field asks the server for the balance., code: POST /giftcards/balance }
+      - { from: giftcard-controller, to: giftcard-service, label: reads the balance, step: The controller reads the balance. }
+      - { from: giftcard-service, to: giftcards-table, label: reads and books the balance, step: The service reads and books the balance. }
+      - { from: checkout-page, to: order-service, label: places the order, step: The checkout places the order with the gift card., code: POST /orders }
+      - { from: order-service, to: giftcard-service, label: books the gift card part, step: The order books the gift card part. }
+      - { from: order-service, to: payment-client, label: charges the rest, step: The order charges the rest. }
+      - { from: payment-client, to: payment-api, label: charges the card, step: The client charges the card at the provider. }
+      - { from: order-service, to: orders-table, label: stores the payment split, step: The order stores how it was paid. }
+      - { from: status-page, to: order-status-api, label: reads the status, step: The status page reads the order., code: "GET /orders/:id/status" }
+      - { from: order-status-api, to: order-service, label: reads the order, step: The endpoint reads the order with its split. }
+  c4:
+    persons:
+      - { id: p-customer, name: Customer, desc: Buys in the shop and pays with a card or a gift card. }
+      - { id: p-support, name: Support agent, desc: Answers questions about orders. }
+    systems:
+      - { id: s-shop, name: Acme Shop, tech: Java and web components, desc: The webshop where customers order and pay. }
+      - { id: s-pay, name: Payment provider, ext: true, tech: REST, desc: Charges cards for the shop. }
+      - { id: s-mail, name: Mail service, ext: true, desc: Sends the receipts. }
+    containers:
+      - { id: c-web, name: Shop web app, system: s-shop, tech: Web components, desc: The pages customers and support agents use. }
+      - { id: c-server, name: Shop server, system: s-shop, tech: Java, desc: "Places orders, takes payments and keeps gift cards." }
+      - { id: c-db, name: Shop database, system: s-shop, kind: db, tech: PostgreSQL, desc: "Orders, payments and gift cards." }
+    components:
+      - { id: k-checkout, name: Checkout, container: c-web, tech: Web components, desc: The checkout with the gift card field., icon: screen, parts: [checkout-page, giftcard-field] }
+      - { id: k-status, name: Order status, container: c-web, tech: Web components, desc: The page with the status of an order., icon: screen, parts: [status-page] }
+      - { id: k-giftcards, name: Gift cards, container: c-server, tech: Spring, desc: The balance and the booking of gift cards., parts: [giftcard-controller, giftcard-service] }
+      - { id: k-orders, name: Orders, container: c-server, tech: Spring, desc: Places orders and splits their payment., parts: [order-service, order-status-api] }
+      - { id: k-payments, name: Payments, container: c-server, tech: Spring, desc: Talks to the payment provider., parts: [payment-client] }
+      - { id: k-tables, name: Order tables, container: c-db, tech: SQL, desc: The tables of orders and gift cards., icon: table, parts: [giftcards-table, orders-table, migration] }
+    edges:
+      - { from: p-customer, to: c-web, label: orders and pays, intent: true }
+      - { from: p-support, to: c-web, label: looks up an order }
+      - { from: c-web, to: c-server, label: calls, tech: REST }
+      - { from: c-server, to: c-db, label: reads and writes, tech: SQL }
+      - { from: c-server, to: s-pay, label: charges the rest, tech: REST, intent: true }
+      - { from: c-server, to: s-mail, label: sends the receipt, tech: SMTP }
+      - { from: k-orders, to: s-pay, label: checks old vouchers, ends: true }
+    outside:
+      payment-api: s-pay
