@@ -18,13 +18,13 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
-const proofs = require('./run-proofs.cjs');
 const writer = require('./state-transition.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { bad, parseItemReview, reviewPath, reviewerId } = require('./run-review-file.cjs');
 const { REINSTALL, completedBeforeReviewRule, reviewRuleSince } = require('./state-review.cjs');
 const { integrateCall, itemRecordCall, itemReviewCall, realAppCall } = require('./run-call.cjs');
 const { realAppPaths } = require('./run-real-app.cjs');
+const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
 
 const { RunError } = lib;
 
@@ -147,7 +147,6 @@ function itemOf(ledger, id, options) {
   return { intent, item };
 }
 
-const filesHash = (tree, files) => proofs.scopeHash(tree, files, { exact: true });
 const short = (tree, ref) => lib.git(tree, ['rev-parse', '--short', ref]);
 
 /** Where the item's work starts: the merge base with the base branch. */
@@ -287,7 +286,7 @@ function step(tree, context, { ledger, editable, exists, pending, current }) {
     ? lib.gitLines(tree, ['diff', '--name-only', `${item.review_commit}..HEAD`], { tolerate: true })
       .filter((file) => lib.ownedBy(file, editable) || current.files.includes(file))
     : [];
-  if (item.review && item.review_hash === filesHash(tree, current.files) && touched.length === 0) {
+  if (item.review && itemReviewCurrent(tree, { intent, item, files: current.files, config }) && touched.length === 0) {
     const head = `review ${item.id} ${current.verdict} for the current files (read at ${short(tree, item.review_commit)})`;
     return verdictResult(tree, context, current, head);
   }
@@ -319,7 +318,7 @@ function owedReviews(tree, ledger, ids, options) {
       lines.push(`${id} has no readable review file, run ${command}`);
       continue;
     }
-    if (filesHash(tree, reviewed.files) !== item.review_hash) {
+    if (!itemReviewCurrent(tree, { intent, item, files: reviewed.files, configFile: options.config })) {
       lines.push(`${id}: a file it lists changed since its review, run ${command}`);
     }
   }
