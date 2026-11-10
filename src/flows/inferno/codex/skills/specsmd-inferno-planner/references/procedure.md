@@ -55,7 +55,7 @@ direct: <slug>
 
 ## Capture and cross-intent reconciliation
 
-1. Establish the goal, users, problem, success criteria, constraints, non-goals and preferences.
+1. Establish the goal, users, problem, constraints, non-goals and preferences. Number each success criterion `SC-<n>`, never renumbered, with its instrument and the value it must show; the brief's Item Map names the items delivering each.
 2. Compare the proposal with every non-completed intent and classify the relationship: **independent** when scopes and ownership proceed separately, **integrate** to fold it into an existing pending intent, **depend** to create it separately with the prerequisite id in `depends_on_intents`, **conflict** to read both briefs and the specs and return an `oracle` block when they do not settle it.
 3. Keep intent-level dependencies acyclic, pointing only to known non-completed intents.
 4. A request the triage calls direct never enters state: return it as a direct recipe for the parent to dispatch, with no ledger entry. Never write `.specs-inferno/quick-fixes.md` or any other parking file; `state-transition.cjs check` reports it as drift. Couple work that changes one surface; a batch of unrelated findings is one intent of small items, never one large item.
@@ -109,6 +109,10 @@ diagnosis:            # required on corrective items
 ```
 
 Also decide id, title, kind, complexity, acceptance criteria, `depends_on`, exact verification, optional `finalize_check` and optional `design_contract`.
+
+### Four sections beside the manifest
+
+`delivers:` names the `SC-<n>` the item delivers. Edge Cases: a row per case with its expected behaviour and test. Out of Scope: what the item does not build, a line each. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. A test reads `` `<path>` :: <case> ``, an empty section `None.` The Description says what changes and why, never what the code does today.
 
 ### Contract rules
 

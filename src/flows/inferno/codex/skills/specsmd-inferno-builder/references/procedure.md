@@ -44,6 +44,8 @@ For behavior-bearing work:
 5. **Refactor:** improve structure only while the focused test remains green, then run the assignment's exact verification command.
 6. Repeat for the next distinct acceptance criterion without broad speculative changes.
 
+Build each Edge Cases row and each Test Plan line of the item as you build a criterion, test first.
+
 Each `reads:` entry is its own red. Move the source behind the surface from the test, assert the surface followed, and confirm the assertion fails first on the value the source moved past. That value is the `stale` sentence the entry carries. Name the test in the tests line of the result.
 
 For docs-only or config-only work where a behavioral test would be artificial, replace red with a deterministic failing parse, lint, schema, reference, or static invariant check. Record why that check is the correct gate. Never fabricate a test merely to claim test-first work.
