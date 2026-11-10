@@ -175,6 +175,49 @@ intents:
         complexity: low
         status: pending
         depends_on: []
+  - id: kappa
+    title: "Kappa"
+    status: pending
+    base_branch: main
+    depends_on_intents: []
+    work_items:
+      - id: k-built
+        title: "K built"
+        kind: ui
+        complexity: low
+        status: pending
+        depends_on: []
+      - id: k-reviewed
+        title: "K reviewed"
+        kind: ui
+        complexity: low
+        status: pending
+        depends_on: []
+        review: fix
+      - id: k-fresh
+        title: "K fresh"
+        kind: behavior
+        complexity: low
+        status: pending
+        depends_on: []
+  - id: lambda
+    title: "Lambda"
+    status: pending
+    base_branch: main
+    depends_on_intents: []
+    work_items:
+      - id: l-new
+        title: "L new"
+        kind: ui
+        complexity: low
+        status: pending
+        depends_on: []
+      - id: l-later
+        title: "L later"
+        kind: behavior
+        complexity: low
+        status: pending
+        depends_on: [l-new]
 `;
 
 /** A tree shaped like a host project: an owned module, its test, a script that checks it. */
@@ -321,6 +364,33 @@ const ITEMS = {
     editable: ["src/board/tile.css"],
     diagnosis: { claim: "two radii carry the tile", probe: "grep -c radius src/board/tile.css", shows: "2" },
   }),
+  // An item built on its own fix: the probe measured the tree before that fix, so it is stale by design.
+  "kappa/k-built": item({
+    id: "k-built",
+    intent: "kappa",
+    kind: "ui",
+    description: "The board is broken at 960px because the shelf foot is too tall.",
+    editable: ["src/board/tile.css"],
+    diagnosis: { claim: "nine radii carry the tile", probe: "grep -c radius src/board/tile.css", shows: "9" },
+  }),
+  "kappa/k-reviewed": item({
+    id: "k-reviewed",
+    intent: "kappa",
+    kind: "ui",
+    description: "The tile is broken below 960px because the row wraps.",
+    editable: ["src/board/tile.ts"],
+    diagnosis: { claim: "the row wraps", probe: "cat src/board/nope.css", shows: "2" },
+  }),
+  "kappa/k-fresh": item({ id: "k-fresh", intent: "kappa", editable: ["src/panel/panel.ts"] }),
+  "lambda/l-new": item({
+    id: "l-new",
+    intent: "lambda",
+    kind: "ui",
+    description: "The board is broken at 960px because the shelf foot is too tall.",
+    editable: ["src/board/tile.css"],
+    diagnosis: { claim: "nine radii carry the tile", probe: "grep -c radius src/board/tile.css", shows: "9" },
+  }),
+  "lambda/l-later": item({ id: "l-later", intent: "lambda", editable: ["src/panel/panel.ts"] }),
   "theta/t-clean": item({
     id: "t-clean",
     intent: "theta",
