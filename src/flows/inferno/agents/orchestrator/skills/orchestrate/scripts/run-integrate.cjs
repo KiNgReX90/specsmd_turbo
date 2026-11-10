@@ -48,16 +48,18 @@ function intentOf(ledger, itemId, options) {
   return intent;
 }
 
-/** Commit the ledger the completion just wrote, so the next step meets a clean tree. */
-function commitLedger(tree, intentIds, message) {
-  const paths = [
-    path.join(lib.SPECS_DIR, 'state.yaml'),
-    ...intentIds.map((id) => path.join(lib.SPECS_DIR, 'intents', id)),
-  ].filter((rel) => fs.existsSync(path.join(tree, rel)));
+/**
+ * Commit the files the completion wrote: the ledger and each work-item file it rewrote. The
+ * list is exact and goes through a pathspec, so a review another reviewer writes while
+ * integrate runs, or a file staged beside it, stays out of the commit.
+ */
+function commitLedger(tree, written, message) {
+  const paths = [path.join(lib.SPECS_DIR, 'state.yaml'), ...written]
+    .filter((rel) => fs.existsSync(path.join(tree, rel)));
   if (paths.length === 0) return [];
   lib.git(tree, ['add', '--', ...paths]);
-  if (lib.gitLines(tree, ['diff', '--cached', '--name-only'], { tolerate: true }).length === 0) return [];
-  lib.git(tree, ['commit', '-q', '-m', message]);
+  if (lib.gitLines(tree, ['diff', '--cached', '--name-only', '--', ...paths], { tolerate: true }).length === 0) return [];
+  lib.git(tree, ['commit', '-q', '-m', message, '--', ...paths]);
   return [`ledger commit ${lib.git(tree, ['rev-parse', '--short', 'HEAD'])}`];
 }
 
@@ -71,15 +73,17 @@ function completeItems(tree, ids, options) {
   const ledger = lib.readLedger(tree);
   const proof = lib.git(tree, ['rev-parse', '--short', 'HEAD']);
   const intentIds = new Set();
+  const written = [];
   const out = [];
   for (const id of ids) {
     const intent = intentOf(ledger, id, options);
     intentIds.add(intent.id);
     const result = writer.completeItem({ file: ledger.file, intent: intent.id, item: id, proof, tree });
+    if (result.markdown) written.push(result.markdown);
     out.push(result.changed ? `completed ${id} at ${proof}` : `${id} ${result.note}`);
   }
   const label = ids.length === 1 ? ids[0] : ids.join(', ');
-  out.push(...commitLedger(tree, [...intentIds], `specsmd(${[...intentIds].join(', ')}): complete ${label} integrated at ${proof}`));
+  out.push(...commitLedger(tree, written, `specsmd(${[...intentIds].join(', ')}): complete ${label} integrated at ${proof}`));
   return { proof, out };
 }
 
