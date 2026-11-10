@@ -9,6 +9,7 @@ const { tempDir } = require('./test-temp.cjs');
 const { writeFile } = require('./test-write.cjs');
 const { reviewBefore } = require('./review-fixture.cjs');
 const fixtures = require('./run-fixture.cjs');
+const lanes = require('./run-lanes-fixture.cjs');
 
 // An intent run branch, the only kind of branch that keeps a run config.
 const BRANCH = 'inferno-intent/demo-00000000T000000Z';
@@ -166,8 +167,8 @@ test('a record of another version is no record', (t) => {
   assert.deepEqual(ran(f), ['run-integrate', 'repo-integrate']);
 });
 
-/** The CLI fixture with alpha claimed under a run config whose bootstrap and integrate differ from the repo's. */
-function claimed(t) {
+/** The CLI fixture with a run config whose bootstrap and integrate differ from the repo's, committed on main. */
+function withRunConfig(t) {
   const fixture = fixtures.repo();
   t.after(() => fs.rmSync(fixture.dir, { recursive: true, force: true }));
   const body = fixtures.CONFIG
@@ -176,7 +177,13 @@ function claimed(t) {
   fixtures.write(fixture.root, RUN_CONFIG, body);
   fixtures.git(fixture.root, ['add', '-A']);
   fixtures.git(fixture.root, ['commit', '-qm', 'run config']);
-  const claim = fixtures.run(fixture, ['claim', 'alpha', '--config', RUN_CONFIG]);
+  return fixture;
+}
+
+/** withRunConfig with alpha claimed, the claim naming the run config or, with `named` false, none. */
+function claimed(t, named = true) {
+  const fixture = withRunConfig(t);
+  const claim = fixtures.run(fixture, ['claim', 'alpha', ...(named ? ['--config', RUN_CONFIG] : [])]);
   assert.equal(claim.code, 0, claim.out + claim.err);
   return fixture;
 }
@@ -199,4 +206,37 @@ test('a call that names the recorded config prints its calls with it', (t) => {
   const refused = fixtures.run(fixture, ['integrate', '--item', 'a-one', '--tree', tree]);
   assert.equal(refused.code, 3, refused.out + refused.err);
   assert.ok(refused.err.includes(`review --item a-one --tree ${tree} --config ${RUN_CONFIG}`), refused.err);
+});
+
+test("a worktree's --config reaches the integrate in it", (t) => {
+  const fixture = claimed(t, false);
+  const made = fixtures.run(fixture, ['worktree', 'alpha', '--config', RUN_CONFIG, '--json']);
+  assert.equal(made.code, 0, made.out + made.err);
+  const landed = fixtures.run(fixture, ['integrate', '--tree', JSON.parse(made.out).path]);
+  assert.equal(landed.code, 0, landed.out + landed.err);
+  assert.match(landed.out, /echo run integrate/);
+});
+
+test('a bare ship checks the proofs of the recorded config', (t) => {
+  const fixture = claimed(t);
+  const { tree } = fixtures.closed(fixture);
+  const gated = fixtures.run(fixture, ['gate', '--tree', tree, '--config', RUN_CONFIG]);
+  assert.equal(gated.code, 0, gated.out + gated.err);
+  const shipped = fixtures.run(fixture, ['ship', 'alpha', '--tree', tree]);
+  assert.equal(shipped.code, 0, shipped.out + shipped.err);
+  assert.match(shipped.out, /shipped/);
+});
+
+test("a bare lane accept reads the recorded config's lane", (t) => {
+  const f = lanes.fixture(t, lanes.config({ smoke: '0' }));
+  lanes.write(f.tree, RUN_CONFIG, lanes.config({ smoke: '11' }));
+  lanes.commit(f.tree, 'run config');
+  lanes.touch(f);
+  const fix = lanes.harnessFix(f);
+  assert.equal(lanes.gated(f, '--config', RUN_CONFIG).code, 3);
+  lanes.passed(lanes.run(f, 'smoke', '--accept', '--harness-fix', fix));
+  lanes.passed(lanes.run(f, 'gate', '--wait', '--minutes', '0.5', '--config', RUN_CONFIG));
+  const verdict = lanes.run(f, 'green', '--config', RUN_CONFIG);
+  lanes.passed(verdict);
+  assert.match(verdict.out, /ACCEPTED smoke instrument red, harness fix [0-9a-f]{7}/);
 });
