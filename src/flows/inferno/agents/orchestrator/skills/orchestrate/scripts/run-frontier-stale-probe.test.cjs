@@ -3,6 +3,7 @@ const test = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
 const { fixture, run } = require("./run-frontier-fixture.cjs");
+const { writeFile } = require("./test-write.cjs");
 
 // A diagnosis probe measures the tree an item is about to be built on. Once the item is built,
 // in its review loop, the probe measured the tree before its own fix and is stale by design. On
@@ -40,7 +41,7 @@ test("a written review file counts as a review before it is recorded", () => {
   const tree = fixture();
   const file = path.join(tree.root, ".specs-inferno/intents/kappa/reviews/k-built.yaml");
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, "verdict: fix\n", "utf8");
+  writeFile(file, "verdict: fix\n", "utf8");
   const result = run(tree, ["frontier", "kappa"]);
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /^ready k-built /m);
