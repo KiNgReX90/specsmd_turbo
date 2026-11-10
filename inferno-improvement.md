@@ -12,7 +12,7 @@ Each line names where the gap shows. `S/` is `src/flows/inferno/agents/orchestra
 
 1. **The flow-fixes intent is open in this repo's own ledger.** `.specs-inferno/state.yaml` holds it as `awaiting-manual`. Three of its five items are `pending`: `ri-integrate-on-the-base-diffs-from-since-or-origin` with `review: fix`, `ri-a-run-branch-keeps-the-config-it-was-given` with `review: fix`, and `ri-integrate-refuses-only-the-dirt-it-reads-or-commits` with no review. Their code and tests are on this branch. None was reviewed clean or integrated through the runner, and the intent was never closed or archived. To finish: one re-read of each open review under the delta rule, then `close-intent` and `archive-intent`.
 2. **The planner launcher still lands with a bare integrate.** `src/flows/inferno/claude/commands/inferno-planner.md:68` says `run.cjs integrate` with no `--since` and no host landing command. The base item built `--since`, and the launcher text was not moved with it.
-3. **The release steps left no record.** `src/package.json` is 0.1.82 and the changelog entry stands under `[Unreleased]`. Nothing on the branch records `npm run validate:all`, `npm pack`, the install eval or the e2e smoke on the combined tree. The branch is not merged.
+3. **The release steps are half proved.** `src/package.json` is 0.1.82 and the changelog entry stands under `[Unreleased]`. On 2026-11-10, at `b41af916`, `npm run validate:all` was green on a test machine and `npm pack` worked. The install eval fails, because it installs the ideation flow (`inferno-0.1.82-host-install-handoff.md`, section 4). The e2e smoke has no record. The branch is not merged.
 4. **P0's own run was skipped.** The readout exists (`evals/review-loop/stats.cjs`, `tokens.cjs`, `measure.cjs`). It was never run on the measured intent, and the plan correction that run would have given was never made. Section 3 replaces it: the first host intent is measured against the old numbers.
 5. **P5, new scope is a new item, is left on purpose.** It waits on a classification of the 75 later findings, which nobody made. The reviewer has no scope check (`src/flows/inferno/agents/reviewer/agent.md:18-24`), and a grant still widens an item (`src/flows/inferno/agents/orchestrator/agent.md:70`).
 6. **P8, the live test and the break test, is left on purpose.** It waits on the owner's go. Nothing of it exists.
@@ -31,7 +31,7 @@ Each line names where the gap shows. `S/` is `src/flows/inferno/agents/orchestra
 - A host whose tests run on another machine through a wrapper names that wrapper under `mutate.session`, so a batch of mutants shares one sync and one slot.
 - A host that seals definition files names them and their reseal command under `mutate.sealed`.
 
-The app repo on 2026-11-10: 0.1.81 is installed and five intents are running on it. The reinstall lands at the first moment no final gate is walking.
+The app repo on 2026-11-10: 0.1.81 is installed and five intents are running on it. A compatibility run against its live ledgers and configs read them all, and found the state changes additive. The install itself is refused: the flow's text is over the host's word ceiling in five roles, and seven host tests that pin the flow go red (`inferno-0.1.82-host-install-handoff.md`, sections 1 and 2). The host works around it by raising its ceilings to the measured sizes until the flow's text is trimmed, and by moving its own pins in the install commit. The reinstall lands at the first moment no final gate is walking.
 
 ## 3. How we know it worked
 
@@ -71,7 +71,9 @@ How the numbers are read:
 
 A session that meets a defect in the new flow works around it and adds one handoff file beside this one, named `inferno-<what>-handoff.md`: what is wrong, the evidence and how to fix it. Nothing is built on the host's account. This section lists those files, newest last, with the date and one line each.
 
-None yet. The reinstall on the app repo had not landed when this was written.
+- 2026-11-10, `inferno-0.1.82-host-install-handoff.md`. Found before the install, by a compatibility run. The flow's text is over the host's word ceiling in five roles, which blocks the install. Seven host tests that pin the flow go red, three of them on rules the host asked the flow to carry. The flow's YAML reader turns a list item with a trailing comment into a map. The install eval installs the ideation flow.
+
+The reinstall on the app repo had not landed when this was written, so nothing here comes from real work yet.
 
 ## 5. Not built, and why
 
