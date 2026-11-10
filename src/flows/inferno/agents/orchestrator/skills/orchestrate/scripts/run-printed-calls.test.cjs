@@ -215,8 +215,12 @@ test("each call builder prints its exact line from its own flags, the site's dec
     scanCall: [
       [["/w"], `run.cjs scan --tree /w${tail}`],
       [["/w", null, true], `run.cjs scan --collect --tree /w${tail}`],
-      [["/w", "plan-x"], `run.cjs scan --only wiring --plan plan-x --tree /w${tail}`],
-      [["/w", "plan-x", true], `run.cjs scan --collect --only wiring --plan plan-x --tree /w${tail}`],
+      [["/w", "plan-x"], `run.cjs scan --plan plan-x --tree /w${tail}`],
+      [["/w", "plan-x", true], `run.cjs scan --collect --plan plan-x --tree /w${tail}`],
+    ],
+    planOracleCall: [
+      [["/w", "plan-x"], 'run.cjs dispatch-log plan-x --tier oracle --impact "<grade>: <line>" --complexity ' +
+        `"high earlier: <GAP id> stayed open through both fix rounds of the cross-check" --tree /w --config ${CODEX}`],
     ],
     teardownCall: [[["/w"], `run.cjs teardown --tree /w${tail}`]],
     realAppCall: [

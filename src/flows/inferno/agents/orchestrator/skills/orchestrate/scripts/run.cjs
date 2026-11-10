@@ -57,7 +57,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] the item's cold review: 3 dispatch the reviewer, 0 clean, 2 fix
   node run.cjs scan [--tree <dir>] [--intent <id>]      the four scanner briefs before the intent review: 3 spawn the printed lines
   node run.cjs scan --collect [--tree <dir>]            record and commit scan.yaml: 0 recorded, 3 a result missing, 2 a line without its proof
-  node run.cjs scan [--collect] --only wiring --plan <intent-id> the plan-time scan, one scanner per slice of the plan: 3 spawn or wait on an unmerged intent, then 0 no LEGAL or MAKER gap, 2 every such gap for the planner
+  node run.cjs scan [--collect] --plan <intent-id>       the plan-time cross-check, a pass and at most two fix rounds: 3 spawn, wait on an unmerged intent or ask the oracle, then 0 no finding, 2 every finding for the planner or the oracle
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
   node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] [--config <file>] break one line, run the test, restore: caught yes|no
   node run.cjs mutate --batch <file> [--tree <dir>] [--config <file>] every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
@@ -114,8 +114,7 @@ Options
                     scan, review, gate and green: the intent a tree on no intent branch builds
   --force           gate: rerun every finalize command, revoking each proof before its run
   --minutes <n>     gate --wait: how long one call blocks before exiting 4 (default 9)
-  --only wiring     scan with --plan: the one question the plan-time scan asks, its default
-  --plan <id>       scan: ask of the captured plan of this intent instead of its diff
+  --plan <id>       scan: cross-check the captured plan of this intent instead of scanning its diff
   --lane <name>     gate: run one configured lane in this process, as gate --detach starts it
   --harness-fix <sha> smoke|windows --accept: the harness fix on the base branch the instrument red is accepted against
   --batch <file>    mutate: a JSON or YAML list of {criterion, file, line, find, replace, test}; find occurs once on that line

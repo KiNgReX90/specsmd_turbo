@@ -9,13 +9,10 @@
  * files, refuses a line without the command that proves it, and records and commits
  * scan.yaml, bound to the tree the scanners were sent. The intent review answers every line.
  *
- * At plan time, `--only wiring --plan <intent>` asks the wiring question of the plan before
- * anything is built, one scanner per slice of its work items (run-scan-slices.cjs), and its
- * collect merges every slice and hands each LEGAL or MAKER gap back to the planner instead of
- * recording. It writes every GAP line to a gaps file in the cache dir, prints them as far as the
- * line cap allows, and ends in the step that names that file; a clean collect removes the file.
- * A BUILD line never blocks a plan, and a plan that builds on an unmerged intent
- * waits for that merge, so it is scanned once against the real tree.
+ * At plan time, `--plan <intent>` is the cross-check of the captured plan before anything is
+ * built (run-scan-plan.cjs): a pass over the whole plan, then at most two fix rounds, and its
+ * collect hands every finding back to the planner instead of recording. A plan that builds on
+ * an unmerged intent waits for that merge, so it is checked against the real tree.
  */
 
 const fs = require('fs');
@@ -28,13 +25,11 @@ const { resolveBase, unmetPrerequisites } = require('./run-intents.cjs');
 const { hostActor } = require('./run-review.cjs');
 const owed = require('./run-intent-owed.cjs');
 const { intentReviewCall, scanCall } = require('./run-call.cjs');
-const { BLOCKING_KINDS, IDS, PLAN_KINDS, PLAN_QUESTION, QUESTIONS, numbered, readResult, renderScan } = require('./run-scan-file.cjs');
-const { planItems, planSlices } = require('./run-scan-slices.cjs');
+const { IDS, PLAN_ID, QUESTIONS, readResult, renderScan } = require('./run-scan-file.cjs');
+const { planItems } = require('./run-scan-slices.cjs');
+const { planCollect, planDispatch } = require('./run-scan-plan.cjs');
 
 const { RunError } = lib;
-
-/** The questions the plan-time scan asks: nothing is built yet, so only the wiring can be held. */
-const PLAN_IDS = ['wiring'];
 
 /** The lines run.cjs prints of an answer (lib.capLines); the plan collect fits its step inside them. */
 const MAX_LINES = 30;
@@ -46,21 +41,16 @@ const short = (tree, ref) => lib.git(tree, ['rev-parse', '--short', ref]);
 
 /**
  * The questions this call asks, and so the ones its collect reads: all four before the
- * review, wiring alone at plan time. The dispatch records them and the collect reads exactly
- * those, so neither can name a question the other does not. A refused plan-time call prints
- * the caller's own call with wiring alone.
+ * review, the cross-check at plan time. The dispatch records them and the collect reads exactly
+ * those. `--only` named the plan-time question once; a call that still names it is refused
+ * with the call that works.
  */
 function questions(tree, options) {
-  if (!options.plan) {
-    if (!options.only) return IDS;
-    throw new RunError('usage: --only goes with --plan <intent>; the scan before the review asks all four questions', 'BAD_ARGS', 1);
+  if (options.only) {
+    const call = options.plan ? scanCall(tree, options.plan, Boolean(options.collect)) : scanCall(tree, null, Boolean(options.collect));
+    throw new RunError(`usage: the scan takes no --only: the scan before the review asks all four questions, and the plan-time cross-check is one call: run ${call}`, 'BAD_ARGS', 1);
   }
-  const asked = options.only ? String(options.only).split(',').map((id) => id.trim()).filter(Boolean) : PLAN_IDS;
-  if (asked.length !== PLAN_IDS.length || asked.some((id) => !PLAN_IDS.includes(id))) {
-    const call = scanCall(tree, options.plan, Boolean(options.collect));
-    throw new RunError(`usage: the plan-time scan asks wiring alone: run ${call}`, 'BAD_ARGS', 1);
-  }
-  return PLAN_IDS;
+  return options.plan ? [PLAN_ID] : IDS;
 }
 
 /** The agent file the host dispatches the scanner from, relative to the project root. */
@@ -79,60 +69,22 @@ function refuseUninstalled(tree, context) {
   );
 }
 
-const itemPaths = (items) => items.map((id) => `work-items/${id}.md`).join(', ');
-
-/** What the scanner reads: the diff's range, or its slice of the plan and where the rest is. */
-function subject(context, entry, entries, range) {
-  if (range) return [`- range ${range}`];
-  const plan = `${lib.SPECS_DIR}/intents/${context.intent}`;
-  const others = entries.filter((other) => other !== entry).flatMap((other) => other.items);
-  return [
-    `- plan ${plan}: its brief.md and the work items of your slice. Nothing is built yet, so read the plan against the live tree.`,
-    `- slice: ${itemPaths(entry.items) || 'none: the plan has no work item yet, so scan its brief.md'}`,
-    ...(others.length > 0
-      ? [`- other slices, which other scanners cover: ${itemPaths(others)}. Read one only to check a producer or consumer your slice relies on.`]
-      : []),
-  ];
-}
-
-/** The question line, and at plan time the kinds a line is tagged with and which of them block. */
-function questionText(question, range) {
-  if (range) return [`- question ${question}: ${QUESTIONS[question]}`];
-  return [
-    `- question ${question} at plan time: ${PLAN_QUESTION}`,
-    ...Object.entries(PLAN_KINDS).map(([kind, what]) => `- ${kind}: ${what}`),
-  ];
-}
-
-function briefText(tree, context, entry, entries, range) {
+function briefText(tree, context, entry, range) {
   const { question } = entry;
-  const scope = range ? 'the range' : 'your slice';
-  const of = entries.length > 1 ? `, slice ${entries.indexOf(entry) + 1} of ${entries.length}` : '';
   return [
-    `# INFERNO scan: ${question}${of}`,
+    `# INFERNO scan: ${question}`,
     '',
     `Answer this one question about intent ${context.intent} and write only the result file. ` +
-      `Be exhaustive within ${scope}: ask the question of every identifier, op, field, question id, file contract and ` +
+      'Be exhaustive within the range: ask the question of every identifier, op, field, question id, file contract and ' +
       'behaviour it adds, changes or removes, across the whole tree, and report every gap you find, however many, never a sample. ' +
       'Every line carries the command that proves it.',
     '',
     `- tree ${tree}`,
-    ...subject(context, entry, entries, range),
-    ...questionText(question, range),
+    `- range ${range}`,
+    `- question ${question}: ${QUESTIONS[question]}`,
     `- result ${entry.result}`,
     '',
   ].join('\n');
-}
-
-/**
- * What this call dispatches, one entry per scanner: a question each over the diff, or at plan
- * time the wiring question once per slice of the plan's work items.
- */
-function entriesFor(context, slices) {
-  const at = (id) => ({ brief: path.join(context.dir, `${id}.md`), result: path.join(context.dir, `${id}.yaml`) });
-  if (!slices) return context.ids.map((id) => ({ id, question: id, items: null, ...at(id) }));
-  const [question] = context.ids;
-  return slices.map((items, index) => ({ id: `${question}-${index + 1}`, question, items, ...at(`${question}-${index + 1}`) }));
 }
 
 function groupLine(index, size) {
@@ -144,40 +96,45 @@ function dispatch(tree, context) {
   const { intent, config, options, ids, dir, agent, model } = context;
   refuseUninstalled(tree, context);
   let range = null;
-  let slices = null;
+  let entries;
+  let lead;
+  let round = null;
   if (options.plan) {
-    // A fresh plan-time dispatch drops the last one's briefs and results, whatever its slices were.
+    const planned = planDispatch(tree, context);
+    if (planned.spent) return planned.spent;
+    ({ entries, lead, round } = planned);
+    // A fresh plan-time dispatch drops the last one's briefs and results, whatever its cuts were.
     fs.rmSync(dir, { recursive: true, force: true });
-    slices = planSlices(tree, intent).map((slice) => slice.items);
-    if (slices.length === 0) slices = [[]];
   } else {
     const base = options.base || resolveBase(config, null, tree);
     range = `${short(tree, gate.mergeBase(tree, base))}..${short(tree, 'HEAD')}`;
+    lead = `scan of ${intent} over ${range}`;
+    entries = ids.map((id) => ({ id, question: id, items: null, brief: path.join(dir, `${id}.md`), result: path.join(dir, `${id}.yaml`) }));
+    for (const entry of entries) entry.text = briefText(tree, context, entry, range);
   }
   fs.mkdirSync(dir, { recursive: true });
-  const entries = entriesFor(context, slices);
   for (const entry of entries) {
     fs.rmSync(entry.result, { force: true });
-    fs.writeFileSync(entry.brief, briefText(tree, context, entry, entries, range));
+    fs.writeFileSync(entry.brief, entry.text);
   }
   const at = {
-    intent, plan: Boolean(options.plan), ids, range, head: lib.git(tree, ['rev-parse', 'HEAD']), hash: proofs.scopeHash(tree),
+    intent, plan: Boolean(options.plan), ids, range, round, head: lib.git(tree, ['rev-parse', 'HEAD']), hash: proofs.scopeHash(tree),
     slices: entries.map(({ id, question, items }) => ({ id, question, items })),
   };
   fs.writeFileSync(path.join(dir, 'dispatch.json'), `${JSON.stringify(at)}\n`);
   const size = GROUP[config.host === 'codex' ? 'codex' : 'claude'];
   const groups = [];
-  for (let i = 0; i < entries.length; i += size) groups.push(entries.slice(i, i + size));
-  const out = [`scan of ${intent} ${range ? `over ${range}` : 'of its plan'}`];
+  for (let i = 0; i < entries.length; i += size) groups.push(entries.slice(i, i + size).map(({ text, ...entry }) => entry));
+  const out = [lead];
   groups.forEach((group, index) => {
     out.push(groupLine(index, group.length));
     for (const entry of group) out.push(`dispatch ${agent}${model ? ` model ${model}` : ''} scan ${entry.question} brief ${entry.brief}`);
   });
   out.push(`then ${scanCall(tree, options.plan, true)} collects them`);
-  return { exit: 3, payload: { ok: false, intent, owed: 'scan', agent, model, range, groups }, out };
+  return { exit: 3, payload: { ok: false, intent, owed: 'scan', agent, model, range, round, groups }, out };
 }
 
-/** The work items added to or dropped from the plan since its slices were dispatched, or null. */
+/** The work items added to or dropped from the plan since its cross-check was dispatched, or null. */
 function planChange(tree, intent, entries) {
   const sent = new Set(entries.flatMap((entry) => entry.items || []));
   const now = new Set(planItems(tree, intent).map((item) => item.id));
@@ -195,39 +152,6 @@ function readDispatch(dir, intent, plan) {
   } catch (error) {
     return null;
   }
-}
-
-/**
- * Hand every LEGAL and MAKER gap the plan-time scan found back to the planner; nothing is
- * recorded. BUILD lines are counted and left to the builder and the gate, never sent.
- */
-function planGaps(tree, context, results) {
-  const blocking = (line) => BLOCKING_KINDS.includes(line.kind);
-  const lines = numbered(results.map((result) => ({ ...result, lines: result.lines.filter(blocking) })));
-  const build = results.flatMap((result) => result.lines.filter((line) => !blocking(line))).length;
-  const left = build > 0 ? [`${build} BUILD line${build === 1 ? '' : 's'} left to the builder and the gate, never to the plan`] : [];
-  // The printout is capped and the gaps file is not, so the planner is resumed from the file.
-  const gapsFile = `${context.dir}-gaps.txt`;
-  if (lines.length === 0) {
-    fs.rmSync(gapsFile, { force: true });
-    return {
-      exit: 0,
-      payload: { ok: true, intent: context.intent, gaps: [], build },
-      out: [`no LEGAL or MAKER gap in the plan of ${context.intent}: it goes to build`, ...left],
-    };
-  }
-  const gaps = lines.map((line) => `GAP ${line.id} ${line.kind} ${line.file}:${line.line}: ${line.claim} (proof: ${line.proof})`);
-  fs.mkdirSync(path.dirname(gapsFile), { recursive: true });
-  fs.writeFileSync(gapsFile, `${gaps.join('\n')}\n`);
-  const tail = [
-    ...left,
-    `resume the planner with every GAP line in ${gapsFile} as one message, then run ${scanCall(tree, context.options.plan)} again`,
-  ];
-  return {
-    exit: 2,
-    payload: { ok: false, intent: context.intent, gaps: lines, gapsFile, build },
-    out: [...lib.capLines(gaps, MAX_LINES - tail.length), ...tail],
-  };
 }
 
 function record(tree, context, sent, results) {
@@ -273,7 +197,7 @@ function collect(tree, context) {
   const changed = options.plan ? planChange(tree, intent, entries) : null;
   if (changed) {
     return owing([
-      `the plan of ${intent} changed since the scan dispatch (${changed}), so a slice went unscanned; nothing collected`,
+      `the plan of ${intent} changed since the scan dispatch (${changed}), so an item went unchecked; nothing collected`,
       `run ${again} for a fresh dispatch, spawn the lines it prints, then collect`,
     ]);
   }
@@ -287,12 +211,12 @@ function collect(tree, context) {
     ]);
   }
   const results = entries.map((entry) => ({ question: entry.question, lines: readResult(resultOf(entry), entry.question, fix, entry.id, Boolean(options.plan)) }));
-  return options.plan ? planGaps(tree, context, results) : record(tree, context, sent, results);
+  return options.plan ? planCollect(tree, context, sent, results) : record(tree, context, sent, results);
 }
 
 /**
  * The intents a plan builds on that have not merged yet. Until they merge the plan pins detail
- * of a tree that does not exist, so its scan waits and then runs once against the real tree.
+ * of a tree that does not exist, so its cross-check waits and then runs against the real tree.
  */
 function unmergedBase(tree, intent) {
   if (!fs.existsSync(lib.statePath(tree))) return [];
@@ -315,7 +239,7 @@ function scan(options) {
       exit: 3,
       payload: { ok: false, intent, owed: 'merge', unmerged },
       out: [
-        `the plan of ${intent} builds on ${unmerged.join(', ')}, not merged yet: its scan waits for that merge`,
+        `the plan of ${intent} builds on ${unmerged.join(', ')}, not merged yet: its cross-check waits for that merge`,
         `once ${unmerged.join(', ')} ${unmerged.length === 1 ? 'has' : 'have'} merged into the base, run ${scanCall(tree, options.plan)}`,
       ],
     };
@@ -323,7 +247,7 @@ function scan(options) {
   const root = path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'scan');
   const dir = options.plan ? path.join(root, `plan-${intent}`) : root;
   const { agent, model } = hostActor('scanner', config);
-  const context = { intent, config, options, ids, dir, agent, model };
+  const context = { intent, config, options, ids, dir, agent, model, maxLines: MAX_LINES };
   if (!options.plan && !owed.scanOwed(tree, intent)) {
     const rel = owed.scanPath(tree, intent);
     return { exit: 0, payload: { ok: true, intent, scan: rel }, out: [`the scan of ${intent} is collected in ${rel}`, `then ${intentReviewCall(tree)}`] };

@@ -9,9 +9,9 @@
  * A line without the command that proves it is refused, because a suspicion nobody can rerun
  * costs the reviewer a search instead of a check.
  *
- * At plan time every line also carries its kind, and only a LEGAL or MAKER line blocks the
- * plan. A plan pins code-level detail for a tree not built yet, so a BUILD line is plumbing a
- * builder's red-first test and the gate catch in minutes, and a plan chasing it never converges.
+ * At plan time the cross-check writes the same file, and every line also carries its kind, one
+ * of Turbo's five kinds of problem in a plan. Every kind blocks the plan: the bound on the
+ * rounds, not a kind that never blocks, is what makes the check end.
  */
 
 const fs = require('fs');
@@ -30,22 +30,28 @@ const QUESTIONS = {
 };
 const IDS = Object.keys(QUESTIONS);
 
-/** What a plan-time line can be, and the kinds that block the plan. */
-const PLAN_KINDS = {
-  LEGAL: 'a provision, limb, date, act line or scope encoded wrong or missing, measured against the research and the primary texts.',
-  MAKER: 'what the maker sees or gets is wrong: a screen, a reader-facing string, a dossier or document outcome, ' +
-    'a wrong result for a concrete product, a stored answer that is lost.',
-  BUILD: 'how a builder proves or wires the work: test files and their fixtures, recorded wire files, test helpers and ' +
-    'selectors, ownership lists, verification budgets, closure lists, line numbers and counts inside tests. ' +
-    "It never blocks the plan: the builder's red-first test and the gate own it.",
-};
-const BLOCKING_KINDS = ['LEGAL', 'MAKER'];
-const KIND_LIST = 'LEGAL, MAKER or BUILD';
+/** The plan-time question: the cross-check of the plan's meaning, once the plan lint has passed its form. */
+const PLAN_ID = 'cross-check';
 
-/** The plan-time question: nothing is built, so only the law and what the maker sees or gets can block. */
-const PLAN_QUESTION = 'what in the plan encodes the law wrong or gives the maker the wrong thing, ' +
-  'including a screen or reader with no producer and an answer the maker gives that nothing stores. ' +
-  `Tag every line with its kind, ${KIND_LIST}, and spend no search on BUILD.`;
+/** What a plan-time line can be: Turbo's kinds of problem, in the words of an INFERNO plan. */
+const PLAN_KINDS = {
+  conflict: 'two items, or an item and the brief, require things that cannot both hold: a field required in one and optional ' +
+    'in the other, two error texts for one case, one value changed in two directions.',
+  gap: "a success criterion or an edge case no item's criterion or test covers; a step between two items that neither owns; " +
+    "a file a change needs outside its item's ownership; an existing test that asserts a value an item changes and is in no " +
+    "item's Test Plan; a producer with no consumer, or a consumer with no producer.",
+  misreading: 'an item implements a success criterion or a decision of the brief differently from the brief.',
+  deviation: 'an item goes against a rule file your brief lists, named with its heading, or reaches outside the intent\'s scope ' +
+    'or its own Out of Scope, or builds what another item builds.',
+  wrong_assumption: 'an item relies on a symbol, path, column, route or behaviour the code does not have, or has otherwise; ' +
+    'or it builds new what already exists and fits, which its Reuse table should have named.',
+};
+const KIND_LIST = `${Object.keys(PLAN_KINDS).slice(0, -1).join(', ')} or ${Object.keys(PLAN_KINDS).slice(-1)[0]}`;
+
+/** What the cross-check leaves out, because the builder's red-first test and the gate catch it in minutes. */
+const NOT_A_FINDING = 'Test plumbing is no finding: a fixture detail, a selector, a line number or a count inside a test. ' +
+  'Neither is style, naming or the fix.';
+
 const RESULT_KEYS = ['question', 'lines'];
 const LINE_KEYS = ['file', 'line', 'claim', 'proof'];
 const SCAN_LINE_KEYS = ['id', 'scanner', ...LINE_KEYS];
@@ -58,7 +64,7 @@ function bad(file, id, problem, fix, scanner = id) {
 
 /**
  * The lines of one scanner's result file, each with the command that proves it. `fix` is the
- * collect command the refusal prints, `scanner` the slice a refusal names when it is not `id`.
+ * collect command the refusal prints, `scanner` the cut a refusal names when it is not `id`.
  */
 function readResult(file, id, fix, scanner = id, plan = false) {
   const refuse = (problem) => bad(file, id, problem, fix, scanner);
@@ -84,7 +90,7 @@ function readResult(file, id, fix, scanner = id, plan = false) {
       if (!keys.includes(key)) throw refuse(`unknown key ${key} in ${at}: it holds ${keys.join(', ')} only`);
     }
     if (plan && !Object.prototype.hasOwnProperty.call(PLAN_KINDS, line.kind)) {
-      throw refuse(`${at} has kind ${line.kind === undefined ? 'none' : line.kind}: a plan-time line is ${KIND_LIST}`);
+      throw refuse(`${at} has kind ${line.kind === undefined ? 'none' : line.kind}: a cross-check line is ${KIND_LIST}`);
     }
     for (const key of LINE_KEYS) {
       if (typeof line[key] !== 'string' || line[key].trim() === '') {
@@ -107,8 +113,8 @@ function quoted(value) {
 
 /**
  * Every line of the results, numbered per question. `results` maps a question to its lines,
- * read in the order of the questions, or lists `{ question, lines }` per slice in order, so a
- * question split over slices numbers on across them and no two lines share an id.
+ * read in the order of the questions, or lists `{ question, lines }` per cut in order, so a
+ * question split over cuts numbers on across them and no two lines share an id.
  */
 function numbered(results) {
   const entries = Array.isArray(results) ? results : IDS.map((id) => ({ question: id, lines: results[id] }));
@@ -139,5 +145,5 @@ function renderScan({ intent, range, results, tree, commit }) {
 }
 
 module.exports = {
-  BLOCKING_KINDS, IDS, LINE_KEYS, PLAN_KINDS, PLAN_QUESTION, QUESTIONS, RESULT_KEYS, SCAN_LINE_KEYS, numbered, readResult, renderScan,
+  IDS, KIND_LIST, LINE_KEYS, NOT_A_FINDING, PLAN_ID, PLAN_KINDS, QUESTIONS, RESULT_KEYS, SCAN_LINE_KEYS, numbered, readResult, renderScan,
 };

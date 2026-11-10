@@ -1,13 +1,16 @@
 'use strict';
 
 /**
- * The plan-time scan's slices: the work items of a plan, split into disjoint groups each
- * small enough for one scanner to hold every item of it against the live tree.
+ * The cross-check's cuts: the work items of a plan, split into the batches one cross-checker
+ * each reads whole before it judges any part of it.
  *
- * One cold scanner over a whole plan stops after a handful of findings, so each rescan
- * samples another subset of the same gaps. A scanner per slice can be exhaustive within it,
- * and one round finds the set. Split from run-scan.cjs because the split is a rule of its
- * own: the dispatch writes a brief per slice and the collect reads a result per slice.
+ * One reader takes the brief and every item when they fit its budget of words, because a
+ * conflict sits between two items and only a reader that holds both sees it. A plan too large
+ * for one reader is cut along its dependency chains: the items `depends_on` links, directly or
+ * through others. A chain that fits one reader is never split, so a producer and its consumer
+ * are read together, and small chains share a reader. A chain too large for one reader alone is
+ * cut in its dependency order. Items in two chains share no file once the plan lint is clean,
+ * which prints every pair that shares an editable file with no `depends_on` path between them.
  */
 
 const fs = require('fs');
@@ -15,14 +18,19 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 
-/** The words of work-item text one scanner is handed; an item larger than this is a slice alone. */
-const SLICE_WORDS = 4500;
+/**
+ * The words one cross-checker is handed, the brief included: about sixteen thousand tokens of
+ * plan, which a reader holds whole beside the code it greps. Past it the plan is cut.
+ */
+const READER_WORDS = 12000;
 
 const words = (text) => text.split(/\s+/).filter(Boolean).length;
 
+const planDir = (tree, intent) => path.join(tree, lib.SPECS_DIR, 'intents', intent);
+
 /** The plan's work items in file order, each with its word count and the items it depends on. */
 function planItems(tree, intent) {
-  const dir = path.join(tree, lib.SPECS_DIR, 'intents', intent, 'work-items');
+  const dir = path.join(planDir(tree, intent), 'work-items');
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).filter((file) => file.endsWith('.md')).sort().map((file) => {
     const text = fs.readFileSync(path.join(dir, file), 'utf8');
@@ -38,7 +46,13 @@ function planItems(tree, intent) {
   });
 }
 
-/** Each item after the items it depends on, so a chain's neighbours land in one slice. */
+/** The brief's words, which every reader reads beside its cut. */
+function briefWords(tree, intent) {
+  const file = path.join(planDir(tree, intent), 'brief.md');
+  return fs.existsSync(file) ? words(fs.readFileSync(file, 'utf8')) : 0;
+}
+
+/** Each item after the items it depends on, so a chain's neighbours sit next to each other. */
 function chainOrder(items) {
   const byId = new Map(items.map((item) => [item.id, item]));
   const placed = new Set();
@@ -54,22 +68,60 @@ function chainOrder(items) {
   return order;
 }
 
-/**
- * The plan's slices in chain order: consecutive items packed until the next would pass
- * `budget` words. Every item lands in exactly one slice.
- */
-function planSlices(tree, intent, budget = SLICE_WORDS) {
-  const slices = [];
-  let current = null;
-  for (const item of chainOrder(planItems(tree, intent))) {
-    if (!current || current.words + item.words > budget) {
-      current = { items: [], words: 0 };
-      slices.push(current);
-    }
-    current.items.push(item.id);
-    current.words += item.words;
+/** The plan's dependency chains in chain order: the items `depends_on` links either way. */
+function chains(items) {
+  const ids = new Set(items.map((item) => item.id));
+  const root = new Map(items.map((item) => [item.id, item.id]));
+  const find = (id) => (root.get(id) === id ? id : find(root.get(id)));
+  for (const item of items) {
+    for (const id of item.depends) if (ids.has(id)) root.set(find(item.id), find(id));
   }
-  return slices;
+  const groups = new Map();
+  for (const item of chainOrder(items)) {
+    const key = find(item.id);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  return [...groups.values()];
 }
 
-module.exports = { SLICE_WORDS, planItems, planSlices };
+const total = (items) => items.reduce((sum, item) => sum + item.words, 0);
+
+/** A chain too large for one reader, cut in its order into parts of at most `room` words. */
+function cutChain(chain, room) {
+  const parts = [];
+  let current = null;
+  for (const item of chain) {
+    if (!current || total(current) + item.words > room) {
+      current = [];
+      parts.push(current);
+    }
+    current.push(item);
+  }
+  return parts;
+}
+
+/**
+ * The plan's cuts, each `{ items, words }`: one with every item when the brief and the items fit
+ * `budget` words, else one per chain, small chains packed together first fit. Every item lands
+ * in exactly one cut.
+ */
+function planCuts(tree, intent, budget = READER_WORDS) {
+  const items = planItems(tree, intent);
+  const room = Math.max(budget - briefWords(tree, intent), 1);
+  const shape = (cut) => ({ items: cut.map((item) => item.id), words: total(cut) });
+  if (total(items) <= room) return [shape(chainOrder(items))];
+  const cuts = [];
+  for (const chain of chains(items)) {
+    if (total(chain) > room) {
+      cuts.push(...cutChain(chain, room));
+      continue;
+    }
+    const fits = cuts.find((cut) => total(cut) + total(chain) <= room);
+    if (fits) fits.push(...chain);
+    else cuts.push([...chain]);
+  }
+  return cuts.map(shape);
+}
+
+module.exports = { READER_WORDS, planCuts, planItems };

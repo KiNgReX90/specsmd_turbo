@@ -114,16 +114,18 @@ describe('inferno flow', () => {
     for (const [id, question] of Object.entries(file.QUESTIONS)) expect(scanner).toContain(`- \`${id}\`: ${question}`);
   });
 
-  // The planner launcher scans every captured plan for wiring gaps before it hands the plan
-  // over, on each host by a call that runs from the project root.
+  // The planner launcher lints every captured plan, then cross-checks it before it hands the
+  // plan over, on each host by calls that run from the project root.
   it.each([
     ['claude/commands/inferno-planner.md', ''],
     ['codex/skills/specsmd-inferno-planner/SKILL.md', ' --config .specs-inferno/config.codex.yaml'],
-  ])('%s runs the plan-time scan', (rel, config) => {
+  ])('%s lints the plan, then runs the plan-time cross-check', (rel, config) => {
     const text = readFileSync(path.join(INFERNO, rel), 'utf8');
-    expect(text).toContain(
-      `node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs scan --only wiring --plan <intent-id>${config}`
-    );
+    const lint = `node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs plan-lint <intent-id>${config}`;
+    const check = `node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs scan --plan <intent-id>${config}`;
+    expect(text).toContain(lint);
+    expect(text).toContain(check);
+    expect(text.indexOf(lint)).toBeLessThan(text.indexOf(check));
   });
 
   // A Codex recovery lands work the branch already holds through integrate on the Codex config.
@@ -272,7 +274,7 @@ describe('inferno flow', () => {
     expect(text).not.toMatch(/#\[cfg\(test\)\]/);
   });
 
-  // A repair that fixes only the line a scan GAP names leaves the rest of its class for the
+  // A repair that fixes only the line a cross-check GAP names leaves the rest of its class for the
   // next round, so every planner text sweeps each consumer before it returns a plan or a repair.
   it.each([
     'agents/planner/agent.md',
@@ -288,23 +290,25 @@ describe('inferno flow', () => {
     }
     expect(text).toMatch(/production caller/);
     expect(text).toMatch(/GAP is a class/);
-    expect(text).toMatch(/LEGAL or MAKER/);
-    expect(text).toMatch(/BUILD finding is never chased/);
+    expect(text).toMatch(/cross-check GAP names one instance/);
+    expect(text).toMatch(/Test plumbing is never chased/);
   });
 
-  // The plan-time scan prints a dispatch line per slice of the plan, so every launcher spawns
-  // them together, collects them all, and scans again until no LEGAL or MAKER gap comes back.
-  // A BUILD line never blocks a plan, and a plan on an unmerged intent waits for that merge.
+  // The cross-check's pass prints a dispatch line per cut of the plan, so every launcher spawns
+  // them together and collects them all. At most two fix rounds follow, each one reader over the
+  // findings and the repair, and what is still open then goes to the oracle on its graded route.
+  // A plan on an unmerged intent waits for that merge.
   it.each([
     'claude/commands/inferno-planner.md',
     'codex/skills/specsmd-inferno-planner/SKILL.md',
-  ])('%s spawns every slice of the plan-time scan at once and rescans to no LEGAL or MAKER gap', (rel) => {
+  ])('%s spawns every cut of the cross-check at once and ends after two fix rounds at the oracle', (rel) => {
     const text = readFileSync(path.join(INFERNO, rel), 'utf8');
     expect(text).toMatch(/every dispatch line it prints/);
-    expect(text).toMatch(/blocks on LEGAL and MAKER lines only/);
-    expect(text).toMatch(/BUILD lines to the builder and the gate/);
-    expect(text).toMatch(/goes to build when one round prints no GAP/);
-    expect(text).toMatch(/builds on an unmerged intent is not scanned/);
+    expect(text).toMatch(/every GAP line in it as one message/);
+    expect(text).toMatch(/at most two fix rounds, and the plan is never checked whole again/);
+    expect(text).toMatch(/oracle call for each finding still open/);
+    expect(text).not.toMatch(/LEGAL|MAKER|BUILD/);
+    expect(text).toMatch(/builds on an unmerged intent is not checked/);
   });
 
   // The launcher acts on the planner's handoff by its labels, so a label renamed on either
