@@ -7,6 +7,8 @@ const { deferItem, closeIntent, completeItem, check, archiveIntent, main } = req
 const { sandbox, NOW } = require("./state-transition-fixture.cjs");
 const { deferredItems } = require("./state-defer.cjs");
 const { writeFile } = require("./test-write.cjs");
+const { tempDir } = require("./test-temp.cjs");
+const { intentItems } = require("./run-intent-owed.cjs");
 const { CLOSING, REASON, defer, itemField, planned, refusal, snapshot } = require("./state-defer-fixture.cjs");
 
 // A deferred item is closed for its intent: close-intent and check pass over it, nothing
@@ -99,6 +101,20 @@ test("deferredItems reads the live ledger, says when no reason was recorded, and
   assert.deepEqual([...deferredItems(box.file, "gift-cards")], [["gift-wrap", "no reason recorded"]]);
   assert.deepEqual([...deferredItems(box.file, "never-planned")], []);
   assert.deepEqual([...deferredItems(path.join(box.dir, "nowhere", "state.yaml"), "gift-cards")], []);
+});
+
+test("a ledger with no intents key holds no deferred item, and the gate's items read from the spec files as before", () => {
+  const specs = path.join(tempDir("inferno-state-"), ".specs-inferno");
+  const items = path.join(specs, "intents", "gift-cards", "work-items");
+  fs.mkdirSync(items, { recursive: true });
+  writeFile(path.join(specs, "state.yaml"), "ledger\n");
+  for (const id of ["gift-wrap", "card-mail"]) writeFile(path.join(items, `${id}.md`), `---\nid: ${id}\n---\n`);
+  assert.deepEqual([...deferredItems(path.join(specs, "state.yaml"), "gift-cards")], []);
+  assert.deepEqual(intentItems(path.dirname(specs), "gift-cards"), ["card-mail", "gift-wrap"]);
+  // The archive still answers for the intent the live ledger does not hold.
+  fs.mkdirSync(path.join(specs, "archive"));
+  writeFile(path.join(specs, "archive", "state.yaml"), CLOSING.replace("status: pending", "status: deferred"));
+  assert.deepEqual(intentItems(path.dirname(specs), "gift-cards"), ["card-mail"]);
 });
 
 // --- the CLI ---------------------------------------------------------------
