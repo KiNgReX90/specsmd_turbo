@@ -325,11 +325,11 @@ The prose that explains what the code does today is cut in return (`inferno-futu
 2. It looks for Turbo's kinds of problem: `conflict` (two items that cannot both hold), `gap` (a case, a step or a file nobody owns, a producer without a consumer), `misreading` (an item that implements the brief differently), `deviation` (an item against a rule of P9 or outside the intent's scope) and `wrong_assumption` (a symbol, path or behaviour that is not in the code, or something built new that already exists).
 3. It checks claims against the code inside a budget of tool calls, grep before read, line ranges only. Every finding carries the code that shows it.
 4. At most two fix rounds. The second round checks each earlier finding and only the parts the repair changed. What is still open after that goes to the oracle, routed by P7. The plan is never scanned whole a third time.
-5. The slice scan per item just before its dispatch, which the queued direct build adds, stays. It reads the tree the item's predecessors left.
+5. Each item also gets one slice scan just before its dispatch, against the tree its predecessors left. That is the second half of the rule the app repo already follows by hand.
 
 **Files owned.** `agents/scanner/agent.md` (the plan-time half becomes the cross-check), `claude/commands/inferno-planner.md` and its Codex twin, `S/run-scan.cjs` (`--plan`), `S/run-scan.test.cjs`.
 
-**Order with the queued work.** The direct build that limits the plan-time scan to one round with one repair lands first. P12 then changes what that one round looks for and how it ends.
+**Order with the queued work.** The direct build that would have limited the plan-time scan to one round with one repair was never started. P12 is built in its place.
 
 ### T1. A mutant is killed only when a test failed
 
@@ -398,7 +398,7 @@ The last two rows are the quality check. If either rises, the package that cause
 
 - **A worktree per item.** Turbo has it, and it removes a whole class of waits between siblings. On a host with a compile tree per worktree it costs gigabytes and cold builds. The intent in flight in this repo fixes those waits inside the shared worktree instead.
 - **Fresh fix builders.** Turbo dispatches every fix fresh. INFERNO resumes the warm builder, whose thread reaches 467k tokens. Measure it with P0 after P2 before changing it.
-- **The plan-time scan rule** and three smaller runner fixes, which are already queued as direct builds here. The intent in flight owns `run-integrate.cjs`, `run-attribute.cjs`, `run-peers.cjs`, `run.cjs` and a new `run-config-record.cjs`. This plan touches none of those. Let that work land first.
+- **The flow fixes that were in flight in this repo.** They were stopped mid-run on 2026-11-10. Their state and the order to finish them are in `inferno-flow-fixes-handoff.md`. Finish them before the first package here. That intent owns `run-integrate.cjs`, `run-attribute.cjs`, `run-peers.cjs`, `run.cjs` and a new `run-config-record.cjs`, and one of its direct builds edits `run-mutate-batch.cjs`, which P1 edits too.
 - **The orchestrator's own thread.** 390M tokens at about 267k of context per round is the third largest cost. It has no design yet.
 - **The rest of Turbo's inception.** The questions to the user and the one human approval, the record that a script renders into specs, the drawn Code Scaffold, the overview page and the Confluence and Jira sync. They serve a team that signs off a plan. INFERNO plans without a person.
 
