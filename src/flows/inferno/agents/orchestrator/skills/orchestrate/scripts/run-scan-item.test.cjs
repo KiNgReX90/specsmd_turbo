@@ -65,6 +65,17 @@ test("an item with no predecessor gets no slice check: the plan's cross-check re
   assert.match(result.out, /a-one has no predecessor in alpha/);
 });
 
+test("an item whose only depends_on names no item of its intent gets no slice check", () => {
+  const { fixture, tree } = landed();
+  const spec = ".specs-inferno/intents/alpha/work-items/a-two.md";
+  const text = fs.readFileSync(path.join(tree, spec), "utf8").replace(/^depends_on: \[.*\]$/m, "depends_on: [z-gone]");
+  write(tree, spec, text);
+  const result = scan(fixture, tree, ["--item", "a-two"]);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.equal(dispatchLines(result.out).length, 0, result.out);
+  assert.match(result.out, /a-two has no predecessor in alpha/);
+});
+
 test("a wrong assumption or a rebuilt part goes into the dispatch as a measured fact, and nothing waits", () => {
   const { collected } = checked(`${LINE("a-two adds limit() while a-one built it", "rebuilt")}${LINE("a-two reads limit 10", "wrong_assumption")}`);
   assert.equal(collected.code, 0, collected.out + collected.err);
