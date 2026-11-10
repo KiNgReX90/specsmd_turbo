@@ -236,6 +236,10 @@ test("each call builder prints its exact line from its own flags, the site's dec
       [["/w", "a1..b2", "a-one"], `run.cjs real-app --range a1..b2 --item a-one --tree /w${tail}`],
     ],
     laneAcceptCall: [[["windows", "/w"], `node ${calls.RUNNER_PATH} windows --accept --harness-fix <sha> --tree /w${tail}`]],
+    laneIntermittentCall: [[
+      ["smoke", "/w", ['cart.test.mjs "adds a card"', "it's $5"]],
+      `node ${calls.RUNNER_PATH} smoke --accept-intermittent --test 'cart.test.mjs "adds a card"' --test 'it'\\''s $5' --reason "<why>" --by <who> --tree /w${tail}`,
+    ]],
     closeIntentCall: [[["beta"], `state-transition.cjs close-intent --intent beta --tree /t --config ${CODEX}`]],
     blockIntentCall: [[["beta"], `state-transition.cjs block-intent --reason "<why it cannot be built yet>" --intent beta --tree /t --config ${CODEX}`]],
     unclaimIntentCall: [[["beta"], `state-transition.cjs unclaim-intent --intent beta --tree /t --config ${CODEX}`]],
