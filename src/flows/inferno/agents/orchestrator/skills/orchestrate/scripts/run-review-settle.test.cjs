@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const { INTENT_TREE, git, intentReviewed, repo, run, worktree, write } = require("./review-fixture.cjs");
 const { writeFile } = require("./test-write.cjs");
+const { CAUGHT_ONE, INTENT_REVIEW, itemReview, mutantRepo } = require("./run-review-mutants-fixture.cjs");
 
 // --- a minor-only fix settles ----------------------------------------------------------
 // A fix review whose findings are all minor is no miss. The warm builder corrects, verify-item
@@ -170,6 +171,20 @@ test("a proof that predates the fix review, that failed, or that the item outgre
   for (const host of [stale, early, failed, outgrown]) assert.doesNotMatch(ledger(host.tree), /review: settled/);
 });
 
+test("a listed file of the item that changed after the proof, outside the proof's paths, does not settle it", () => {
+  // The review lists src/a2.test.ts, which the build wrote; the correction's proof covers only src/a.ts.
+  const body = MINOR.replace("files: [src/a.ts, src/a.test.ts]", "files: [src/a.ts, src/a.test.ts, src/a2.test.ts]");
+  const host = minorReviewed({ body, files: { "src/a2.test.ts": "// the build's test\n" } });
+  corrected(host, NAMED);
+  corrected(host, { "src/a2.test.ts": "// the build's test, changed after the proof\n" }, { verify: false });
+
+  const result = host.review();
+
+  assert.equal(result.code, 3, result.out + result.err);
+  assert.match(result.out, /^settle owed for a-one: .* but the item changed since its verify-item proof$/m);
+  assert.doesNotMatch(ledger(host.tree), /review: settled/);
+});
+
 test("a settled item passes integrate, releases its successor, and leaves the gate to the intent review", () => {
   const host = minorReviewed({ intentTree: true, config: "delivery:\n  base_branch: main\nverification:\n  integrate:\n    - echo integrate ran\n  finalize:\n    - echo gated\n" });
   corrected(host, NAMED);
@@ -197,8 +212,8 @@ test("a settled item whose listed file changes again is owed a delta review from
   git(host.tree, ["add", "-A"]);
   git(host.tree, ["commit", "-qm", "a test beside it"]);
   assert.equal(host.review().code, 0, "a file of the item the review does not list leaves it settled, as it leaves a clean one");
-  write(host.tree, "src/a.ts", "export const count = 3; // later\n");
-  git(host.tree, ["commit", "-qam", "a later change"]);
+  // The later change the way the flow makes one: a builder's turn, then verify-item, then the commit.
+  corrected(host, { "src/a.ts": "export const count = 3; // later\n" });
 
   const result = host.review();
 
@@ -210,6 +225,32 @@ test("a settled item whose listed file changes again is owed a delta review from
   const integrate = host.at(["integrate", "--item", "a-one"]);
   assert.equal(integrate.code, 3, integrate.out + integrate.err);
   assert.match(integrate.err, /a-one: a file it lists changed since its review/);
+});
+
+test("a settled item whose listed file changed is told verify-item first while its proof is old, then the delta review from the settled one", () => {
+  const host = minorReviewed();
+  corrected(host, NAMED);
+  assert.equal(host.review().code, 0);
+  corrected(host, { "src/a.ts": "export const count = 5; // later\n" }, { verify: false });
+
+  const first = host.review();
+
+  assert.equal(first.code, 3, first.out + first.err);
+  assert.match(first.out, /^verify-item owed for a-one before its review: its proof \S+a-one\.json was taken over an older state of its paths, so no reviewer may read it$/m);
+  assert.doesNotMatch(first.out, /^review owed /m, "no reviewer is dispatched over an old proof");
+  assert.match(ledger(host.tree), /review: settled\n/);
+  // Run the verify-item call as printed, from the project root the way the orchestrator runs it.
+  const printedCall = /^then run\.cjs (verify-item .+?), then run\.cjs review --item a-one /m.exec(first.out)[1].split(" ");
+  const proved = run(host.fixture, printedCall);
+  assert.equal(proved.code, 0, proved.out + proved.err);
+
+  const second = host.review();
+
+  assert.equal(second.code, 3, second.out + second.err);
+  assert.match(second.out, /^review owed for a-one: a file the settled review lists changed since it settled$/m);
+  assert.match(second.out, new RegExp(`range ${host.read.slice(0, 7)}[0-9a-f]*\\.\\.`), "the delta reads from the commit the settled review read");
+  assert.match(second.out, /^ {2}previous \.specs-inferno\/intents\/alpha\/reviews\/a-one\.yaml$/m);
+  assert.match(second.out, /^ {2}proof \S+a-one\.json$/m, "and names the proof it now may read");
 });
 
 test("the intent review dispatch lists each settled item with the range nobody re-read, and none when none settled", () => {
@@ -269,7 +310,37 @@ test("a settled review file that names no commit reads from the settle commit, a
   git(host.tree, ["commit", "-qm", "a review file recorded without its commit, and the scan"]);
   assert.match(host.at(["review"]).out, new RegExp(`^ {2}settled a-one unknown\\.\\.${settledAt}$`, "m"));
 
-  write(host.tree, "src/a.ts", "export const count = 4; // later\n");
-  git(host.tree, ["commit", "-qam", "a later change"]);
+  corrected(host, { "src/a.ts": "export const count = 4; // later\n" });
   assert.match(host.review().out, new RegExp(`range ${settledAt}[0-9a-f]*\\.\\.`));
+});
+
+test("a settled item's caught mutant and checked pin count at the intent review as a clean item's do", () => {
+  // a-one owes, for each of its two criteria, a caught mutant or a checked pin. Its minor-only
+  // fix review holds both: criterion 1 by a mutant its test catches, criterion 2 by a pin.
+  const SENTENCE = "Gift cards never expire and keep their full value.";
+  const fixture = mutantRepo({ files: {
+    "src/notice.html": `<p>${SENTENCE}</p>\n`,
+    "checks/notice.test.cjs": `says(['${SENTENCE}']);\n`,
+  } });
+  const tree = worktree(fixture, INTENT_TREE);
+  const host = { fixture, tree, at: (args) => run(fixture, [...args, "--tree", tree]) };
+  const pin = `pins:\n  - criterion: 2\n    file: src/notice.html\n    test: checks/notice.test.cjs\n    text: "${SENTENCE}"\n`;
+  write(tree, REVIEW, itemReview(`findings:\n  - criterion: AC1\n    file: src/a.ts\n    line: 1\n    evidence: the name a reads as nothing\n` +
+    `    fix: say what it counts\n    severity: minor\nmutants:\n${CAUGHT_ONE}${pin}`, "fix"));
+  const recorded = host.at(["review", "--item", "a-one", "--reviewer", "rev-1"]);
+  assert.equal(recorded.code, 2, recorded.out + recorded.err);
+  corrected(host, { "src/a.ts": "export const a = 1; // the count\nexport const a2 = 2;\n" });
+  const settled = host.at(["review", "--item", "a-one"]);
+  assert.equal(settled.code, 0, settled.out + settled.err);
+  assert.match(ledger(tree), /review: settled\n/);
+  write(tree, ".specs-inferno/intents/alpha/scan.yaml", "lines: []\n");
+  git(tree, ["add", "-A"]);
+  git(tree, ["commit", "-qm", "scan collected"]);
+
+  assert.equal(host.at(["review"]).code, 3);
+  write(tree, INTENT_REVIEW, "verdict: clean\n");
+  const intent = host.at(["review", "--reviewer", "rev-2"]);
+
+  assert.equal(intent.code, 0, intent.out + intent.err);
+  assert.doesNotMatch(intent.out + intent.err, /owes a caught mutant or a checked pin/);
 });

@@ -266,12 +266,12 @@ function settledResult(tree, context, head) {
 
 /**
  * Why the item's verify-item proof does not prove its corrected state, or null when it does: it
- * passed, it was written on a commit after the one the fix review read, and the item's diff it
- * hashed is the tree's still.
+ * passed, it was written on a commit after the one the fix review read, and proofAtHead finds it
+ * taken over the item's paths as HEAD holds them.
  */
 function proofProblem(tree, intentId, item) {
   // Required here, not at the top: run-item-proof loads run-intents, which loads run-frontier, which loads this file.
-  const { diffHash, readItemProof } = require('./run-item-proof.cjs');
+  const { proofAtHead, readItemProof } = require('./run-item-proof.cjs');
   const proof = readItemProof(tree, intentId, item.id);
   if (!proof) return 'no verify-item proof of the correction is on record';
   const head = typeof proof.head === 'string' ? proof.head : '';
@@ -279,8 +279,7 @@ function proofProblem(tree, intentId, item) {
     lib.git(tree, ['merge-base', '--is-ancestor', item.review_commit, head], { tolerate: true }) !== null;
   if (!after) return 'its verify-item proof predates the fix review';
   if (proof.passed !== true) return 'its verify-item proof failed';
-  const diff = proof.diff;
-  if (diff && diffHash(tree, diff.from, diff.paths) !== diff.sha256) return 'the item changed since its verify-item proof';
+  if (proofAtHead(tree, intentId, item.id).state === 'stale') return 'the item changed since its verify-item proof';
   return null;
 }
 
