@@ -230,6 +230,11 @@ test("an item map that disagrees with delivers: is a finding on each side", () =
   assertOneFinding(plan({ items }), /^FINDING brief: show-balance delivers SC-1, but the Item Map row of SC-1 does not name it$/);
 });
 
+test("an Item Map row that names an id the intent does not have is a finding", () => {
+  const brief = BRIEF.replace("| SC-2 | show-balance |", "| SC-2 | show-balance, gift-box |");
+  assertOneFinding(plan({ brief }), /^FINDING brief: the Item Map names gift-box for SC-2, which is no item of this intent$/);
+});
+
 test("an acceptance criterion that names no test, case id or command is a finding", () => {
   const items = withItem("card-store", "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance)", "- [ ] A card of 25 shows 25");
   assertOneFinding(plan({ items }), /^FINDING card-store: acceptance criterion 1 names no test file, case id or command in a code span$/);
