@@ -4,7 +4,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 
+const lib = require("./run-lib.cjs");
 const proofs = require("./run-proofs.cjs");
+const { itemReviewCurrent } = require("./run-review-hash.cjs");
 const { CONFIG, git, repo, reviewed, run, worktree, write } = require("./review-fixture.cjs");
 
 // A review binds the files it lists. A fold of the base used to re-owe the review of every item
@@ -98,6 +100,26 @@ function owed(fixture, tree) {
   assert.match(integrate.err, /a-one: a file it lists changed since its review/);
 }
 
+/** The check itself, in this process, for a state no caller of it lets through. */
+function standing(tree) {
+  const intent = lib.readLedger(tree).intents.find((entry) => entry.id === "alpha");
+  const item = intent.items.find((entry) => entry.id === "a-one");
+  return itemReviewCurrent(tree, { intent, item, files: LISTED, config: lib.readConfig(tree) });
+}
+
+/** Record a clean review of a-one by hand: the ledger line and the recorded file, under `hash` and `at`. */
+function recordAs(tree, hash, at, message) {
+  const rel = ".specs-inferno/intents/alpha/reviews/a-one.yaml";
+  write(tree, rel, `item: a-one\nverdict: clean\nfiles: [${LISTED.join(", ")}]\ntree: ${hash}\ncommit: ${at}\nreviewer: rev-1\n`);
+  execFileSync(process.execPath, [WRITER, "review-item", "--intent", "alpha", "--item", "a-one",
+    "--file", path.join(tree, ".specs-inferno/state.yaml"), "--verdict", "clean", "--files-hash", hash, "--tier", "cheap", "--commit", at]);
+  git(tree, ["add", "--", rel, ".specs-inferno/state.yaml"]);
+  git(tree, ["commit", "-qm", message]);
+}
+
+/** Exactly what git leaves, untrimmed. */
+const raw = (tree, args) => spawnSync("git", args, { cwd: tree, encoding: "utf8" }).stdout;
+
 function lands(fixture, tree) {
   const result = run(fixture, ["integrate", "--item", "a-one", "--tree", tree]);
   assert.equal(result.code, 0, result.out + result.err);
@@ -157,13 +179,13 @@ test("a fold whose conflict lies inside the item's own lines re-owes the review"
   owed(fixture, tree);
 });
 
-test("a fold whose registry conflict renumbers a sibling's case leaves the item's review current", () => {
+test("a fold whose registry conflict renumbers a sibling's case and brings a new header leaves the item's review current", () => {
   const { fixture, tree } = built();
   const refund = block("TC-003", "A refund by mail", "Mail a refund.");
   commit(tree, { [REGISTRY]: `${read(tree, REGISTRY)}\n${refund}`, ...named(tree, "a-two", "TC-002 and TC-003") }, "a-two");
   reviewed(run, fixture, tree, ["a-one"], LISTED);
   const other = `${block("TC-003", "Another intent's case", "Reserved.")}\n${block("TC-011", "A third intent's case", "Reserved.")}`;
-  onMain(fixture, { [REGISTRY]: `${CASES}\n${other}` });
+  onMain(fixture, { [REGISTRY]: `${CASES.replace("# Tester cases", "# Tester cases, by screen")}\n${other}` });
   assert.equal(fold(tree), false, "both sides reserved TC-003");
   const ours = read(tree, REGISTRY).replace(/<<<<<<<[\s\S]*>>>>>>> main\n/, "");
   resolve(tree, {
@@ -199,17 +221,83 @@ test("a merge of an item branch is the branch's own change, on the intent branch
 test("a review recorded under the released whole-file rule reads as current, before and after a fold", () => {
   const { fixture, tree } = built();
   const hash = proofs.scopeHash(tree, LISTED, { exact: true });
-  const head = git(tree, ["rev-parse", "HEAD"]);
-  const rel = ".specs-inferno/intents/alpha/reviews/a-one.yaml";
-  write(tree, rel, `item: a-one\nverdict: clean\nfiles: [${LISTED.join(", ")}]\ntree: ${hash}\ncommit: ${head}\nreviewer: rev-1\n`);
-  execFileSync(process.execPath, [WRITER, "review-item", "--intent", "alpha", "--item", "a-one",
-    "--file", path.join(tree, ".specs-inferno/state.yaml"), "--verdict", "clean", "--files-hash", hash, "--tier", "cheap", "--commit", head]);
-  git(tree, ["add", "--", rel, ".specs-inferno/state.yaml"]);
-  git(tree, ["commit", "-qm", "review a-one clean, recorded by the released flow"]);
+  recordAs(tree, hash, git(tree, ["rev-parse", "HEAD"]), "review a-one clean, recorded by the released flow");
   current(fixture, tree);
 
   onMain(fixture, { [REGISTRY]: `${CASES}\n${block("TC-010", "Another intent's case", "Reserved.")}` });
   assert.ok(fold(tree));
   current(fixture, tree);
   lands(fixture, tree);
+});
+
+// --- the guards: a review stands after a fold only on what the walk proved ----------------------
+
+test("a branch commit that changes a registry line outside every case block re-owes the review", () => {
+  const { fixture, tree } = built();
+  reviewed(run, fixture, tree, ["a-one"], LISTED);
+  commit(tree, { [REGISTRY]: read(tree, REGISTRY).replace("# Tester cases", "# Tester cases for gift cards") }, "a-two");
+
+  owed(fixture, tree);
+});
+
+test("a fold that merged cleanly but holds a hand edit of a listed file in its merge commit re-owes the review", () => {
+  const { fixture, tree } = built();
+  reviewed(run, fixture, tree, ["a-one"], LISTED);
+  onMain(fixture, { "src/a.ts": source({ 1: "export const a = 10;" }) });
+  assert.equal(spawnSync("git", ["merge", "--no-commit", "--no-ff", "main"], { cwd: tree }).status, 0, "the fold merges cleanly");
+  resolve(tree, { "src/a.ts": source({ 1: "export const a = 10;", 3: "export const c = 30;", 5: "export const e = 50;" }) });
+
+  owed(fixture, tree);
+});
+
+test("a fold committed with the conflict markers a merge of both sides writes re-owes the review", () => {
+  const { fixture, tree } = built();
+  reviewed(run, fixture, tree, ["a-one"], LISTED);
+  onMain(fixture, { "src/a.ts": source({ 5: "export const e = 500;" }) });
+  const sides = [git(tree, ["rev-parse", "HEAD"]), git(tree, ["rev-parse", "main"])];
+  assert.equal(fold(tree), false, "the fold conflicts");
+  // The merge commit holds the very text a merge of both sides writes, markers and all.
+  const merged = raw(tree, ["merge-tree", "--write-tree", "--no-messages", ...sides]).split("\n")[0];
+  resolve(tree, { "src/a.ts": raw(tree, ["show", `${merged}:src/a.ts`]) });
+  assert.match(read(tree, "src/a.ts"), /^<<<<<<< /m);
+
+  owed(fixture, tree);
+});
+
+test("a record whose hash does not bind the review commit's files re-owes the review, even after a fold that would stand", () => {
+  const { fixture, tree } = built();
+  // The hash of the listed files before a-one changed them, recorded against the commit after.
+  recordAs(tree, proofs.scopeHash(fixture.root, LISTED, { exact: true }), git(tree, ["rev-parse", "HEAD"]), "a record that binds other files");
+  onMain(fixture, { [REGISTRY]: `${CASES}\n${block("TC-010", "Another intent's case", "Reserved.")}` });
+  assert.ok(fold(tree));
+
+  owed(fixture, tree);
+});
+
+// review and integrate both refuse an uncommitted change to a listed file before they ask, so
+// only a caller of the check itself meets this state.
+test("an uncommitted change to a listed file after a fold that would stand leaves the review unbound", () => {
+  const { fixture, tree } = built();
+  reviewed(run, fixture, tree, ["a-one"], LISTED);
+  onMain(fixture, { "src/a.ts": source({ 1: "export const a = 10;" }) });
+  assert.ok(fold(tree));
+  assert.equal(standing(tree), true, "the fold alone leaves the review standing");
+
+  write(tree, "src/a.ts", source({ 1: "export const a = 10;", 3: "export const c = 30;", 5: "export const e = 50;" }));
+  assert.equal(standing(tree), false);
+});
+
+test("a review commit off HEAD's first-parent line re-owes the review, though no commit on that line touched the files", () => {
+  const { fixture, tree } = built();
+  git(tree, ["checkout", "-qb", "side"]);
+  commit(tree, { "src/a.ts": source({ 4: "export const d = 40;", 5: "export const e = 50;" }) }, "a-one on a side branch");
+  reviewed(run, fixture, tree, ["a-one"], LISTED);
+  git(tree, ["checkout", "-q", "inferno-intent/wt"]);
+  // The intent branch takes the side's history and none of its files, then its ledger by hand.
+  git(tree, ["merge", "-q", "-s", "ours", "--no-edit", "side"]);
+  git(tree, ["checkout", "side", "--", ".specs-inferno"]);
+  git(tree, ["commit", "-qm", "the ledger of the side branch"]);
+  assert.doesNotMatch(read(tree, "src/a.ts"), /d = 40/, "the reviewed change never reached this line");
+
+  owed(fixture, tree);
 });
