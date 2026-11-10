@@ -37,9 +37,9 @@ require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(TR
 setInterval(() => { if (!fs.existsSync('trap.cjs')) process.exit(0); }, 100);
 `;
 
-/** Poll until `ready` holds, up to five seconds. */
-function until(ready, what) {
-  for (let i = 0; i < 100 && !ready(); i += 1) jobs.sleepSync(50);
+/** Poll until `ready` holds, up to `seconds`. */
+function until(ready, what, seconds = 5) {
+  for (let i = 0; i < seconds * 20 && !ready(); i += 1) jobs.sleepSync(50);
   assert.ok(ready(), what);
 }
 
@@ -69,7 +69,11 @@ function slotCache(t, f) {
 
 const holders = (f) => slot.queue(f.tree).tickets.map((ticket) => ticket.holder);
 
-/** A tree whose smoke lane walks (holds) after a gate on a change to src/. */
+/**
+ * A tree whose smoke lane walks (holds) after a gate on a change to src/. The gate job ends on its
+ * own once its finalize commands pass; it is waited out here, because while it runs it holds the
+ * tree's git index and a supersede refuses with a gate running.
+ */
 function walking(t, source = withStop(0)) {
   const f = fixture(t, source);
   write(f.tree, 'stop.cjs', STOP);
@@ -77,7 +81,9 @@ function walking(t, source = withStop(0)) {
   passed(run(f, 'gate', '--detach'));
   const lane = laneJob(f);
   assert.ok(jobs.alive(lane), 'the smoke lane walks');
-  return { f, lane };
+  const gateJob = JSON.parse(fs.readFileSync(path.join(cacheOf(f), 'gate-job.json'), 'utf8'));
+  until(() => !jobs.alive(gateJob), 'the gate job ends', 60);
+  return { f, lane, gateJob };
 }
 
 const laneJob = (f) => JSON.parse(fs.readFileSync(path.join(cacheOf(f), 'lane-smoke-job.json'), 'utf8'));
@@ -116,6 +122,40 @@ test("a fix outside every running lane's scope is refused and the lane walks on"
   assert.equal(result.code, 2, result.out + result.err);
   assert.match(result.err, /the fix changes nothing a running lane proves; wait for it: node \S+run\.cjs gate --wait/);
   assert.ok(jobs.alive(lane), 'the lane walks on');
+});
+
+test("the fixture's cleanup ends every job a test detached before it removes the tree", { skip: !LINUX }, () => {
+  const cleanups = [];
+  const { f, lane, gateJob } = walking({ after: (fn) => cleanups.push(fn) });
+  for (const cleanup of cleanups) cleanup();
+  for (const job of [gateJob, lane]) assert.ok(gone(job.pid), `the job ${job.pid} writes no more`);
+  assert.equal(fs.existsSync(path.dirname(f.tree)), false, 'the fixture dir is gone');
+});
+
+/**
+ * A process of the test's own whose lane job file sits in the fixture's cache, and the fixture's
+ * cleanup run; returns whether the process outlived it. The test ends the process by its pid.
+ */
+function outlivesCleanup(t, options) {
+  const cleanups = [];
+  const f = fixture({ after: (fn) => cleanups.push(fn) });
+  const stranger = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'run.cjs'], {
+    cwd: options.cwd(f), detached: options.detached, stdio: 'ignore',
+  });
+  t.after(() => stranger.kill('SIGKILL'));
+  until(() => jobs.alive({ pid: stranger.pid }), 'the stranger runs');
+  fs.mkdirSync(cacheOf(f), { recursive: true });
+  writeFile(path.join(cacheOf(f), 'lane-smoke-job.json'), JSON.stringify({ pid: stranger.pid, lane: 'smoke' }));
+  for (const cleanup of cleanups) cleanup();
+  return jobs.alive({ pid: stranger.pid });
+}
+
+test("the fixture's cleanup leaves a process that does not lead its own group", { skip: !LINUX }, (t) => {
+  assert.ok(outlivesCleanup(t, { cwd: (f) => f.tree, detached: false }), 'a process in the test runner\'s group is never signalled');
+});
+
+test("the fixture's cleanup leaves a group leader that runs outside the fixture's tree", { skip: !LINUX }, (t) => {
+  assert.ok(outlivesCleanup(t, { cwd: () => __dirname, detached: true }), 'a group of another tree is never signalled');
 });
 
 test('a running lane with no stop is refused before any signal', { skip: !LINUX }, (t) => {

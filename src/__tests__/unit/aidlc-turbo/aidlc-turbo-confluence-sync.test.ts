@@ -135,7 +135,7 @@ describe('aidlc-turbo Confluence sync', () => {
     const skill = read(SKILL);
     expect(skill).toContain('| `project` | project-init, before any inception |');
     expect(skill).toMatch(/## Project\n/);
-    expect(skill.replace(/\s+/g, ' ')).toContain('Its title must be the `project` name (default `Project Documentation`) or start with that name and ` -`.');
+    expect(skill.replace(/\s+/g, ' ')).toContain('Its title must be the `project` name (default `Project Documentation`) or start with that name and <code> -</code>.');
     expect(skill).toMatch(/mode: project, status: done/);
     const init = read('skills/master/project-init.md');
     expect(init).toContain('mode `project` and the link');
