@@ -11,7 +11,8 @@
  * what the mutate wrote, and never looks for a mutant by its text: that guess rewrites lines
  * nobody mutated. A file that already holds its original is left as it is. Any other file, an
  * edit since, a missing file or a journal short of a field, is refused with the journal kept,
- * since a leftover never clears by waiting.
+ * since a leftover never clears by waiting. Both shapes may carry the paths a reseal changed
+ * (run-mutate-seal.cjs), which recovery puts back by the same rule.
  */
 
 const crypto = require('crypto');
@@ -19,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { putBackSeal, sealPaths, unseal } = require('./run-mutate-seal.cjs');
 
 const { RunError } = lib;
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
@@ -161,14 +163,26 @@ function recoverInterrupted(tree, options = {}) {
   }
   const files = batch ? entry.files.map((record) => String(record && record.file)) : [entry.file];
   if (Number.isInteger(entry.pid) && entry.pid !== process.pid && alive(entry)) {
-    if (options.keepLive && files.every((file) => options.keepLive(file))) return [];
+    if (options.keepLive && [...files, ...sealPaths(entry.seal)].every((file) => options.keepLive(file))) return [];
     throw new RunError(
       `another mutate (pid ${entry.pid}) is running on ${files.join(', ') || 'no file yet'}; wait for it, then run this again; ` +
         `if no mutate is running, delete ${journal}`,
       'MUTATE_RUNNING'
     );
   }
-  const lines = batch ? putBackFiles(tree, entry, journal) : [putBack(tree, entry, journal)];
+  // The seal goes first, so a refused file leaves no reseal behind; a record that holds its original again is skipped.
+  const seal = putBackSeal(tree, entry.seal);
+  const lines = [...(batch ? putBackFiles(tree, entry, journal) : [putBack(tree, entry, journal)]), ...seal.done];
+  if (seal.refused.length > 0 || seal.running) {
+    const left = { running: seal.running, paths: seal.refused.map((item) => item.record) };
+    fs.writeFileSync(journal, `${JSON.stringify({ pid: entry.pid, start: entry.start, files: [], seal: left })}\n`);
+    const why = [
+      ...seal.refused.map((item) => `a reseal of an interrupted mutate rewrote ${item.record && item.record.file}, and ${item.why}`),
+      ...(seal.running ? [`an interrupted mutate was killed while its reseal (${seal.running}) ran, so the paths it changed are unknown`] : []),
+    ];
+    throw new RunError(afterRecovery(lines, `${why.join('; ')}. Put back from HEAD what the reseal changed, ` +
+      `keep every other change, then delete ${journal}`), 'MUTATE_LEFTOVER');
+  }
   fs.rmSync(journal, { force: true });
   return lines;
 }
@@ -219,7 +233,8 @@ function holdSignals() {
  * The files one batch mutates, with the journal that covers all of them. `write` records a
  * file's new lines in the journal before it writes them; `putBack` writes the original back;
  * `received` names a signal held since the start; `close` restores every file it touched, drops
- * the journal when all are whole, and releases the signals.
+ * the journal when all are whole, and releases the signals. `seal` and `save` let the reseal
+ * record what it changed (run-mutate-seal.cjs).
  */
 function openSession(tree) {
   const journal = journalPath(tree);
@@ -227,9 +242,10 @@ function openSession(tree) {
   const stamp = `${lib.stamp()}-${process.pid}`;
   const who = owner();
   const files = new Map();
+  const seal = { running: null, paths: [] };
   const save = () => {
     const records = [...files.values()].filter((file) => file.record).map((file) => file.record);
-    fs.writeFileSync(journal, `${JSON.stringify({ ...who, files: records })}\n`);
+    fs.writeFileSync(journal, `${JSON.stringify({ ...who, files: records, seal })}\n`);
   };
   const touch = (rel) => {
     if (!files.has(rel)) files.set(rel, { abs: path.join(tree, rel), original: fs.readFileSync(path.join(tree, rel)), record: null });
@@ -239,6 +255,8 @@ function openSession(tree) {
   const release = holdSignals();
   return {
     tree,
+    seal,
+    save,
     /** The first signal held so far, read after a tick of the event loop. */
     async received() {
       await new Promise((resolve) => setImmediate(resolve));
@@ -274,6 +292,7 @@ function openSession(tree) {
         if (why) failed.push(why);
         else file.record = null;
       }
+      failed.push(...unseal({ tree, seal, save }));
       if (failed.length === 0) fs.rmSync(journal, { force: true });
       else save();
       release();

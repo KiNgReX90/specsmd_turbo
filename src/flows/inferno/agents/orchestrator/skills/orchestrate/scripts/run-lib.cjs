@@ -182,17 +182,17 @@ function readConfig(root, selected) {
     return {};
   }
   const config = parseYaml(fs.readFileSync(file, 'utf8'));
-  let wiringFile = file; // an inherited block is refused against the file that holds it
+  const from = {}; // an inherited block is refused against the file that holds it
   if (selected && file !== defaultFile && fs.existsSync(defaultFile)) {
     const defaults = parseYaml(fs.readFileSync(defaultFile, 'utf8'));
     // Machine facts every host config shares; the budget lookup must match the installer's.
-    for (const section of ['worktree', 'recovery', 'halt', 'budget', 'doubles', 'wiring', 'real_app', 'cases']) {
+    for (const section of ['worktree', 'recovery', 'halt', 'budget', 'doubles', 'wiring', 'real_app', 'cases', 'mutate']) {
       if (
         !Object.prototype.hasOwnProperty.call(config, section) &&
         Object.prototype.hasOwnProperty.call(defaults, section)
       ) {
         config[section] = defaults[section];
-        if (section === 'wiring') wiringFile = defaultFile;
+        from[section] = defaultFile;
       }
     }
     lanes.inheritLanes(config, defaults);
@@ -202,7 +202,8 @@ function readConfig(root, selected) {
   validateRoles(config, file);
   validateVerification(config, file);
   gates.validateGates(config, file);
-  validateWiring(config, wiringFile);
+  validateWiring(config, from.wiring || file);
+  require('./run-mutate-seal.cjs').validateSealed(config, from.mutate || file);
   return config;
 }
 
