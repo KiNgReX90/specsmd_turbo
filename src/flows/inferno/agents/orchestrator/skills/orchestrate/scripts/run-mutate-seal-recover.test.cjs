@@ -65,6 +65,23 @@ for (const [shape, args] of [["run", single], ["batch", batched]]) {
     assert.match(next.out, /^caught yes$/m);
     assertSealed(f);
   });
+
+  // Once HEAD moved, neither the mutant with its lines back nor HEAD's copy hashes to the original.
+  test(`a ${shape} whose reseal rewrote the mutated file is refused after a kill once HEAD moved, and nothing is written there`, async (t) => {
+    const f = sealTree(t);
+    const config = configFile(f, "rewrite.yaml", sealConfig(`node seal.cjs ${VALUE} --rewrite`));
+    await killedDuringTest(f, args(f, ["--config", config]));
+    const moved = configFile(f, "moved.txt", "3\n");
+    git(f.tree, "update-index", "--cacheinfo", `100644,${git(f.tree, "hash-object", "-w", moved)},${VALUE}`);
+    git(f.tree, "commit", "-qm", "moved");
+    const next = sealMutate(f, "true");
+    assert.equal(next.code, 2, next.out + next.err);
+    assert.match(next.err, /MUTATE_LEFTOVER/);
+    assert.match(next.err, /defs\/value\.txt.*the file changed since/);
+    assert.equal(readIn(f, VALUE), "2\n# sealed\n", "recovery wrote a copy whose hash is not the original's");
+    const kept = journal(f);
+    assert.deepEqual(shape === "run" ? [kept.file] : kept.files.map((record) => record.file), [VALUE], "the journal keeps the refused file");
+  });
 }
 
 test("a seal path edited after the kill is refused, the rest is restored, and the journal keeps the refused one", async (t) => {
