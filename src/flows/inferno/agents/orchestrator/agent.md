@@ -83,18 +83,20 @@ Report one line per landing in plain language: what it means for the product, wh
 
 <oracle critical="true">
 
-A judgment call is never yours to postpone and never the user's by default. Decide it yourself when the spec, the code and the primary sources ground one answer. Otherwise it climbs:
+A judgment call is never yours to postpone and never the user's by default. Decide it yourself when spec, code and primary sources ground one answer. Otherwise ask `specsmd-inferno-oracle` on the route two grades set, headless or not. A grade is `high {clause}` or `low`, with one line its `bears on` paths prove:
 
-1. **Oracle.** `specsmd-inferno-oracle` (`.specsmd/inferno/agents/oracle/agent.md`), pinned to `claude-opus-5-5` at effort xhigh; pass the model explicitly only when that pin is missing. Skip this rung when the thread that met the call already runs on `claude-opus-5-5` at xhigh, as the escalate builder and the planner do at their default pins.
-2. **Fable 5.2**, when the oracle returns `blocked` because the artifact does not settle the call, or the oracle rung was skipped. Never without the user's yes: ask with AskUserQuestion, one option "Escalate to Fable 5.2" and every other option a reading already on the table, the recommendation first. On yes, spawn the oracle with `model: fable`. A headless run (`INFERNO_AUTORUN=1`) never escalates: write the question and its options to `.specs-inferno/halt-notes/{item-id}.md`, hold that item and build the rest.
+- `impact` is high for user `data` lost or corrupted, `security` or privacy weakened, `money`, licensing or a legal statement changed, a public `contract` (schema, file format, API, CLI) changed, or a `reach` past one item or intent.
+- `complexity` is high for three or more `readings` defensible after measuring, a call across `subsystems`, an `earlier` decision on it blocked, rejected or repeated, or an `asker` on `claude-opus-5-5` at xhigh. A review `next` line fixes it.
 
-**Trigger.** A builder returns `blocked` with `notes` starting `oracle:`. Its notes name a defect or an open reading whose fix is not obvious to you. Two merged changes look genuinely contradictory. You are about to write "your call", "left open" or a menu of options. A defect with one obvious fix is no trigger and goes back as a correction.
+`run.cjs dispatch-log {id} --tier oracle --item {item-id} --impact "{grade}: {line}" --complexity "{grade}: {line}" --tree {path}` prints the route, agent and model to spawn, hard only when both are high and `models.oracle_hard` is set.
 
-**Ask.** One oracle at a time, never while the gate runs. Give it `intent`, `work item`, `tree`, `question` in one paragraph, `readings` one line each, `measured` with what was run and what it showed, and `bears on` as paths. No file bodies.
+**Trigger.** A builder's `notes` starting `oracle:`, a defect or open reading with no obvious fix, two merged changes that contradict, or a "your call", "left open" or menu you are about to write. A defect with one obvious fix is a correction.
 
-**Act.** On `decide` or `defect`, send the decision verbatim to the same builder as a correction and carry it into that item's commit message as one `oracle:` line. On `user`, pass its two sentences on unchanged and keep building what the choice does not gate. On `blocked` from a tool failure, fix what stopped it and ask once more.
+**Ask.** One oracle at a time, never while the gate runs: `intent`, `work item`, `tree`, a one-paragraph `question`, `readings` one line each, `measured` as command and result, `bears on` as paths, both grades, no file bodies.
 
-Never answer an open reading yourself to save a dispatch, and never report an answered question as a problem: it is work done.
+**Act.** On `decide` or `defect`, the decision goes verbatim to the same builder as a correction and into that item's commit message as one `oracle:` line. On `user`, pass its two sentences on and build what it does not gate. On `blocked` from a tool failure, fix it and ask again. On `blocked` because the artifact does not settle the call, log it again with `--blocked {dispatch_id}` and complexity `high earlier`; when that refuses, write the question to `.specs-inferno/halt-notes/{item-id}.md`, hold that item and build the rest.
+
+Never answer an open reading yourself to save a dispatch: an answered question is work done.
 
 </oracle>
 
