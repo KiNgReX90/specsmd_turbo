@@ -114,16 +114,18 @@ describe('inferno flow', () => {
     for (const [id, question] of Object.entries(file.QUESTIONS)) expect(scanner).toContain(`- \`${id}\`: ${question}`);
   });
 
-  // The planner launcher scans every captured plan for wiring gaps before it hands the plan
-  // over, on each host by a call that runs from the project root.
+  // The planner launcher lints every captured plan, then cross-checks it before it hands the
+  // plan over, on each host by calls that run from the project root.
   it.each([
     ['claude/commands/inferno-planner.md', ''],
     ['codex/skills/specsmd-inferno-planner/SKILL.md', ' --config .specs-inferno/config.codex.yaml'],
-  ])('%s runs the plan-time scan', (rel, config) => {
+  ])('%s lints the plan, then runs the plan-time cross-check', (rel, config) => {
     const text = readFileSync(path.join(INFERNO, rel), 'utf8');
-    expect(text).toContain(
-      `node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs scan --only wiring --plan <intent-id>${config}`
-    );
+    const lint = `node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs plan-lint <intent-id>${config}`;
+    const check = `node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs scan --plan <intent-id>${config}`;
+    expect(text).toContain(lint);
+    expect(text).toContain(check);
+    expect(text.indexOf(lint)).toBeLessThan(text.indexOf(check));
   });
 
   // A Codex recovery lands work the branch already holds through integrate on the Codex config.
@@ -156,11 +158,60 @@ describe('inferno flow', () => {
     expect(top(blocks[0])).toEqual(item.ITEM_KEYS);
     expect(nested(blocks[0], 'findings')).toEqual([...item.FINDING_KEYS, 'repeat']);
     expect(nested(blocks[0], 'mutants')).toEqual(item.MUTANT_KEYS);
+    expect(nested(blocks[0], 'pins')).toEqual(item.PIN_KEYS);
     expect(top(blocks[1])).toEqual(intent.INTENT_KEYS);
     expect(nested(blocks[1], 'criteria')).toEqual([...intent.CRITERION_KEYS, 'evidence']);
     expect(nested(blocks[1], 'findings')).toEqual([...item.FINDING_KEYS, 'owner']);
     expect(nested(blocks[1], 'scanner')).toEqual(intent.SCANNER_KEYS);
     expect(nested(blocks[1], 'mutants')).toEqual(item.MUTANT_KEYS);
+    expect(nested(blocks[1], 'pins')).toEqual(item.PIN_KEYS);
+  });
+
+  // The item review's dispatch names under `proof` what verify-item ran (run-review.cjs). The
+  // reviewer reads it and never reruns the item's checks, a test the proof lists as changed
+  // needs a criterion, and what is no coverage is Turbo's list. On Codex the skill reads the
+  // same body, and its own rule says the same.
+  it.each(['agents/reviewer/agent.md', 'commands/inferno-reviewer.md'])('%s reads the proof and never reruns the item checks', (rel) => {
+    const text = readFileSync(path.join(INFERNO, rel), 'utf8');
+    for (const sentence of [
+      "Read the `proof` of the item's checks and never rerun them; on one doubt, run one narrow test.",
+      '`passed: false` is a `blocker`.',
+      'Without a `proof`, run each test narrowly: one file or test name.',
+      'A criterion is unproven without a test, or when its test does not assert what the criterion says, asserts only the fixture it built, ' +
+        'is skipped or `todo`, asserts nothing, promises in its name more than its body checks, computes its expected value the way the code ' +
+        "does, or mocks the unit under test or an earlier item's code.",
+      "7. **Changed tests.** A test the proof's `tests_changed` lists as `modified` or `deleted` needs a criterion that changes the behaviour " +
+        'it checked, or it is `major`: a test bent to fit the code.',
+    ]) expect(text).toContain(sentence);
+    expect(text).not.toMatch(/run the thing|find the test that proves it and run it/);
+    const review = readFileSync(path.join(INFERNO, 'agents/orchestrator/skills/orchestrate/scripts/run-review.cjs'), 'utf8');
+    expect(review).toContain('`  proof ${named}`');
+  });
+
+  // A criterion whose test pins reader-facing copy verbatim is held by a pin the reviewer read, which
+  // the runner checks (run-review-pins.cjs); every other criterion with a test keeps its mutant.
+  it.each(['agents/reviewer/agent.md', 'commands/inferno-reviewer.md'])('%s holds a literal pin of copy by reading it', (rel) => {
+    const text = readFileSync(path.join(INFERNO, rel), 'utf8');
+    for (const sentence of [
+      'A criterion whose test pins reader-facing copy verbatim gets no mutant: read the pin and list it under `pins`; the runner checks its text.',
+      'A pattern, a count or a computed value keeps its mutant.',
+      'Every criterion with a test needs a caught mutant or a checked pin, in its item review or the intent review.',
+      'In item mode propose no mutant or pin and leave both out',
+      'Propose a mutant or a pin as in item mode',
+    ]) expect(text).toContain(sentence);
+    expect(text).not.toMatch(/needs a caught mutant, in its item review/);
+  });
+
+  it('the Codex reviewer skill proposes pins beside mutants', () => {
+    const skill = readFileSync(path.join(INFERNO, 'codex/skills/specsmd-inferno-reviewer/SKILL.md'), 'utf8');
+    expect(skill).toContain('you propose mutants and pins; the runner runs or checks them on record.');
+  });
+
+  it('the Codex reviewer skill never reruns the proof checks', () => {
+    const skill = readFileSync(path.join(INFERNO, 'codex/skills/specsmd-inferno-reviewer/SKILL.md'), 'utf8');
+    expect(skill).toContain("Never rerun the proof's checks or break a line yourself");
+    expect(skill).not.toContain('Run every test narrowly');
+    expect(skill).toContain('Read `.specsmd/inferno/agents/reviewer/agent.md` completely and follow it verbatim');
   });
 
   // The oracle exists to end postponement: it returns one decision, never a menu,
@@ -272,7 +323,7 @@ describe('inferno flow', () => {
     expect(text).not.toMatch(/#\[cfg\(test\)\]/);
   });
 
-  // A repair that fixes only the line a scan GAP names leaves the rest of its class for the
+  // A repair that fixes only the line a cross-check GAP names leaves the rest of its class for the
   // next round, so every planner text sweeps each consumer before it returns a plan or a repair.
   it.each([
     'agents/planner/agent.md',
@@ -288,23 +339,25 @@ describe('inferno flow', () => {
     }
     expect(text).toMatch(/production caller/);
     expect(text).toMatch(/GAP is a class/);
-    expect(text).toMatch(/LEGAL or MAKER/);
-    expect(text).toMatch(/BUILD finding is never chased/);
+    expect(text).toMatch(/cross-check GAP names one instance/);
+    expect(text).toMatch(/Test plumbing is never chased/);
   });
 
-  // The plan-time scan prints a dispatch line per slice of the plan, so every launcher spawns
-  // them together, collects them all, and scans again until no LEGAL or MAKER gap comes back.
-  // A BUILD line never blocks a plan, and a plan on an unmerged intent waits for that merge.
+  // The cross-check's pass prints a dispatch line per cut of the plan, so every launcher spawns
+  // them together and collects them all. At most two fix rounds follow, each one reader over the
+  // findings and the repair, and what is still open then goes to the oracle on its graded route.
+  // A plan on an unmerged intent waits for that merge.
   it.each([
     'claude/commands/inferno-planner.md',
     'codex/skills/specsmd-inferno-planner/SKILL.md',
-  ])('%s spawns every slice of the plan-time scan at once and rescans to no LEGAL or MAKER gap', (rel) => {
+  ])('%s spawns every cut of the cross-check at once and ends after two fix rounds at the oracle', (rel) => {
     const text = readFileSync(path.join(INFERNO, rel), 'utf8');
     expect(text).toMatch(/every dispatch line it prints/);
-    expect(text).toMatch(/blocks on LEGAL and MAKER lines only/);
-    expect(text).toMatch(/BUILD lines to the builder and the gate/);
-    expect(text).toMatch(/goes to build when one round prints no GAP/);
-    expect(text).toMatch(/builds on an unmerged intent is not scanned/);
+    expect(text).toMatch(/every GAP line in it as one message/);
+    expect(text).toMatch(/at most two fix rounds, and the plan is never checked whole again/);
+    expect(text).toMatch(/oracle call for each finding still open/);
+    expect(text).not.toMatch(/LEGAL|MAKER|BUILD/);
+    expect(text).toMatch(/builds on an unmerged intent is not checked/);
   });
 
   // The launcher acts on the planner's handoff by its labels, so a label renamed on either

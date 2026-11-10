@@ -211,16 +211,24 @@ test("each call builder prints its exact line from its own flags, the site's dec
       [["/w", "a-one", "beta"], `run.cjs review --item a-one --reviewer <agent-id> --tree /w --intent beta --config ${CODEX}`],
     ],
     verifyItemCall: [
-      [["/w", "a-one"], `run.cjs verify-item a-one --tree /w${tail}`],
-      [["/w", "a-one", "beta"], `run.cjs verify-item a-one --tree /w --intent beta --config ${CODEX}`],
+      [["/w", ["a-one"]], `run.cjs verify-item a-one --tree /w${tail}`],
+      [["/w", ["a-one", "a-two"]], `run.cjs verify-item --items a-one,a-two --tree /w${tail}`],
     ],
     intentReviewCall: [[["/w"], `run.cjs review --tree /w${tail}`]],
     intentRecordCall: [[["/w"], `run.cjs review --reviewer <agent-id> --tree /w${tail}`]],
     scanCall: [
       [["/w"], `run.cjs scan --tree /w${tail}`],
       [["/w", null, true], `run.cjs scan --collect --tree /w${tail}`],
-      [["/w", "plan-x"], `run.cjs scan --only wiring --plan plan-x --tree /w${tail}`],
-      [["/w", "plan-x", true], `run.cjs scan --collect --only wiring --plan plan-x --tree /w${tail}`],
+      [["/w", "plan-x"], `run.cjs scan --plan plan-x --tree /w${tail}`],
+      [["/w", "plan-x", true], `run.cjs scan --collect --plan plan-x --tree /w${tail}`],
+    ],
+    itemScanCall: [
+      [["/w", "a-one"], `run.cjs scan --item a-one --tree /w${tail}`],
+      [["/w", "a-one", true], `run.cjs scan --collect --item a-one --tree /w${tail}`],
+    ],
+    planOracleCall: [
+      [["/w", "plan-x"], 'run.cjs dispatch-log plan-x --tier oracle --impact "<grade>: <line>" --complexity ' +
+        `"high earlier: <GAP id> stayed open through both fix rounds of the cross-check" --tree /w --config ${CODEX}`],
     ],
     teardownCall: [[["/w"], `run.cjs teardown --tree /w${tail}`]],
     realAppCall: [
@@ -228,6 +236,10 @@ test("each call builder prints its exact line from its own flags, the site's dec
       [["/w", "a1..b2", "a-one"], `run.cjs real-app --range a1..b2 --item a-one --tree /w${tail}`],
     ],
     laneAcceptCall: [[["windows", "/w"], `node ${calls.RUNNER_PATH} windows --accept --harness-fix <sha> --tree /w${tail}`]],
+    laneIntermittentCall: [[
+      ["smoke", "/w", ['cart.test.mjs "adds a card"', "it's $5"]],
+      `node ${calls.RUNNER_PATH} smoke --accept-intermittent --test 'cart.test.mjs "adds a card"' --test 'it'\\''s $5' --reason "<why>" --by <who> --tree /w${tail}`,
+    ]],
     closeIntentCall: [[["beta"], `state-transition.cjs close-intent --intent beta --tree /t --config ${CODEX}`]],
     blockIntentCall: [[["beta"], `state-transition.cjs block-intent --reason "<why it cannot be built yet>" --intent beta --tree /t --config ${CODEX}`]],
     unclaimIntentCall: [[["beta"], `state-transition.cjs unclaim-intent --intent beta --tree /t --config ${CODEX}`]],

@@ -115,7 +115,8 @@ test("a stop signal to mutate's process group ends the reseal and every process 
   const config = configFile(f, "c.yaml", sealConfig(HANGS(f)));
   const child = spawn(process.execPath, singleArgs(f, "node check.cjs strict", ["--config", config]),
     { cwd: f.tree, env: sealEnv(f), stdio: ["ignore", "pipe", "pipe"], detached: true });
-  t.after(() => spawnSync("kill", ["-KILL", `-${child.pid}`]));
+  // Never the `kill` program here: it reads `-<pid>` as an option and signals every process of the user.
+  t.after(() => { try { if (child.pid > 1) process.kill(-child.pid, "SIGKILL"); } catch { /* the group is gone */ } });
   let out = "";
   child.stdout.on("data", (chunk) => { out += chunk; });
   const done = new Promise((resolve) => child.on("close", (code) => resolve(code)));

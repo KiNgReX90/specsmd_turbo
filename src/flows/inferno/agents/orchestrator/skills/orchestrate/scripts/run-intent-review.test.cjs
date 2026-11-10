@@ -242,7 +242,7 @@ test("a Rust-only item owes a caught mutant for every criterion, like a JavaScri
   write(tree, REVIEW, "verdict: clean\n");
   const refused = review(fixture, tree);
   assert.equal(refused.code, 2, refused.out + refused.err);
-  assert.match(refused.err, /a-two owes a caught mutant for criteria 1 "b runs"/);
+  assert.match(refused.err, /a-two owes a caught mutant or a checked pin for criteria 1 "b runs"/);
   assert.doesNotMatch(refused.err, /b stops/);
   write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("a-two:1", B_TWO)}`);
   const recorded = review(fixture, tree);
@@ -254,7 +254,7 @@ test("an item proven by any other kind of test owes every criterion too", () => 
   write(tree, REVIEW, "verdict: clean\n");
   const refused = review(fixture, tree);
   assert.equal(refused.code, 2, refused.out + refused.err);
-  assert.match(refused.err, /a-one owes a caught mutant for criteria 1 "the script exits 0"/);
+  assert.match(refused.err, /a-one owes a caught mutant or a checked pin for criteria 1 "the script exits 0"/);
 });
 
 test("a mixed item owes every criterion, and a cargo mutant that names one covers it", () => {
@@ -308,7 +308,7 @@ test("in the intent review a number names a criterion only with its own item", (
   write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("a-two:1", B_TWO)}`);
   const other = review(fixture, tree);
   assert.equal(other.code, 2, other.out + other.err);
-  assert.match(other.err, /a-one owes a caught mutant for criteria 1 "a is three", 2 "a is exported"/);
+  assert.match(other.err, /a-one owes a caught mutant or a checked pin for criteria 1 "a is three", 2 "a is exported"/);
   write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("1", A_THREE)}`);
   const bare = review(fixture, tree);
   assert.equal(bare.code, 2, bare.out + bare.err);

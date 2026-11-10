@@ -71,7 +71,7 @@ Repeat until all items are completed or the run blocks or halts.
    - every `standards` line `dispatch-log` prints, verbatim: the rule files under `.specs-inferno/standards/` that apply to the item's `ownership.editable`. A rule the item's own criterion asks to break is no fault of the builder: it goes to the oracle;
    - firewall files by name with the sanctioned alternative for each;
    - already-landed dependency outputs, semantics that must survive, skipped items and known hazards;
-   - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold.
+   - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold, and every `SLICE` line from `run.cjs scan --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` and the collect it prints, run once per item, a `conflict` line sent to the planner once instead.
    Pass pointers, not file bodies or broad search instructions. Never ask for residual risks: that slot is how a builder parks a defect it could have fixed.
 7. Use `wait_agent` until every dispatched builder returns, tracking each outstanding worker by id.
 
@@ -138,7 +138,7 @@ Finalize automatically once no work remains.
 
    A log line matching a lane's `red_line` turns the wait red at once, while the lane walks on. While a lane walks, a committed fix gates through `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml`: it stops the tree's running gate and lanes and proves each lane stopped by its `stop` check. It refuses when the fix changes nothing a running lane proves.
 
-   An instrument red passes only against a harness fix already on the base branch, through the step `gate --wait` prints, and only when the lane's `accept_check`, where set, exits 0.
+   A lane red passes only through the step `gate --wait` prints: an instrument red against a harness fix on the base branch, a product red the lane's `verdicts` prove intermittent.
 2. Run ledger reconciliation:
 
    ```sh

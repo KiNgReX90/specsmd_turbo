@@ -15,7 +15,7 @@ const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const cases = require('./run-cases.cjs');
 const slot = require('./run-slot.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
-const { lanesSince, startLanesOnly } = require('./run-lanes-only.cjs');
+const { lanesSince, startLanesOnly, startOneLane } = require('./run-lanes-only.cjs');
 const supersede = require('./run-supersede.cjs');
 const { foldBlockers, refuseDirt } = require('./run-dirt.cjs');
 
@@ -290,12 +290,23 @@ function gateWait(options) {
   return lanes.waitAll(job, options, deadline, () => finished(job), turn.lead);
 }
 
+/** gate --detach --lane <name>: walk that one lane again on its own, on a clean tree, with no fold and no ticket. */
+function laneDetach(options) {
+  const tree = treeOf(options);
+  const restored = refuseDirty(tree);
+  return startOneLane(tree, options, lib.readConfig(tree, options.config), restored);
+}
+
 function gate(options) {
   if (options.detach && options.wait) throw new RunError('gate takes --detach or --wait, not both', 'BAD_ARGS', 1);
+  if (options.lane && options.detach && (options.lanes_only || options.supersede)) {
+    throw new RunError('gate takes --lane with --detach alone, not with --lanes-only or --supersede', 'BAD_ARGS', 1);
+  }
   if (options.lanes_only && !options.detach) throw new RunError('gate takes --lanes-only only with --detach', 'BAD_ARGS', 1);
   if (options.since && !options.lanes_only) throw new RunError('gate takes --since only with --detach --lanes-only', 'BAD_ARGS', 1);
   if (options.holder && !options.lanes_only) throw new RunError('gate takes --holder only with --detach --lanes-only', 'BAD_ARGS', 1);
   if (options.supersede && !options.detach) throw new RunError('gate takes --supersede only with --detach', 'BAD_ARGS', 1);
+  if (options.lane && options.detach) return laneDetach(options);
   if (options.lane) return lanes.laneNow(options);
   if (options.detach) return gateDetach(options);
   if (options.wait) return gateWait(options);

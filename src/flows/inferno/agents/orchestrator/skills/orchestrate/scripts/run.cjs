@@ -58,7 +58,8 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] the item's cold review: 3 dispatch the reviewer, 0 clean, 2 fix
   node run.cjs scan [--tree <dir>] [--intent <id>]      the four scanner briefs before the intent review: 3 spawn the printed lines
   node run.cjs scan --collect [--tree <dir>]            record and commit scan.yaml: 0 recorded, 3 a result missing, 2 a line without its proof
-  node run.cjs scan [--collect] --only wiring --plan <intent-id> the plan-time scan, one scanner per slice of the plan: 3 spawn or wait on an unmerged intent, then 0 no LEGAL or MAKER gap, 2 every such gap for the planner
+  node run.cjs scan [--collect] --item <id> [--tree <dir>] the slice check of one item before its dispatch, once and only after a predecessor: 3 spawn, then 0 the lines for the dispatch, 2 a conflict for the planner
+  node run.cjs scan [--collect] --plan <intent-id>       the plan-time cross-check, a pass and at most two fix rounds: 3 spawn, wait on an unmerged intent or ask the oracle, then 0 no finding, 2 every finding for the planner or the oracle
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
   node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] [--config <file>] break one line, run the test, restore: caught yes|no
   node run.cjs mutate --batch <file> [--tree <dir>] [--config <file>] every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
@@ -72,9 +73,11 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs gate --detach [--tree <dir>]              start the gate and each lane the branch touched (verification.smoke, .windows) and return; 4 queued behind another intent's ticket (merge_slot)
   node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base, origin/<base> on the base branch): no fold, no finalize command, no ticket
   node run.cjs gate --detach --supersede [--tree <dir>] stop the tree's running lanes a fix touched, prove each stopped by its verification.<lane>.stop, then start the gate: 2 refused or not proven stopped
-  node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane's instrument red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
+  node run.cjs gate --detach --lane <name> [--tree <dir>] walk that one lane again, also while the gate job runs, and make gate --wait wait on it: 2 while that lane still runs
+  node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
+  node run.cjs smoke|windows --accept-intermittent --test "<name>" [--test "<name>" ...] --reason "<why>" --by <who> [--tree <dir>] [--config <file>] accept that lane's product red when its verdicts file proves every red test intermittent, one --test each; refused past two accepts of a test on the base since a "Fixes-intermittent: <name>" commit
   node run.cjs slot [--tree <dir>] [--config <file>]     the merge slot queue, a worktree running without a ticket first
   node run.cjs slot --take --holder <name> [--tree <dir>] take or renew a ticket by hand: 0 at the head, 4 queued behind another holder
   node run.cjs slot --renew --holder <name> [--tree <dir>] mark the holder's ticket active
@@ -106,7 +109,7 @@ Options
   --dispatch-id <id> verify-item: the accepted dispatch to check (default the item's latest)
   --peers <json>    verify-item: the dispatch ids that may explain a sibling's change (default every accepted one)
   --item <id>       integrate: the item this landing completes once the checks are green; review: the item reviewed;
-                    real-app: the item whose own paths the removals are read from
+                    real-app: the item whose own paths the removals are read from; scan: the item its slice check reads
   --range <a..b>    real-app: the diff whose removed test ids, labels and routes it looks for; cases: the landing it checks
   --items <a,b>     integrate, verify-item and dispatch-log: the batched chain, treated as one unit
   --impact <grade>  dispatch-log --tier oracle: "high <clause>: <rubric line>" or "low: <rubric line>", as is --complexity
@@ -115,10 +118,12 @@ Options
                     scan, review, gate and green: the intent a tree on no intent branch builds
   --force           gate: rerun every finalize command, revoking each proof before its run
   --minutes <n>     gate --wait: how long one call blocks before exiting 4 (default 9)
-  --only wiring     scan with --plan: the one question the plan-time scan asks, its default
-  --plan <id>       scan: ask of the captured plan of this intent instead of its diff
-  --lane <name>     gate: run one configured lane in this process, as gate --detach starts it
+  --plan <id>       scan: cross-check the captured plan of this intent instead of scanning its diff
+  --lane <name>     gate: run one configured lane in this process, as gate --detach starts it; with --detach, start that lane alone as its own job
   --harness-fix <sha> smoke|windows --accept: the harness fix on the base branch the instrument red is accepted against
+  --test <name>     smoke|windows --accept-intermittent: a red test of the lane's verdicts file, once per test; mutate: the test command
+  --reason <why>    smoke|windows --accept-intermittent: why the red is accepted, written into the ship commit
+  --by <who>        smoke|windows --accept-intermittent: the role that signs the accept
   --batch <file>    mutate: a JSON or YAML list of {criterion, file, line, find, replace, test}; find occurs once on that line
 
 Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder.`;
@@ -178,7 +183,11 @@ const COMMANDS = {
 const OWNING = new Set(['frontier', 'probes', 'verify-item', 'scan', 'review', 'integrate', 'gate', 'green', 'ship', 'dispatch-log', 'accept-dispatch', ...LANES]);
 
 /** Options that take no value. Everything else starting with `--` takes the next argument. */
-const FLAGS = new Set(['--json', '--detach', '--wait', '--force', '--collect', '--accept', '--take', '--renew', '--release', '--lanes-only', '--supersede']);
+const FLAGS = new Set([
+  '--json', '--detach', '--wait', '--force', '--collect', '--accept', '--accept-intermittent', '--take', '--renew', '--release', '--lanes-only', '--supersede',
+]);
+/** Options that may repeat: each value is also kept, in order, under the plural name. */
+const REPEATED = new Set(['--test']);
 
 function parseArgs(argv) {
   const options = { cwd: process.cwd() };
@@ -197,7 +206,9 @@ function parseArgs(argv) {
     if (value === undefined || value.startsWith('--')) {
       throw new RunError(`missing value for ${arg}`, 'BAD_ARGS', 1);
     }
-    options[arg.slice(2).replace(/-/g, '_')] = value;
+    const key = arg.slice(2).replace(/-/g, '_');
+    options[key] = value;
+    if (REPEATED.has(arg)) options[`${key}s`] = [...(options[`${key}s`] || []), value];
     i += 1;
   }
   if (options.tree) options.tree = path.resolve(options.cwd, options.tree);
