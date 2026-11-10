@@ -68,6 +68,7 @@ Repeat until all items are completed or the run blocks or halts.
    - the item's `context` manifest and `ownership.editable` verbatim, and `design_contract` verbatim when present;
    - the exact verification command, as the whole verification budget;
    - `dispatch.constraints` pasted verbatim;
+   - every `standards` line `dispatch-log` prints, verbatim: the rule files under `.specs-inferno/standards/` that apply to the item's `ownership.editable`. A rule the item's own criterion asks to break is no fault of the builder: it goes to the oracle;
    - firewall files by name with the sanctioned alternative for each;
    - already-landed dependency outputs, semantics that must survive, skipped items and known hazards;
    - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold.

@@ -22,13 +22,15 @@ const SKILLS = [
   'specsmd-inferno-builder',
   'specsmd-inferno-config',
   'specsmd-inferno-intents',
+  'specsmd-inferno-standards',
   'specsmd-inferno-reviewer',
   'specsmd-inferno-scanner',
 ];
-// The intents skill is a one-screen listing, so its whole body is the SKILL.md, and the
-// reviewer and scanner skills read their canonical bodies; none ships a procedure reference.
+// The intents skill is a one-screen listing and the standards skill one setup in the parent
+// conversation, so the SKILL.md is the whole body of each, and the reviewer and scanner skills
+// read their canonical bodies; none ships a procedure reference.
 const PROCEDURE_SKILLS = SKILLS.filter(
-  (skill) => !['specsmd-inferno-intents', 'specsmd-inferno-reviewer', 'specsmd-inferno-scanner'].includes(skill)
+  (skill) => !['specsmd-inferno-intents', 'specsmd-inferno-standards', 'specsmd-inferno-reviewer', 'specsmd-inferno-scanner'].includes(skill)
 );
 // The orchestrator is the session's main thread and has no custom agent of its own.
 const AGENTS: Record<string, [string, string]> = {

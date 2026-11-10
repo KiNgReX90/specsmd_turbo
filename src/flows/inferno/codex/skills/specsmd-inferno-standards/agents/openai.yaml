@@ -1,0 +1,4 @@
+interface:
+  display_name: "Specsmd Inferno Standards"
+  short_description: "Draft the project's INFERNO rule files for approval"
+  default_prompt: "Use $specsmd-inferno-standards to draft the project's rule files under .specs-inferno/standards/."

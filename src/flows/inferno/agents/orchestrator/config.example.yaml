@@ -100,6 +100,12 @@ wiring:                           # optional: per kind (command, table or event)
 #     - paths: ["definitions/**"]                          # globs of the sealed files
 #       reseal: "node scripts/lib/definitions/pack.mjs --write"   # the command that rewrites the seal, run in the tree
 
+# standards:                      # optional: the project's rule files under .specs-inferno/standards/, each with the path globs it applies to; dispatch-log prints every file that applies to a builder's ownership.editable, and a listed file that does not exist refuses the dispatch; /specsmd-inferno-standards drafts them; a --config file without the block takes this one
+#   - file: typescript.md
+#     paths: ["src/**/*.ts", "src/**/*.tsx"]
+#   - file: copy.md
+#     paths: ["src/copy/**"]
+
 worktree:
   bootstrap:                      # optional: commands run inside a fresh intent worktree before the first dispatch
     - npm ci

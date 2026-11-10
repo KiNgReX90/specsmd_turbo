@@ -16,6 +16,7 @@ const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
 const writer = require('./state-transition.cjs');
 const dispatch = require('./run-dispatch.cjs');
+const { standardsFor } = require('./run-standards.cjs');
 const { frontier, tierOf } = require('./run-frontier.cjs');
 const { archivePaths, archivedIds } = require('./state-archive.cjs');
 const { PARKED_VALUES } = require('./state-ledger.cjs');
@@ -345,6 +346,8 @@ function dispatchLog(intentId, options) {
     const spec = lib.readItemSpec(tree, intentId, id);
     for (const entry of (spec.manifest.ownership && spec.manifest.ownership.editable) || []) editable.add(entry);
   }
+  // The project's rule files that apply to these paths, read before the record so a bad block refuses the dispatch.
+  const standards = standardsFor(tree, [...editable], { config: options.config }).map((file) => `standards ${file}`);
   const record = dispatch.recordDispatch(tree, {
     intent: intentId,
     items,
@@ -360,7 +363,7 @@ function dispatchLog(intentId, options) {
   return {
     exit: 0,
     payload: { log, line: lines[0], dispatch_id: record.dispatchId, tree },
-    out: [`logged ${items.join(', ')} -> ${log}`, `dispatch ${record.dispatchId}`],
+    out: [`logged ${items.join(', ')} -> ${log}`, `dispatch ${record.dispatchId}`, ...standards],
   };
 }
 

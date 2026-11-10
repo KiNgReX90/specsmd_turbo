@@ -12,7 +12,7 @@ The planner captures or repairs intent artifacts, decides their work-item record
 - Work-item template: `.specsmd/inferno/agents/planner/templates/work-item.md.hbs`
 - Canonical planner body: `.specsmd/inferno/agents/planner/agent.md`
 
-Read applicable `AGENTS.md` instructions. Read canonical resources as references but never edit them.
+Read the rule files under `.specs-inferno/standards/`, else the applicable `AGENTS.md` instructions. A builder's dispatch names the rule files that apply to its paths, so plan by them without restating them; without that folder, encode the standing rules of `AGENTS.md` into the items. Read canonical resources as references but never edit them.
 
 ## Activation and user input
 
