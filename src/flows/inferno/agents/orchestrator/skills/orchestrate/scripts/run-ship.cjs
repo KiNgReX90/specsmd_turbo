@@ -16,6 +16,10 @@
  *
  * Both end with the host's `verification.ship_cleanup`, when set: one command run from the primary
  * checkout once the tree and branch are gone. Its failure prints a line and never undoes the ship.
+ *
+ * A lane red accepted as intermittent goes into the ship commit as one `exception:` line per lane,
+ * written here so nobody writes it by hand; those lines on the base are the ledger a later accept
+ * reads (run-lanes-intermittent.cjs), and ship refuses an accept the base already holds twice.
  */
 
 const fs = require('fs');
@@ -25,6 +29,8 @@ const lib = require('./run-lib.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { intentOf, worktreeEntries } = require('./run-worktrees.cjs');
 const { green } = require('./run-gate.cjs');
+const { intermittentHeld } = require('./run-lanes.cjs');
+const { shipExceptions } = require('./run-lanes-intermittent.cjs');
 const { linkedTree, loadOwnership, stopOwnedProcesses } = require('./run-processes.cjs');
 const gates = require('./run-config-gates.cjs');
 
@@ -99,9 +105,12 @@ function ship(intentId, options) {
     return { exit: 3, payload: { ok: false, step: 'green', hash: proof.payload.hash, owed: proof.payload.owed }, out };
   }
 
+  // The lane reds accepted as intermittent, refused before anything merges once the base holds two accepts of a test.
+  const exceptions = shipExceptions(primary, base, intermittentHeld(tree, lib.readConfig(tree, options.config), options.config));
+
   // (3) Merge, from the primary checkout.
   const tip = lib.git(tree, ['rev-parse', 'HEAD']);
-  lib.git(primary, ['merge', '--no-ff', '--autostash', '-m', `Merge branch '${branch}'`, branch]);
+  lib.git(primary, ['merge', '--no-ff', '--autostash', '-m', `Merge branch '${branch}'`, ...exceptions.flatMap((line) => ['-m', line]), branch]);
   const sha = lib.git(primary, ['rev-parse', '--short', 'HEAD']);
   out.push(`merged ${branch} into ${base} as ${sha}`);
 
@@ -128,7 +137,7 @@ function ship(intentId, options) {
   }
 
   out.push('shipped');
-  return { exit: 0, payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup }, out };
+  return { exit: 0, payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup, exceptions }, out };
 }
 
 /**

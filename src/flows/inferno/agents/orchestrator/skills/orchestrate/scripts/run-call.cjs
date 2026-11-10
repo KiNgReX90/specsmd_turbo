@@ -124,6 +124,13 @@ const teardownCall = (tree) => runCall('teardown', tree, null);
 /** Accept a lane's instrument red against a harness fix, by the runner's own path. */
 const laneAcceptCall = (lane, tree) => nodeCall(lane, tree, null, ['--accept', '--harness-fix', '<sha>']);
 
+/** One word for a POSIX shell, whatever quotes or dollar signs a test name carries. */
+const shellWord = (text) => `'${text.replace(/'/g, "'\\''")}'`;
+
+/** Accept a lane's product red its verdicts proved intermittent, naming each red test, by the runner's own path. */
+const laneIntermittentCall = (lane, tree, tests) => nodeCall(lane, tree, null,
+  ['--accept-intermittent', ...tests.flatMap((test) => ['--test', shellWord(test)]), '--reason', '"<why>"', '--by', '<who>']);
+
 /**
  * A merge slot call for a holder by the runner's own path, for a driver that holds its own
  * ticket: `take`, `renew` or `release`, or the queue itself when `verb` is null.
@@ -141,6 +148,6 @@ const unclaimIntentCall = (intent) => writerCall('unclaim-intent', intent);
 
 module.exports = {
   RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
-  intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
+  intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, laneIntermittentCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
   verifyItemCall,
 };

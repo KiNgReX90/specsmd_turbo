@@ -138,7 +138,7 @@ Finalize automatically once no work remains.
 
    A log line matching a lane's `red_line` turns the wait red at once, while the lane walks on. While a lane walks, a committed fix gates through `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml`: it stops the tree's running gate and lanes and proves each lane stopped by its `stop` check. It refuses when the fix changes nothing a running lane proves.
 
-   An instrument red passes only against a harness fix already on the base branch, through the step `gate --wait` prints, and only when the lane's `accept_check`, where set, exits 0.
+   A lane red passes only through the step `gate --wait` prints: an instrument red against a harness fix on the base branch, a product red the lane's `verdicts` prove intermittent.
 2. Run ledger reconciliation:
 
    ```sh

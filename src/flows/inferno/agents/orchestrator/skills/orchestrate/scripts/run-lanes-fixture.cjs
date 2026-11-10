@@ -2,11 +2,13 @@
 
 /**
  * Test fixtures for the smoke and Windows lanes: a throwaway host repo on an intent branch whose
- * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | redwait | file>`.
+ * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | redwait | file | verdicts>`.
  * `wait` holds until the release file exists, `movewait` then writes an in-scope file, `redwait`
- * first prints a product red class line and then holds like `wait`, and `file` exits
- * with the code written to the code file outside the tree. Every lane run appends its name and
- * INFERNO_GATE_CONFIG to the lane-env file outside the tree. A lane's `accept_check` stub,
+ * first prints a product red class line and then holds like `wait`, `file` exits
+ * with the code written to the code file outside the tree, and `verdicts` copies the verdicts-next
+ * file outside the tree to the verdicts file beside it and exits 10. Every lane run appends its name and
+ * INFERNO_GATE_CONFIG to the lane-env file outside the tree. The finalize stub `node proof.cjs hold`
+ * holds until the release file exists, so the gate job stays in its finalize commands. A lane's `accept_check` stub,
  * `node check.cjs <exit>`, writes its INFERNO_* environment to the check-env file outside the
  * tree, prints its verdict as its last line and exits with that code.
  */
@@ -131,12 +133,17 @@ function fixture(t, source = config()) {
   write(tree, 'proof.cjs', `const fs = require('node:fs');
 fs.appendFileSync('.runs', process.argv[2] + '\\n');
 if (process.argv[2] === 'red') process.exit(1);
+while (process.argv[2] === 'hold' && !fs.existsSync('../release')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
 `);
   write(tree, 'lane.cjs', `const fs = require('node:fs');
 const [name, code, release] = process.argv.slice(2);
 fs.appendFileSync('.lane-runs', name + '\\n');
 fs.appendFileSync('../lane-env', name + ' ' + (process.env.INFERNO_GATE_CONFIG || '') + '\\n');
 if (code === 'redwait') console.log('PRODUCT RED demo: red on the branch');
+if (code === 'verdicts') {
+  fs.copyFileSync('../verdicts-next.json', '../verdicts.json');
+  process.exit(10);
+}
 if (code === 'wait' || code === 'movewait' || code === 'redwait') {
   while (!fs.existsSync(release) && fs.existsSync('lane.cjs')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   if (code === 'movewait') fs.writeFileSync('src/moved.txt', 'moved\\n');
@@ -157,8 +164,18 @@ process.exit(code);
   git(tree, 'checkout', '-qb', BRANCH);
   return {
     tree, release, code, cache: path.join(dir, 'cache'), checkEnv: path.join(dir, 'check-env'), laneEnv: path.join(dir, 'lane-env'),
+    next: path.join(dir, 'verdicts-next.json'), verdicts: path.join(dir, 'verdicts.json'),
   };
 }
+
+/** The verdicts the `verdicts` stub writes on its next run: each red test as `[name, base, again]`. */
+function nextVerdicts(f, red) {
+  writeFile(f.next, `${JSON.stringify({ red: red.map(([name, base, again]) => ({ name, base, again })) })}\n`);
+}
+
+/** A config whose smoke lane runs `token` and names the verdicts file the `verdicts` stub writes. */
+const withVerdicts = (token = 'verdicts', lanes = {}) =>
+  config({ smoke: token, ...lanes }, [whole], ['src/**'], { smoke: { verdicts: '../verdicts.json' } });
 
 function run(f, ...args) {
   reviewBefore(args, f.tree);
@@ -208,5 +225,6 @@ function cacheOf(f) {
 }
 
 module.exports = {
-  BRANCH, acceptLine, cacheOf, commit, config, fixture, gated, git, harnessFix, laneRuns, passed, red, run, touch, whole, write,
+  BRANCH, acceptLine, cacheOf, commit, config, fixture, gated, git, harnessFix, laneRuns, nextVerdicts, passed, red, run, touch, whole,
+  withVerdicts, write,
 };
