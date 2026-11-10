@@ -78,8 +78,9 @@ Until the readout reads both lenses and counts a mutant once (section 4 of `infe
 | Item, on the app repo | Rounds, both lenses | Round 1 findings | Mutants per criterion | Grants | Build commit to clean review |
 | --- | --- | --- | --- | --- | --- |
 | `a14-the-store-holds-a-vulnerability-the-maker-found`, 2026-11-10, review records `d650ef038` and `3ff216c44` | 2 | contract: 1 blocker, 1 minor. quality: 1 major, 2 minor | 1.0 (6 proposals, 6 criteria), none run at the item, all owed to the intent review | 1 | 21 minutes |
+| `doc-each-stated-law-prints-its-notified-body-in-point-7`, 2026-11-10, review records `2f938490c` and `208302195` | 2 | contract: 1 blocker, 1 minor. quality: 4 minor | 0.9 (15 proposals and 2 pins, 17 criteria), none run at the item, all owed to the intent review | 3 | 33 minutes |
 
-What the first row shows. The quality lens found a major finding of its own in round 1. Both reviewers came back warm for round 2 and both signed clean. The readout printed "12 in 2 rounds" for the 6 proposals, which is the double count of the handoff.
+What the rows show. Both items closed in 2 rounds, with the same two reviewers back for round 2. Neither ran a mutant at the item, so the whole mutant load of these intents lands at the intent review (section 3 of the handoff). On the first row: The quality lens found a major finding of its own in round 1. Both reviewers came back warm for round 2 and both signed clean. The readout printed "12 in 2 rounds" for the 6 proposals, which is the double count of the handoff.
 
 ## 4. Findings from the first host
 
