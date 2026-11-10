@@ -56,7 +56,7 @@ test("a clean intent review owes no caught mutant for a deferred item's criteria
   write(live.tree, REVIEW, "verdict: clean\n");
   const owed = record(live.fixture, live.tree);
   assert.equal(owed.code, 2, owed.out + owed.err);
-  assert.match(owed.err, /a-two owes a caught mutant for criteria 1/);
+  assert.match(owed.err, /a-two owes a caught mutant or a checked pin for criteria 1/);
 
   const { fixture, tree } = deferred(started());
   review(fixture, tree);
