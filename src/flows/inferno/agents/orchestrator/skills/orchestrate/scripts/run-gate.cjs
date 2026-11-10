@@ -6,7 +6,6 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const proofs = require('./run-proofs.cjs');
-const { attribute } = require('./run-attribute.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const jobs = require('./run-jobs.cjs');
 const lanes = require('./run-lanes.cjs');
@@ -80,100 +79,6 @@ function foldBase(tree, base) {
     }
   }
   return lib.git(tree, ['rev-parse', 'HEAD']) === before ? [] : [`folded ${base} into ${branch}`];
-}
-
-// ---------------------------------------------------------------------------
-// verify-item
-// ---------------------------------------------------------------------------
-
-/** The items under review: one id, or the explicitly batched chain in `--items a,b`. */
-function reviewed(ledger, itemId, options) {
-  const ids = options.items
-    ? String(options.items).split(',').map((id) => id.trim()).filter((id) => id.length > 0)
-    : [itemId];
-  return ids.map((id) => {
-    const intent = options.intent
-      ? lib.findIntent(ledger, options.intent)
-      : ledger.intents.find((entry) => entry.items.some((item) => item.id === id));
-    if (!intent) throw new RunError(`work item not found in the live ledger: ${id}`, 'ITEM_NOT_FOUND');
-    return { id, intent: intent.id };
-  });
-}
-
-/** Every path changed since `since` that the union of the reviewed items does not own. */
-function sinceOutside(tree, since, editable) {
-  return changedPaths(tree, since).filter(
-    (file) => !file.startsWith(`${lib.SPECS_DIR}/`) && !lib.ownedBy(file, editable, tree)
-  );
-}
-
-/**
- * One item's own check plus its ownership. A batch is reviewed as the unit it was built as:
- * each item against its own dispatch, so a change one item of the batch reported is that
- * item's, and under `--since` against the union of its items' editable lists.
- */
-function verifyItem(itemId, options) {
-  const tree = treeOf(options);
-  const ledger = lib.readLedger(tree);
-  const items = reviewed(ledger, itemId, options).map((entry) => ({
-    ...entry,
-    spec: lib.readItemSpec(tree, entry.intent, entry.id),
-  }));
-  const label = items.map((entry) => entry.id).join(', ');
-  const editable = [
-    ...new Set(
-      items.flatMap((entry) => (entry.spec.manifest.ownership && entry.spec.manifest.ownership.editable) || [])
-    ),
-  ];
-  // `--since` names the baseline by hand; without it each item answers to its own dispatch,
-  // and an item the runner before signed records dispatched is checked the old way.
-  const out = [];
-  let attribution = options.since ? null
-    : attribute(tree, items, { ...options, base: options.base || resolveBase(lib.readConfig(tree, options.config), null, tree) });
-  if (attribution && attribution.legacy) {
-    out.push(`no signed dispatch for ${attribution.legacy.join(', ')}: checked since HEAD as the runner before signed records did`);
-    attribution = null;
-  }
-  const since = attribution ? attribution.since : options.since || 'HEAD';
-  const outside = attribution ? attribution.outside : sinceOutside(tree, since, editable);
-  const unreported = attribution ? attribution.unreported : [];
-  const attributed = attribution ? attribution.attributed : [];
-  let failed = outside.length > 0;
-  const checks = [];
-  for (const entry of items) {
-    if (!entry.spec.manifest.finalize_check) {
-      out.push(`PASS ${entry.id} carries no finalize_check`);
-      continue;
-    }
-    const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `verify-${entry.id}-${lib.stamp()}.log`);
-    const check = lib.runShell(entry.spec.manifest.finalize_check, tree, log);
-    checks.push({ item: entry.id, ...check });
-    out.push(
-      check.code === 0
-        ? `PASS ${check.seconds}s ${check.command}`
-        : `FAIL ${check.seconds}s ${check.command} -> ${log}`
-    );
-    if (check.code !== 0) {
-      out.push(...lib.tail(log, 5));
-      failed = true;
-    }
-  }
-
-  if (outside.length > 0) {
-    out.push(`outside ${label} ownership.editable: ${outside.slice(0, 10).join(', ')}`);
-  } else {
-    out.push(`ownership clean since ${since}`);
-  }
-  if (unreported.length > 0) {
-    out.push(`owned but not in changed_files: ${unreported.slice(0, 10).join(', ')}. If this item wrote them, run dispatch-log ` +
-      'for it again and accept-dispatch its full list, or each sibling\'s review names them outside');
-  }
-
-  return {
-    exit: failed ? 2 : 0,
-    payload: { items: items.map((entry) => entry.id), item: items[0].id, intent: items[0].intent, since, outside, unreported, checks, dispatches: attributed },
-    out,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -426,5 +331,4 @@ module.exports = {
   mergeBase,
   refuseDirty,
   treeOf,
-  verifyItem,
 };
