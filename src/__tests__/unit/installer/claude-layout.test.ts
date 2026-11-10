@@ -65,6 +65,21 @@ describe.sequential('Claude command-only files', { timeout: 30_000 }, () => {
     expect(frontmatter(launcher)).not.toMatch(/^(model|effort):/m);
   });
 
+  // The orchestrator dispatches the quality lens as a subagent beside the contract reviewer, so it
+  // lands as an agent and a command with the canonical body, and the lock holds all three files.
+  it('installs the quality reviewer as an agent and a command with the canonical body', async () => {
+    await installFlow('inferno', ['claude']);
+
+    const canonical = readFileSync('.specsmd/inferno/agents/reviewer-quality/agent.md', 'utf8');
+    for (const rel of ['.claude/agents/specsmd-inferno-reviewer-quality.md', '.claude/commands/specsmd-inferno-reviewer-quality.md']) {
+      const text = readFileSync(rel, 'utf8');
+      expect(body(text), rel).toBe(body(canonical));
+      expect(frontmatter(text), rel).toMatch(/^name: specsmd-inferno-reviewer-quality$/m);
+      expect(Object.keys(readLock().files), rel).toContain(rel);
+    }
+    expect(Object.keys(readLock().files)).toContain('.specsmd/inferno/agents/reviewer-quality/agent.md');
+  });
+
   it('gives a tool without agents the full planner body as its command', async () => {
     await installFlow('inferno', ['cursor']);
 
