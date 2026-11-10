@@ -6,7 +6,9 @@
  * It folds the base in first, so the gate's own fold is a no-op unless the base moves again,
  * and prints the reviewer dispatch line. After the reviewer writes review.yaml, the same call
  * validates it, records the tree it read and commits that one file. A fix review sends each
- * finding to the item that owns it; the next intent review reads only what changed since.
+ * finding to the item that owns it; the next intent review reads only what changed since. The
+ * dispatch names each item that settled a minor-only fix with no second item review, with the
+ * range of that correction.
  */
 
 const fs = require('fs');
@@ -66,6 +68,8 @@ function dispatch(tree, context, reasons, from, folded, previous = null) {
   const specs = path.join(dir, 'work-items');
   const scan = owed.scanPath(tree, intent);
   const scanned = fs.existsSync(path.join(tree, scan));
+  // The corrections of minor findings no item review re-read, which this reviewer reads closely.
+  const settled = owed.settledItems(tree, intent, from);
   fs.mkdirSync(path.dirname(dispatchPath(tree)), { recursive: true });
   const at = { intent, head: lib.git(tree, ['rev-parse', 'HEAD']), hash: proofs.scopeHash(tree) };
   fs.writeFileSync(dispatchPath(tree), `${JSON.stringify(at)}\n`);
@@ -73,7 +77,7 @@ function dispatch(tree, context, reasons, from, folded, previous = null) {
     exit: 3,
     payload: {
       ok: false, intent, owed: reasons, agent, model, range, previous, brief,
-      specs: items.map((id) => path.join(specs, `${id}.md`)), scan: scanned ? scan : null, write: rel,
+      specs: items.map((id) => path.join(specs, `${id}.md`)), scan: scanned ? scan : null, settled, write: rel,
     },
     out: [
       ...folded,
@@ -84,6 +88,7 @@ function dispatch(tree, context, reasons, from, folded, previous = null) {
         `  brief ${brief}`,
         `  specs ${specs}: ${items.map((id) => `${id}.md`).join(' ') || '(none)'}`,
         ...(scanned ? [`  scan ${scan}`] : []),
+        ...settled.map((entry) => `  settled ${entry.item} ${entry.range}`),
         `  write ${rel}`,
       ]),
       `then ${intentRecordCall(tree)} records it`,

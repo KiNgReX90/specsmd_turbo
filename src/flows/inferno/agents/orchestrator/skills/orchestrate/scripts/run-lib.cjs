@@ -241,12 +241,15 @@ function readLedger(root) {
       integrated_sha: field(lines, item, 'integrated_sha'),
       completed_at: field(lines, item, 'completed_at'),
       // The item review state-review.cjs writes: the verdict, the hash of the files it bound,
-      // the commit it read, the tier that built that version, how often that tier was sent
-      // back and what the last fix weighed. integrate, frontier and review read this one shape.
+      // the commit it read, the tier that built that version, how often a review sent the item
+      // back (`review_misses`, null on a ledger the released flow wrote, which counted per tier
+      // in `review_rejections`) and what the last fix weighed. integrate, frontier and review
+      // read this one shape.
       review: field(lines, item, 'review'),
       review_hash: field(lines, item, 'review_hash'),
       review_commit: field(lines, item, 'review_commit'),
       review_tier: field(lines, item, 'review_tier'),
+      review_misses: field(lines, item, 'review_misses'),
       review_rejections: Number(field(lines, item, 'review_rejections')) || 0,
       review_weight: field(lines, item, 'review_weight'),
       reviewed_at: field(lines, item, 'reviewed_at'),

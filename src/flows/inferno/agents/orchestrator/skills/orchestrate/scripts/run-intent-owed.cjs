@@ -23,6 +23,8 @@ const { itemProofs } = require('./run-mutant-coverage.cjs');
 const { intentReviewCall, scanCall } = require('./run-call.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { reviewOutside } = require('./run-config-gates.cjs');
+const { reviewPath } = require('./run-review-file.cjs');
+const { previousReview } = require('./run-review-delta.cjs');
 
 const { RunError } = lib;
 
@@ -168,6 +170,22 @@ function gateRefusal(tree, config, intentId, before, shown) {
 }
 
 /**
+ * The items of the intent whose minor-only fix settled with no second item review, each with
+ * the range nobody re-read: from the commit that fix review read to the commit it settled at.
+ * Only those settled after `from`, the commit the intent review reads from, so a delta of the
+ * intent review lists none the last one already read.
+ */
+function settledItems(tree, intentId, from) {
+  const intent = lib.readLedger(tree).intents.find((entry) => entry.id === intentId);
+  const short = (ref) => lib.git(tree, ['rev-parse', '--short', ref], { tolerate: true }) || ref.slice(0, 7);
+  return (intent ? intent.items : []).filter((item) => item.review === 'settled' && item.review_commit).flatMap((item) => {
+    if (from && lib.git(tree, ['merge-base', '--is-ancestor', item.review_commit, from], { tolerate: true }) !== null) return [];
+    const read = previousReview(tree, reviewPath(intentId, item.id));
+    return [{ item: item.id, range: `${read ? short(read.commit.trim()) : 'unknown'}..${short(item.review_commit)}` }];
+  });
+}
+
+/**
  * Whether an evidence path exists. A path inside the intent's own dir is found wherever the
  * intent lives now: both hosts archive that dir before they merge.
  */
@@ -205,5 +223,5 @@ function mergeOwed(tree, config, intentId) {
 
 module.exports = {
   gateRefusal, intentFor, intentItems, intentReviewPath, intentReviewState, mergeOwed, outsideHash, parseFor, reviewCurrent,
-  scanOwed, scanPath,
+  scanOwed, scanPath, settledItems,
 };

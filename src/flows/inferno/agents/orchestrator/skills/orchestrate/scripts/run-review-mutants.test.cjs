@@ -61,7 +61,7 @@ test("the record step fills caught and writes the survivor finding", () => {
   assert.match(result.out, /^FINDING 2 src\/a\.ts:2: the runner broke src\/a\.ts:2 .*node checks\/has\.cjs checks\/two\.expect .* stayed green/m);
   assert.doesNotMatch(result.out, /^MUTANT 2 survived/m, "the survivor is told once, as its finding");
   assert.match(ledger(fixture), /review: fix/);
-  assert.match(ledger(fixture), /review_rejections: 1/);
+  assert.match(ledger(fixture), /review_misses: 1/);
 
   const recorded = parseItemReview(fixture.root, REVIEW, "a-one", { recorded: true });
   assert.equal(recorded.verdict, "fix", "a survivor turns the reviewer's clean into fix");

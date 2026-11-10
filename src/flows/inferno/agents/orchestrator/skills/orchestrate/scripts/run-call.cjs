@@ -79,6 +79,9 @@ const itemReviewCall = (tree, id, intent = null) => runCall('review', tree, inte
  */
 const itemRecordCall = (tree, id, intent = null) => runCall('review', tree, intent, ['--item', id, '--reviewer', '<agent-id>']);
 
+/** One item's own check and its proof, of `intent` when it is not the caller's. */
+const verifyItemCall = (tree, id, intent = null) => runCall('verify-item', tree, intent, [id]);
+
 /** Land one item: fold, the cheap checks, then its completion; of `intent` when it is not the caller's. */
 const integrateCall = (tree, id, intent = null) => runCall('integrate', tree, intent, ['--item', id]);
 
@@ -123,4 +126,5 @@ const unclaimIntentCall = (intent) => writerCall('unclaim-intent', intent);
 module.exports = {
   RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
   intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
+  verifyItemCall,
 };

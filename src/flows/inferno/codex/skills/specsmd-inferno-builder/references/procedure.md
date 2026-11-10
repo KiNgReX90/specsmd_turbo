@@ -52,6 +52,10 @@ For docs-only or config-only work where a behavioral test would be artificial, r
 
 If the existing test suite has no viable seam and adding one would exceed ownership, return blocked with the exact missing path or contract needed.
 
+## Two misses
+
+Handed an item that reviews sent back twice, find the cause before the fix: a third fix on the same guess misses too. `git log -p` of its review file shows each round's findings and the commit that round read. Reproduce what still fails with the narrowest command, follow it to the first wrong line, and name that root cause with `file:line` and output you saw, and why both fixes missed it: the symptom patched, the wrong layer, the test instead of the code, a second caller. Then fix it through the gate above, and put both in `notes` as `cause:` and `missed:`.
+
 ## Design and ownership
 
 - Treat `design_contract` as law. Verify exact values against its cited source, not memory or visual approximation.

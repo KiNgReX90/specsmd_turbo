@@ -16,7 +16,7 @@ autonomy:
 models:
   strong: claude-opus-5-5         # builders on complexity medium and high
   cheap: claude-sonnet-5-5        # builders on complexity low
-  escalate: claude-opus-5-5       # the fresh builder that takes over an item after two strong-tier rejections
+  escalate: claude-opus-5-5       # the fresh builder that takes over an item at its second miss, cause first
   oracle: claude-opus-5-5         # the oracle on the normal route, every ask whose impact and complexity are not both high; absent, roles.oracle, else the oracle's own pin. Its effort is the oracle role's, xhigh by default
   # oracle_hard: claude-fable-5-2 # the oracle on the hard route, an ask graded high on both; set it only when the account has that tier: without it every ask takes the normal route. Codex has no hard route, its oracle's pin is the host's top tier
 

@@ -36,8 +36,8 @@ Complete this phase before claiming anything.
 Continue in this thread from here.
 
 1. In one batched read, load the applicable `AGENTS.md` files, state, Codex config, every pending work-item spec for this intent, the halt flag, UTC time, the worktree list and branch status.
-2. Read configuration once. Missing keys use canonical behavior: `delivery.mode: auto-close` and the discovered build and full tests for final verification. `verification.finalize_scopes` narrows a gate command to the paths worth running it on, `worktree.bootstrap` runs in a fresh worktree, and `dispatch.constraints` is pasted verbatim into every dispatch.
-3. Validate every pending work item before creating a worktree with `run.cjs frontier <intent-id> --tree <path> --config .specs-inferno/config.codex.yaml`. It checks the manifest fields and the dependency graph and names the exact missing field; hand a manifest defect to the planner skill for a bounded repair and never claim or dispatch an invalid item. An `INVALID` line beside ready items names an unbuilt item whose diagnosis probe went stale: dispatch the ready items and repair that one.
+2. Read configuration once. Missing keys use canonical behavior: `delivery.mode: auto-close` and the discovered build and full tests at the gate. `verification.finalize_scopes` narrows a gate command to the paths worth running it on, `worktree.bootstrap` runs in a fresh worktree, and `dispatch.constraints` is pasted verbatim into every dispatch.
+3. Validate every pending work item before creating a worktree with `run.cjs frontier <intent-id> --tree <path> --config .specs-inferno/config.codex.yaml`. It names the exact missing manifest field or graph defect; hand a manifest defect to the planner skill for a bounded repair and never claim or dispatch an invalid item. An `INVALID` line beside ready items names an unbuilt item whose diagnosis probe went stale: dispatch the ready items and repair that one.
 4. For recovery, inspect the branch's commits and run:
 
    ```sh
@@ -45,8 +45,8 @@ Continue in this thread from here.
    ```
 
    Integrate landed work the ledger lacks with `run.cjs integrate --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`; never redispatch it.
-5. For a fresh or stale-claim run, claim on the default branch before the worktree with `run.cjs claim <intent-id> --config .specs-inferno/config.codex.yaml`: it sets `in_progress` and `claimed_at`, sets `claimed_by` to the intended `inferno-intent/<id>-<timestamp>` branch, and commits `specsmd(<id>): claim intent for run`.
-6. Choose an explicit `<path>` inside the current writable roots, then create one clean worktree from that claim commit on branch `inferno-intent/<id>-<timestamp>` with `run.cjs worktree <intent-id> --config .specs-inferno/config.codex.yaml --path <path>`. It runs every `worktree.bootstrap` command there once, before the first dispatch. An in-place run needs an explicit user override.
+5. For a fresh or stale-claim run, claim on the default branch before the worktree with `run.cjs claim <intent-id> --config .specs-inferno/config.codex.yaml`: it records the claim and its branch and commits it.
+6. Choose an explicit `<path>` inside the current writable roots, then create one clean worktree from that claim commit on branch `inferno-intent/<id>-<timestamp>` with `run.cjs worktree <intent-id> --config .specs-inferno/config.codex.yaml --path <path>`. It runs `worktree.bootstrap` there once, before the first dispatch. An in-place run needs an explicit user override.
 
 If a fresh run is abandoned before any item integrates, run `run.cjs unclaim <intent-id> --config .specs-inferno/config.codex.yaml`. A halted run retains its claim.
 
@@ -111,7 +111,7 @@ Run `run.cjs dispatch-log <intent-id> --item <item-id> --tier <tier> --agent <na
 
 1. Reject noisy output. Review from the result block, `run.cjs verify-item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` and `git diff --stat`, and open a changed file only when one of those raises a question. Check `changed_files` against `ownership.editable`; accept an extra file only on evidence that the assigned change requires it.
 2. `verify-item` and `integrate` confirm the builder's checks; do not replay a focused check by hand. For a `design_contract`, require verification against the cited source. A note naming a defect the builder saw and left, a residual or a product call is postponed work: send it back with `followup_task`, and the minimal ownership extension granted with `run.cjs grant` on the correction's fresh `dispatch-log`, before integrating, never into the ledger, the report or the user's lap.
-3. Stage only that item's changed files, never the entire tree, and commit directly on the intent branch for `auto-close`. The commit message carries the builder's `cases:` value as its `Cases:` line, which integrate checks. Then `run.cjs review --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` prints the reviewer dispatch line (exit 3); after the reviewer writes, run the printed `then` line: 0 clean, 2 findings and the `next` builder, who fixes before you commit and review again.
+3. Stage only that item's changed files, never the entire tree, and commit directly on the intent branch for `auto-close`. The commit message carries the builder's `cases:` value as its `Cases:` line, which integrate checks. Then `run.cjs review --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` prints the reviewer dispatch line (exit 3); after the reviewer writes, run the printed `then` line: 0 clean or settled, 2 findings and the `next` builder, who fixes before you commit and review again. `next user` holds that item as its line says, its two sentences in `Needs you:`.
 4. Then run:
 
    ```sh

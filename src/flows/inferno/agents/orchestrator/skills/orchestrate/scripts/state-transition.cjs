@@ -24,7 +24,8 @@
  *                                             item is already completed
  *   block-intent   --intent <id> --reason <w> park a pending intent outside the queue
  *   unblock-intent --intent <id>              return a parked intent to the queue
- *   review-item    --intent <id> --item <id>  record an item review verdict (state-review.cjs)
+ *   review-item    --intent <id> --item <id>  record an item review verdict, clean, fix or settled
+ *                                             (state-review.cjs)
  *   check [--intent <id>]                     report ledger drift; exit 1 if any found
  *
  * `check` itself lives in state-check.cjs, the reader beside this writer, and is re-exported

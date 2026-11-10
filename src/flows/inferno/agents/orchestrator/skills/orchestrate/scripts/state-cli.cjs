@@ -16,7 +16,7 @@ const USAGE = `INFERNO state.yaml single-writer
   node state-transition.cjs unblock-intent --intent <id>
   node state-transition.cjs complete-item --intent <id> --item <id> --proof <sha>
   node state-transition.cjs close-intent  --intent <id>
-  node state-transition.cjs review-item --intent <id> --item <id> --verdict clean|fix --files-hash <hex> --tier cheap|strong|escalate --commit <sha>
+  node state-transition.cjs review-item --intent <id> --item <id> --verdict clean|fix|settled --files-hash <hex> --tier cheap|strong|escalate --commit <sha>
   node state-transition.cjs archive-intent [--intent <id>] [--sweep]
   node state-transition.cjs check [--intent <id>]
 
@@ -46,7 +46,7 @@ them from the remaining intents' depends_on_intents, and refuses anything not co
 --sweep adds every other completed intent except one another session is still shipping.
 complete-item refuses an item with no integration proof. run.cjs integrate --item <id> runs the
 checks on the committed tree and passes the sha they proved, so nothing is marked verified that
-nothing verified. It also refuses an item whose review is not clean. review-item records that
+nothing verified. It also refuses an item whose review is neither clean nor settled. review-item records that
 verdict, and run.cjs review --item is its one caller. close-intent refuses while any work item is still open; complete each item first.
 check exits 1 when the ledger drifts from its work items, when an intent waiting to be claimed
 does not open its INTENT. line with the triage criterion that makes it one, as in "INTENT. (c)
@@ -160,7 +160,7 @@ function main(argv, commands) {
     if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
     else {
       process.stdout.write(
-        `reviewed ${result.item} ${result.verdict} (${result.tier}, ${result.rejections} rejection(s)) at ${result.reviewed_at}\n`
+        `reviewed ${result.item} ${result.verdict} (${result.tier}, ${result.misses} miss${result.misses === 1 ? '' : 'es'}) at ${result.reviewed_at}\n`
       );
     }
     return 0;
