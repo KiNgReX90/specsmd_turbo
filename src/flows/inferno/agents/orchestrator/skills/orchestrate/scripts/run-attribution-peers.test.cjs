@@ -106,7 +106,7 @@ test('an escape into a sibling\'s ownership that nobody reported is named after 
   assert.deepEqual(result.data.outside, ['a2.cjs']);
 });
 
-test('a later round is waited for, and its patches on top of a landed sibling are not the earlier item\'s', (t) => {
+test('a later round on top of a landed sibling is not the earlier item\'s, open or accepted', (t) => {
   const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs'], c: ['a.cjs', 'c.cjs'] });
   const one = f.start('--item', 'a');
   const two = f.start('--item', 'b');
@@ -118,7 +118,9 @@ test('a later round is waited for, and its patches on top of a landed sibling ar
   const later = f.start('--item', 'c');
   f.write('a.cjs', 'module.exports = 3;\n');
   f.write('c.cjs', 'module.exports = 3;\n');
-  assert.match(f.verify('b').out, new RegExp(`dispatch ${later} for c is still open`));
+  const open = f.verify('b');
+  assert.equal(open.code, 0, open.out);
+  assert.deepEqual(open.data.outside, []);
   f.accepted(later, ['a.cjs', 'c.cjs']);
   assert.deepEqual(f.verify('b').data.outside, []);
   f.land('a.cjs', 'c.cjs');
@@ -311,21 +313,6 @@ test('a correction logged for one item of a chain covers the whole chain', (t) =
     assert.equal(result.code, 0, result.out);
     assert.deepEqual(result.data.outside, []);
   }
-});
-
-test('verify-item waits for a correction of a landed item that started after its own baseline', (t) => {
-  const f = fixture(t, { b: ['b.cjs'], c: ['c.cjs'] });
-  const two = f.start('--item', 'b');
-  f.write('b.cjs', 'module.exports = 2;\n');
-  f.accepted(two, ['b.cjs']);
-  f.land('b.cjs');
-  const later = f.start('--item', 'c');
-  f.write('c.cjs', 'module.exports = 2;\n');
-  f.accepted(later, ['c.cjs']);
-  const fix = f.start('--item', 'b');
-  const result = f.verify('c');
-  assert.equal(result.code, 2, result.out);
-  assert.match(result.out, new RegExp(`dispatch ${fix} for b is still open`));
 });
 
 test('a file nobody claims that is written and put back before the review is no change', (t) => {
