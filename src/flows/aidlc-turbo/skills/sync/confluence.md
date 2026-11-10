@@ -41,7 +41,7 @@ default. `{name}` is the inception's or the intent's name, `{slug}` the intent's
 
 Below, "the documentation page" is the inception's page whose title fits `intent`, "the project
 page" the page whose title fits `project`, and "the overview section" the section titled
-`overview_section`. Story pages are titled `Story {NNN} - {title}`, with ` - {name}` after it when
+`overview_section`. Story pages are titled `Story {NNN} - {title}`, with <code> - {name}</code> after it when
 the page tree adds it.
 
 ---
@@ -143,7 +143,7 @@ Input: the link to the documentation page, or `none` when the intent has no page
    stories page `stories/index.md`, and every row of that subtree carries `intent: {intent-slug}`.
 3. The project page: `project_docs_url` from `project/project.yaml` when set. Otherwise take the
    parent of the documentation page and list its children: the one child titled `project` (default
-   `Project Documentation`), or starting with that title and ` -`, is it; write its link into
+   `Project Documentation`), or starting with that title and <code> -</code>, is it; write its link into
    `project/project.yaml` as `project_docs_url`, keeping every other key. No match, or more than
    one: go on without it and say so in `note`. Never create a page. Pull its tree into
    `project/pages/` the same way.
@@ -170,7 +170,7 @@ from `project/project.yaml`. Neither: return `status: needs_input` with the ques
 link.
 
 1. Read the page. Its title must be the `project` name (default `Project Documentation`) or start
-   with that name and ` -`. Any other title, or a folder instead of a page: return
+   with that name and <code> -</code>. Any other title, or a folder instead of a page: return
    `status: needs_input` with the question to paste the link of the project page, naming what you
    found and the title it should have.
 2. Write its link into `project/project.yaml` as `project_docs_url`, keeping every other key. No
