@@ -83,6 +83,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs teardown --tree <dir> [--base <branch>] [--config <file>] remove a worktree and branch the base already holds
   node run.cjs register-process <pid> --tree <dir> --run-id <id> let teardown stop a process the run launched in the tree
   node run.cjs dispatch-log <intent-id> --item <id> | --items <a,b> --tier <tier> --agent <name> [--tree <dir>] record the builder's baseline, print its dispatch id
+  node run.cjs dispatch-log <intent-id> --tier oracle [--item <id>] --impact <grade> --complexity <grade> [--blocked <dispatch-id>] [--tree <dir>] route and log an oracle ask, print its route, model and dispatch id
   node run.cjs accept-dispatch <dispatch-id> --changed-paths <json-array> [--tree <dir>] freeze the result it reported
   node run.cjs grant <dispatch-id> --path <file> [--tree <dir>] add one file to a running dispatch's ownership, signed by the orchestrator
 
@@ -108,6 +109,8 @@ Options
                     real-app: the item whose own paths the removals are read from
   --range <a..b>    real-app: the diff whose removed test ids, labels and routes it looks for; cases: the landing it checks
   --items <a,b>     integrate, verify-item and dispatch-log: the batched chain, treated as one unit
+  --impact <grade>  dispatch-log --tier oracle: "high <clause>: <rubric line>" or "low: <rubric line>", as is --complexity
+  --blocked <id>    dispatch-log --tier oracle: the normal oracle that returned blocked, asked once more on the hard route
   --intent <id>     verify-item, integrate, review and probes: the intent owning the item, when the id is ambiguous;
                     scan, review, gate and green: the intent a tree on no intent branch builds
   --force           gate: rerun every finalize command, revoking each proof before its run

@@ -7,7 +7,8 @@
  * criterion, a caught mutant that names it, whatever language the tests are in: the batch mutate
  * builds every Rust mutant of a review once. An item with no test path owes none. A mutant counts
  * from the item's own review or from the intent review, and only when it reads caught yes, so an
- * entry the batch gave no verdict never counts.
+ * entry the batch gave no verdict never counts. A proposal an item review recorded without
+ * `caught` never ran: the intent review's record runs it (run-review-mutants.cjs).
  */
 
 const fs = require('fs');
@@ -25,8 +26,8 @@ function acceptanceCriteria(content) {
     .map((match) => match[1]);
 }
 
-/** The caught mutants an item review recorded; none when it has no review file yet. */
-function itemMutants(tree, intentId, itemId) {
+/** Every mutant entry an item review recorded; none when it has no review file yet. */
+function recordedMutants(tree, intentId, itemId) {
   for (const base of [['intents'], ['archive', 'intents']]) {
     const file = path.join(tree, lib.SPECS_DIR, ...base, intentId, 'reviews', `${itemId}.yaml`);
     if (!fs.existsSync(file)) continue;
@@ -36,10 +37,18 @@ function itemMutants(tree, intentId, itemId) {
     } catch (error) {
       return [];
     }
-    return doc && Array.isArray(doc.mutants) ? doc.mutants.filter((entry) => entry && entry.caught === 'yes') : [];
+    return doc && Array.isArray(doc.mutants) ? doc.mutants.filter((entry) => entry && typeof entry === 'object') : [];
   }
   return [];
 }
+
+/** The caught mutants an item review recorded. */
+const itemMutants = (tree, intentId, itemId) => recordedMutants(tree, intentId, itemId).filter((entry) => entry.caught === 'yes');
+
+/** The proposals an item review recorded that never ran, each with the item that owes it. */
+const owedProposals = (tree, intentId, ids) => ids.flatMap((id) => recordedMutants(tree, intentId, id)
+  .filter((entry) => entry.caught === undefined && typeof entry.find === 'string')
+  .map((entry) => ({ item: id, entry })));
 
 /** What each item of the intent needs: its criteria, how its tests prove them, its own mutants. */
 function itemProofs(tree, intentId, ids) {
@@ -60,14 +69,14 @@ function itemProofs(tree, intentId, ids) {
 const norm = (text) => String(text).trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
- * Whether a mutant names criterion `index` (0-based) of `item`. In the item's own review the
- * index alone names it (`2`, `AC2`); in the intent review it carries the item (`<item>:2`).
- * The criterion's text names it in either.
+ * Whether a mutant names criterion `index` (0-based) of `item`. In the item's own review a leading
+ * number names it (`2`, `AC2`, `AC-2 the total`); in the intent review it carries the item
+ * (`<item>:2`). The criterion's text names it in either.
  */
 function names(mutant, item, index, own) {
   const said = norm(mutant.criterion);
   if (said === norm(item.criteria[index])) return true;
-  const number = own ? /^(?:ac)?\s*#?(\d+)$/.exec(said) : new RegExp(`^${item.id.toLowerCase()}\\s*[:#]\\s*(?:ac)?(\\d+)$`).exec(said);
+  const number = own ? /^(?:ac-?\s*)?#?(\d+)\b/.exec(said) : new RegExp(`^${item.id.toLowerCase()}\\s*[:#]\\s*(?:ac-?\\s*)?(\\d+)\\b`).exec(said);
   return Boolean(number) && Number(number[1]) === index + 1;
 }
 
@@ -85,4 +94,8 @@ function mutantGaps(items, intentMutants) {
   return lines;
 }
 
-module.exports = { acceptanceCriteria, itemProofs, mutantGaps };
+/** The refusal of a clean intent review while criteria owe: the reviewer proposes, the runner runs. */
+const gapRefusal = (gaps) => `verdict clean while ${gaps.join('; ')}. Propose one mutant for each under mutants, ` +
+  'its criterion written <item>:<n>; the runner runs it when it records this file';
+
+module.exports = { acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals };

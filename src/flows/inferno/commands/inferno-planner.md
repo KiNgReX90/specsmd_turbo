@@ -93,7 +93,7 @@ Classify the new scope against every non-completed intent in state.yaml, cheap-f
 - **depend**: a distinct deliverable that must run after another. Record `depends_on_intents` on the state entry and `depends_on` in the brief front matter.
 - **conflict**: read both briefs and the specs. When they settle it, decide and record it; when they do not, it is an `oracle:` block and the conflicting scope stays unwritten.
 
-Coupling decides grouping: items on one surface are one intent, disjoint surfaces separate intents. Never write `.specs-inferno/quick-fixes.md` or any parking file. The intent id is the title in kebab-case, and the brief renders from `templates/brief.md.hbs` into `.specs-inferno/intents/<intent-id>/brief.md`.
+Coupling decides grouping: items on one surface are one intent, disjoint surfaces separate intents, and a batch of unrelated findings is one intent of small items. Never write `.specs-inferno/quick-fixes.md` or any parking file. The intent id is the title in kebab-case, and the brief renders from `templates/brief.md.hbs` into `.specs-inferno/intents/<intent-id>/brief.md`.
 
 ## Decompose
 
@@ -144,11 +144,11 @@ design_contract:              # optional
 finalize_check: "<one-line invariant the orchestrator runs>"   # optional
 ```
 
-`context.required` is minimal and `ownership.editable` may overlap another item, which the orchestrator serializes. No `reason:` holds a colon followed by a space, and no placeholder path is saved.
+`context.required` is non-empty and minimal, `context.patterns` required for behavior, architecture, ui and api items, `context.tests` unless the kind is docs-only or config-only, and every `design_contract` path also in `context.required`. `ownership.editable` is non-empty and may overlap another item, which the orchestrator serializes. No `reason:` holds a colon followed by a space, and no placeholder path is saved.
 
 An item whose surface draws a value the backend owns carries one `reads:` entry per value, and its `stale` sentence is what the builder's first failing test asserts, so it names a value on a screen and never a mechanism.
 
-Every number that travelled with a command becomes a `probes:` entry on the item that depends on it: `run` is one read-only shell line, never a suite or a write, `shows` the exact trimmed stdout you saw, both double-quoted. A probe is never an acceptance criterion. An item that exists because something is wrong on the screen today carries `diagnosis:` too, whose pixel or position claim comes from browser geometry, never from adding up declarations. `run.cjs probes` replays both on the dispatch tree and blocks the dispatch on a failing one.
+Every number that travelled with a command becomes a `probes:` entry on the item that depends on it: `run` is one read-only shell line, never a suite or a write, `shows` the exact trimmed stdout you saw, both double-quoted. A probe is never an acceptance criterion. An item that exists because something is wrong on the screen today carries `diagnosis:` too, whose pixel or position claim comes from browser geometry, never from adding up declarations.
 
 **Complexity grading.** `low` when the change is fully written (the item names the change, the pattern file and the test) and no high mark applies; the orchestrator runs it on the cheap tier. `high` when the mechanism could not be settled by measurement, or the item touches async, concurrency or a native process boundary, regulatory or definition encoding, a persisted format, a look with no mockup or token to reproduce, or source spanning more than one top-level tree, where a consumer test that only moves an assertion is not a spanned tree. `medium` otherwise. Grade from what was measured, never from length, and mode is always autopilot. A high item carries its decisions under Technical Notes, one line each.
 
@@ -170,7 +170,7 @@ Every number that travelled with a command becomes a `probes:` entry on the item
 
 - On a host with `integration/TEST-CASES.md`, the brief names the tester case ids the intent touches: an existing id for a changed journey, and for a new one the next free id there, which you never write. Each new id is its own handoff line, exactly `reserve: TC-<n> <title> for <intent-id>/<item-id>`; the launcher lands it, and a collision returns the replacement id for the brief and the item. The item that changes the journey owns the case text and its test.
 - An item that writes or changes a reader-facing string cites the host's reader profile in `context.required` and tells the builder to invoke the writing skill the host's rules name.
-- A design source the UI must reproduce is the fidelity contract: cite it in `context.required` and in `design_contract` on every UI item it covers, with a criterion that every value matches it.
+- A design source the UI must reproduce is the fidelity contract: cite it in `design_contract` on every UI item it covers, with a criterion that every value matches it.
 - Platform work built on one OS verifies through code, gated tests and a cross-target compile. Hardware this machine lacks is never a merge gate; the item names what stands in.
 - No standalone verify item by default: a cheap, scoped invariant rides as `finalize_check:` on the item that owns the change. Emit a `kind: test` item only when verification needs reasoning one command cannot express.
 

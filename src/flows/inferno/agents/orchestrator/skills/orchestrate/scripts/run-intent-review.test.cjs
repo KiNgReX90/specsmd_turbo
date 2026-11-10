@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { CONFIG, INTENT_TREE, git, killedMutate, repo, run, worktree, write } = require("./review-fixture.cjs");
+const { CHECK, proposal } = require("./run-review-mutants-fixture.cjs");
 
 // The intent review: one cold reviewer reads the whole intent against its brief before the
 // gate. `run.cjs review` without --item dispatches it, then validates, records and commits
@@ -182,9 +183,10 @@ test("review refuses a scan line nobody answered", () => {
 });
 
 // --- mutant coverage ---------------------------------------------------------
-// An item with any test path owes a caught mutant for every acceptance criterion, named by its
-// text or its index, whatever language proves it. The batch mutate builds the Rust ones once, so
-// Rust owes no less than JavaScript. The mutant sits in the item review or here.
+// An item with any test path owes a caught mutant for every acceptance criterion, whatever
+// language proves it. The batch mutate builds the Rust ones once, so Rust owes no less than
+// JavaScript. The mutant sits in the item review, named by its text or its index, or here, where
+// the reviewer proposes it as <item>:<n> and the runner runs it when it records the file.
 
 function itemSpec(id, criteria, tests) {
   return `---\nid: ${id}\nintent: alpha\nstatus: pending\n---\n\n# Work Item: ${id}\n\n## Acceptance Criteria\n\n` +
@@ -195,6 +197,10 @@ function itemSpec(id, criteria, tests) {
 const mutantList = (entries) =>
   `mutants:\n${entries.map(([criterion, test]) => `  - criterion: "${criterion}"\n    test: ${test}\n    caught: yes\n`).join("")}`;
 
+/** Proposals the runner catches: each breaks a value its test reads. */
+const A_THREE = { find: "a = 3", replace: "a = 4", expect: "checks/a.expect" };
+const B_TWO = { file: "src/b.ts", find: "b = 2", replace: "b = 5", expect: "checks/b.expect" };
+
 function covered(specs, itemReviews = {}) {
   const { fixture, tree } = opened();
   for (const [id, [criteria, tests]] of Object.entries(specs)) {
@@ -203,8 +209,13 @@ function covered(specs, itemReviews = {}) {
   for (const [id, mutants] of Object.entries(itemReviews)) {
     write(tree, `.specs-inferno/intents/alpha/reviews/${id}.yaml`, `item: ${id}\nverdict: clean\nfiles: [src/a.ts]\n${mutantList(mutants)}`);
   }
+  write(tree, "checks/has.cjs", CHECK);
+  write(tree, "checks/a.expect", "src/a.ts a = 3\n");
+  write(tree, "checks/b.expect", "src/b.ts b = 2\n");
   git(tree, ["add", "-A"]);
-  git(tree, ["commit", "-qm", "specs and item reviews"]);
+  git(tree, ["commit", "-qm", "specs, item reviews and the tests the proposals run"]);
+  // The tests are code, so the reviewer is dispatched on the tree that holds them.
+  assert.equal(run(fixture, ["review", "--tree", tree]).code, 3);
   return { fixture, tree };
 }
 
@@ -219,20 +230,21 @@ test("a JS-proven item owes a caught mutant for every criterion, by text or by i
   assert.match(refused.err, /a-one/);
   assert.match(refused.err, /a is exported/);
   assert.doesNotMatch(refused.err, /a is three/);
-  assert.match(refused.err, /the runner's mutate step/);
-  write(tree, REVIEW, `verdict: clean\n${mutantList([["a-one:2", "node --test src/a.test.ts"]])}`);
+  assert.match(refused.err, /Propose one mutant for each under mutants, its criterion written <item>:<n>/);
+  write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("a-one:2", A_THREE)}`);
   const recorded = review(fixture, tree);
   assert.equal(recorded.code, 0, recorded.out + recorded.err);
 });
 
 test("a Rust-only item owes a caught mutant for every criterion, like a JavaScript one", () => {
-  const { fixture, tree } = covered({ "a-one": [[], ["src/a.test.ts"]], "a-two": [["b runs", "b stops"], ["src/b.rs"]] });
-  write(tree, REVIEW, `verdict: clean\n${mutantList([["b stops", "cargo test b_stops"]])}`);
+  const specs = { "a-one": [[], ["src/a.test.ts"]], "a-two": [["b runs", "b stops"], ["src/b.rs"]] };
+  const { fixture, tree } = covered(specs, { "a-two": [["b stops", "cargo test b_stops"]] });
+  write(tree, REVIEW, "verdict: clean\n");
   const refused = review(fixture, tree);
   assert.equal(refused.code, 2, refused.out + refused.err);
   assert.match(refused.err, /a-two owes a caught mutant for criteria 1 "b runs"/);
   assert.doesNotMatch(refused.err, /b stops/);
-  write(tree, REVIEW, `verdict: clean\n${mutantList([["b stops", "cargo test b_stops"], ["a-two:1", "cargo test b_runs"]])}`);
+  write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("a-two:1", B_TWO)}`);
   const recorded = review(fixture, tree);
   assert.equal(recorded.code, 0, recorded.out + recorded.err);
 });
@@ -252,7 +264,7 @@ test("a mixed item owes every criterion, and a cargo mutant that names one cover
   const refused = review(fixture, tree);
   assert.equal(refused.code, 2, refused.out + refused.err);
   assert.match(refused.err, /a crosses the bridge/);
-  write(tree, REVIEW, `verdict: clean\n${mutantList([["a crosses the bridge", "cargo test bridge"]])}`);
+  write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("a-one:2", A_THREE)}`);
   const recorded = review(fixture, tree);
   assert.equal(recorded.code, 0, recorded.out + recorded.err);
 });
@@ -293,12 +305,14 @@ test("the record restores a mutant a killed mutate left behind, then records ove
 
 test("in the intent review a number names a criterion only with its own item", () => {
   const { fixture, tree } = covered({ "a-one": [["a is three", "a is exported"], ["src/a.test.ts"]], "a-two": [["b"], []] });
-  for (const names of [["a-two:1", "a-two:2"], ["1", "2"]]) {
-    write(tree, REVIEW, `verdict: clean\n${mutantList(names.map((name) => [name, "node --test src/a.test.ts"]))}`);
-    const refused = review(fixture, tree);
-    assert.equal(refused.code, 2, refused.out + refused.err);
-    assert.match(refused.err, /a-one owes a caught mutant for criteria 1 "a is three", 2 "a is exported"/);
-  }
+  write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("a-two:1", B_TWO)}`);
+  const other = review(fixture, tree);
+  assert.equal(other.code, 2, other.out + other.err);
+  assert.match(other.err, /a-one owes a caught mutant for criteria 1 "a is three", 2 "a is exported"/);
+  write(tree, REVIEW, `verdict: clean\nmutants:\n${proposal("1", A_THREE)}`);
+  const bare = review(fixture, tree);
+  assert.equal(bare.code, 2, bare.out + bare.err);
+  assert.match(bare.err, /criterion reads 1; name it <item>:<n>/);
 });
 
 test("an item with no test path owes no mutant", () => {

@@ -12,7 +12,7 @@
 const {
   FINDING_KEYS, RECORDED_KEYS, bad, entries, isMap, readDoc, recordedReviewer, relativePath, verdictParts,
 } = require('./run-review-file.cjs');
-const { mutantGaps } = require('./run-mutant-coverage.cjs');
+const { gapRefusal, mutantGaps } = require('./run-mutant-coverage.cjs');
 
 const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants'];
 /** An intent review also records the hash that leaves out the kb the base synced (review.outside). */
@@ -77,10 +77,7 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
   }
   const scanner = scannerOf(rel, doc, scanIds);
   const gaps = doc.verdict === 'clean' ? mutantGaps(proofs, mutants) : [];
-  if (gaps.length > 0) {
-    throw bad(rel, `verdict clean while ${gaps.join('; ')}. Break each with the runner's mutate step and record it under mutants, ` +
-      'here as <item>:<n> or the criterion text, or in that item\'s review');
-  }
+  if (gaps.length > 0) throw bad(rel, gapRefusal(gaps));
   return {
     verdict: doc.verdict, criteria, findings, mutants, survivors, scanner,
     tree: typeof doc.tree === 'string' ? doc.tree : null,

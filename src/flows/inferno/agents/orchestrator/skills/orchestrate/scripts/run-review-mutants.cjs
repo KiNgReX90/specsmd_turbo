@@ -1,0 +1,160 @@
+'use strict';
+
+/**
+ * The runner runs a review's mutants, once, when it records the review (P1 of the improvement plan).
+ *
+ * Item review. A first review proposes one mutant per acceptance criterion a test covers, under
+ * `mutants`, named by the criterion's number: `{criterion, file, line, find, replace, test}`. The
+ * record step runs them in one batch, writes `caught` (yes, no, or none with `why`) on each, and
+ * writes a `major` finding per survivor, marked `mutant: <criterion>`; a survivor makes the verdict
+ * fix. A delta review proposes none: its record carries the last review's entries over, reruns
+ * only the survivors and the entries that never ran, and keeps the rest as they read. A released
+ * flow's `{criterion, test, caught}` entry is carried while caught; one that survived names no line
+ * to break again, so it is dropped and its criterion is the intent review's.
+ *
+ * Intent review. Its record runs, in one batch, every proposal an item review left without
+ * `caught`, the survivors of the last intent review, and the intent reviewer's own proposals,
+ * named `<item>:<n>` and only for a criterion that has no mutant yet. Each lands in review.yaml
+ * under that name, and a survivor is a `major` finding owned by its item.
+ *
+ * On a tree that holds a sibling's uncommitted work nothing runs: an item review is recorded with
+ * its proposals owed, and the intent review, which records on a clean tree only, runs them. What
+ * the runner writes into a pending file is written again on every record, so a record that was
+ * cut off records the same way the next time.
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+const lib = require('./run-lib.cjs');
+const {
+  ITEM_KEYS, isMap, itemCriterion, proposalsOf, readDoc, refuseNew, sameMutant, bad,
+} = require('./run-review-file.cjs');
+const { INTENT_KEYS, parseIntentReview } = require('./run-intent-review-file.cjs');
+const { acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals } = require('./run-mutant-coverage.cjs');
+const { checkTargets, dump, kept, ownFindings, previousEntries, ranLines, runEntries, survivorFinding } = require('./run-mutant-runs.cjs');
+
+const { RunError } = lib;
+
+/** An entry still to run: a proposal that never ran, or one whose test stayed green. */
+const due = (entry) => entry.find !== undefined && (entry.caught === undefined || entry.caught === 'no');
+
+/** The review file as the runner leaves it, in the schema's key order. */
+function rewrite(abs, doc, order, changes) {
+  const next = { ...doc, ...changes };
+  fs.writeFileSync(abs, dump(Object.fromEntries(order.filter((key) => next[key] !== undefined).map((key) => [key, next[key]]))));
+}
+
+/** The item review's mutants, run and written into its pending file. Returns the lines to print. */
+async function itemMutants(tree, context) {
+  const { intent, item, rel, configFile } = context;
+  const doc = readDoc(tree, rel);
+  const own = ownFindings(doc);
+  const out = [];
+  let entries;
+  if (item.review) {
+    const previous = previousEntries(tree, rel);
+    refuseNew(rel, doc, previous);
+    entries = previous.filter((entry) => entry.find !== undefined || entry.caught === 'yes');
+    for (const entry of previous.filter((one) => !entries.includes(one))) {
+      out.push(`MUTANT ${entry.criterion} names no line to break, so the intent review owes its criterion a caught mutant`);
+    }
+  } else {
+    const spec = lib.readItemSpec(tree, intent.id, item.id).file;
+    entries = proposalsOf(rel, doc, itemCriterion(item.id, acceptanceCriteria(fs.readFileSync(spec, 'utf8')).length));
+    checkTargets(tree, rel, entries);
+  }
+  const written = Array.isArray(doc.findings) ? doc.findings.length : 0;
+  if (entries.length === 0 && own.length === written) return out;
+
+  const result = await runEntries(tree, entries.filter(due), { configFile, rel });
+  const owes = (entry) => `the intent review owes criterion ${entry.criterion} a caught mutant`;
+  const survivors = entries.filter((entry) => entry.caught === 'no');
+  rewrite(path.join(tree, rel), doc, ITEM_KEYS, {
+    verdict: own.length > 0 || survivors.length > 0 ? 'fix' : 'clean',
+    findings: [...own, ...survivors.map((entry) => survivorFinding(entry))],
+    mutants: entries.map(kept),
+  });
+  return [...out, ...ranLines(result, entries, owes)];
+}
+
+/** The ids of the collected scan's lines, as the intent review answers them. */
+function scanIds(tree, intent, owed) {
+  const file = path.join(tree, owed.scanPath(tree, intent));
+  const doc = fs.existsSync(file) ? lib.parseYaml(fs.readFileSync(file, 'utf8')) : null;
+  return isMap(doc) && Array.isArray(doc.lines) ? doc.lines.map((line) => line && line.id).filter((id) => typeof id === 'string') : [];
+}
+
+/** How the intent review names a criterion: `<item>:<n>`, an item of the intent and one of its criteria. */
+const intentCriterion = (proofs) => (text) => {
+  const match = /^([^:\s]+):(\d+)$/.exec(text);
+  if (!match) return `criterion reads ${text}; name it <item>:<n>, the work item and the number of its acceptance criterion`;
+  const item = proofs.find((proof) => proof.id === match[1]);
+  if (!item) return `names ${match[1]}, which is no work item of this intent`;
+  const n = Number(match[2]);
+  return n >= 1 && n <= item.criteria.length ? null : `names criterion ${n}, and ${item.id} has ${item.criteria.length} acceptance criteria`;
+};
+
+/** The item and the criterion index an intent entry names, or null for a released flow's free text. */
+function namedBy(proofs, entry) {
+  const match = /^([^:\s]+):(\d+)$/.exec(String(entry.criterion));
+  const item = match && proofs.find((proof) => proof.id === match[1]);
+  return item ? { item, index: Number(match[2]) - 1 } : null;
+}
+
+/** Refuse a proposal for a criterion that has a mutant: a caught one, or one this record runs. */
+function refuseSecond(rel, proofs, proposals, held) {
+  proposals.forEach((proposal) => {
+    const { item, index } = namedBy(proofs, proposal);
+    const caught = item.mutants.some((mutant) => names(mutant, item, index, true));
+    if (caught || held.some((entry) => names(entry, item, index, false))) {
+      throw bad(rel, `mutants proposes one for ${proposal.criterion}, which has a mutant ${caught ? 'its item review caught' : 'this record runs'}; ` +
+        'propose only for a criterion still without one');
+    }
+  });
+}
+
+/** The intent review's mutants, run and written into its pending file. Returns the lines to print. */
+async function intentMutants(tree, context) {
+  // Required here, not at the top: run-intent-owed loads run-intents, which loads run-frontier and run-review.
+  const owed = require('./run-intent-owed.cjs');
+  const { intent, rel } = context;
+  const items = owed.intentItems(tree, intent);
+  parseIntentReview(tree, rel, { recorded: false, items, scanIds: scanIds(tree, intent, owed) });
+  const abs = path.join(tree, rel);
+  const text = fs.readFileSync(abs, 'utf8');
+  const doc = readDoc(tree, rel);
+  const own = ownFindings(doc);
+  const proofs = itemProofs(tree, intent, items);
+  const carried = previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes');
+  const fromItems = owedProposals(tree, intent, items).map(({ item, entry }) => ({ ...kept(entry), criterion: `${item}:${entry.criterion}` }))
+    .filter((entry) => !carried.some((one) => sameMutant(one, entry)));
+  const proposals = proposalsOf(rel, doc, intentCriterion(proofs), (entry) => [...carried, ...fromItems].some((one) => sameMutant(one, entry)));
+  refuseSecond(rel, proofs, proposals, [...carried.filter((entry) => entry.caught !== 'none'), ...fromItems]);
+  const entries = [...carried, ...fromItems, ...proposals];
+  const gaps = (counted) => (doc.verdict === 'clean' ? mutantGaps(proofs, counted) : []);
+  const before = gaps(entries.filter((entry) => entry.caught === 'yes' || due(entry)).map((entry) => ({ ...entry, caught: 'yes' })));
+  if (before.length > 0) throw bad(rel, gapRefusal(before));
+  checkTargets(tree, rel, proposals);
+  if (entries.length === 0 && own.length === (Array.isArray(doc.findings) ? doc.findings.length : 0)) return [];
+
+  const result = await runEntries(tree, entries.filter(due), { configFile: context.configFile, rel });
+  if (result.busy) throw new RunError(`no mutant could run: ${result.busy}. Nothing is recorded: run the same command again`, 'DIRTY');
+  const survivors = entries.filter((entry) => entry.caught === 'no');
+  const ownerOf = (entry) => ({ owner: entry.criterion.split(':')[0] });
+  const verdict = own.length > 0 || survivors.length > 0 ? 'fix' : 'clean';
+  rewrite(abs, doc, INTENT_KEYS, {
+    verdict,
+    findings: [...own, ...survivors.map((entry) => survivorFinding(entry, ownerOf(entry)))],
+    mutants: entries.map(kept),
+  });
+  const after = verdict === 'clean' ? mutantGaps(proofs, entries) : [];
+  if (after.length > 0) {
+    fs.writeFileSync(abs, text);
+    throw bad(rel, gapRefusal(after));
+  }
+  const owes = (entry) => `propose another for ${entry.criterion} in the next intent review`;
+  return ranLines(result, entries, owes);
+}
+
+module.exports = { intentMutants, itemMutants };

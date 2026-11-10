@@ -72,10 +72,6 @@ findings:
     evidence: read src/a.ts, it exports 1
     fix: export 2
     severity: major
-mutants:
-  - criterion: AC1 the value reads two
-    test: node --test src/a.test.ts
-    caught: yes
 `;
 
 test("review with no review file prints the reviewer dispatch line and exits 3", () => {
