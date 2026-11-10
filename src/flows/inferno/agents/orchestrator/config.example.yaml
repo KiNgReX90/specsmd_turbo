@@ -100,11 +100,17 @@ wiring:                           # optional: per kind (command, table or event)
 #   sources: ["src/**", "src-tauri/src/**"]   # product source; the tests and case files are never source
 #   expectations: ["e2e/**", "src/**/*.test.ts"]   # tests whose changed lines a case may describe
 
-# mutate:                         # optional: files the host seals with a manifest of their digests; run.cjs mutate runs the reseal after a mutant lands in one, so the test sees a valid seal; every other path the reseal changed gets its bytes from before back after the revert, on every exit; a reseal that exits non-zero reads no verdict, and one that a signal ended or that ran past reseal_seconds reads no verdict and stops the run; a --config file inherits it
+# mutate:                         # optional: how run.cjs mutate runs a mutant on this host; a --config file inherits it
 #   reseal_seconds: 300           # optional: the most seconds one reseal may run; past it, mutate ends the reseal and every process it started (default 300)
-#   sealed:
+#   sealed:                       # optional: files the host seals with a manifest of their digests; run.cjs mutate runs the reseal after a mutant lands in one, so the test sees a valid seal; every other path the reseal changed gets its bytes from before back after the revert, on every exit; a reseal that exits non-zero reads no verdict, and one that a signal ended or that ran past reseal_seconds reads no verdict and stops the run
 #     - paths: ["definitions/**"]                          # globs of the sealed files and of the seal; a seal git ignores goes back only when these globs cover it
 #       reseal: "node scripts/lib/definitions/pack.mjs --write"   # the command that rewrites the seal, run in the tree
+#   session:                      # optional: for tests that run through a wrapper which syncs the tree to another machine and waits there for a slot; the mutants of a batch that share one such test command share one session of the wrapper, so the tree is synced and the slot taken once, not once per mutant; per mutant the changed file (and every path its reseal changed) is sent, the test runs, and the file is put back and sent again; each command runs in the tree under bash with INFERNO_TREE and INFERNO_SESSION, an empty directory of this session outside the tree for the wrapper's own state; a session that does not open, or a send that fails, reads no verdict, a send back that fails stops that session's mutants, and a command a signal ended stops the run
+#     match: '^tools/remote-test\.sh \S+ '    # a regex in single quotes that marks a test command as going through the wrapper when it matches at its start; the rest of the command is the test the session runs
+#     open: "tools/remote-test.sh open"        # copies the whole tree as it stands into a fresh session and takes the slot
+#     send: "tools/remote-test.sh send"        # puts INFERNO_FILE, a path relative to the tree, into the session as the tree holds it now, and deletes it there when the tree no longer does
+#     run: "tools/remote-test.sh run"          # runs INFERNO_TEST in the session; its output and exit code are the test's
+#     close: "tools/remote-test.sh close"      # gives the session and the slot up; it runs on every exit once open started, and in the next step that reads the tree when a kill skipped it, so it exits 0 when nothing is open
 
 # standards:                      # optional: the project's rule files under .specs-inferno/standards/, each with the path globs it applies to; dispatch-log prints every file that applies to a builder's ownership.editable, and a listed file that does not exist refuses the dispatch; /specsmd-inferno-standards drafts them; a --config file without the block takes this one
 #   - file: typescript.md
