@@ -296,13 +296,22 @@ function deferItem(options) {
 
 /**
  * The deferred items of an intent with their reasons, from the live ledger or, once the intent
- * is archived, from the archive. Empty when neither holds the intent.
+ * is archived, from the archive. Empty when neither holds the intent. A ledger with no
+ * `intents:` key holds none: the gate, which reads the items from the spec files, never failed
+ * on the ledger's form before it asked this, and must not now.
  */
 function deferredItems(stateFile, intentId) {
   for (const file of [stateFile, archivePaths(stateFile).archiveFile]) {
     if (!fs.existsSync(file)) continue;
     const lines = loadState(file);
-    const intent = locateIntents(lines).find((entry) => entry.id === intentId);
+    let intents;
+    try {
+      intents = locateIntents(lines);
+    } catch (error) {
+      if (error.code === 'NO_INTENTS') continue;
+      throw error;
+    }
+    const intent = intents.find((entry) => entry.id === intentId);
     if (!intent) continue;
     return new Map(locateWorkItems(lines, intent)
       .filter((entry) => isDeferred(statusOf(lines, entry)))
