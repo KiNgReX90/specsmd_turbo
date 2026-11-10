@@ -5,6 +5,7 @@ const path = require("node:path");
 
 const { nextActor } = require("./run-review.cjs");
 const { STATE, git, repo, run, write } = require("./review-fixture.cjs");
+const { SURVIVES_TWO, mutantRepo } = require("./run-review-mutants-fixture.cjs");
 
 // --- only a serious rejection climbs ------------------------------------------------
 // A fix review counts toward the ladder only when a finding is blocker or major, or a mutant
@@ -81,8 +82,8 @@ test("a blocker finding counts", () => {
 });
 
 test("a surviving mutant counts even when every finding is minor", () => {
-  const fixture = repo();
-  write(fixture.root, REVIEW, `${fixReview(MINOR)}mutants:\n  - criterion: AC1\n    test: node --test src/a.test.ts\n    caught: no\n`);
+  const fixture = mutantRepo();
+  write(fixture.root, REVIEW, `${fixReview(MINOR)}mutants:\n${SURVIVES_TWO}`);
   const result = review(fixture);
   assert.match(ledger(fixture), /review_rejections: 1/);
   assert.match(result.out, /next strong model-strong specsmd-inferno-builder: a fresh builder/);

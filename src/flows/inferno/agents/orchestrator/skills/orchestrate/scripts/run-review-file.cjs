@@ -29,7 +29,19 @@ const FINDING_KEYS = ['criterion', 'file', 'line', 'evidence', 'fix', 'severity'
 const SEVERITIES = ['blocker', 'major', 'minor'];
 const SEVERITY_FIX = 'blocker when the change breaks a criterion or other behaviour, major when a criterion is unproven ' +
   'or a test proves nothing, minor for any other defect';
-const MUTANT_KEYS = ['criterion', 'test', 'caught'];
+/**
+ * A mutant as a reviewer proposes it: the criterion it breaks, a line of a file, the text on that
+ * line and its broken version, and the test that should notice. The runner adds `caught` (yes, no,
+ * or none when the run read no verdict, with `why`) when it runs it; an entry without `caught`
+ * never ran and is owed to the intent review. A file the released flow recorded holds
+ * `{criterion, test, caught}`, a mutant its reviewer ran itself, and still reads.
+ */
+const MUTANT_KEYS = ['criterion', 'file', 'line', 'find', 'replace', 'test'];
+const TARGET_KEYS = ['file', 'line', 'find', 'replace'];
+const RUNNER_KEYS = ['caught', 'why'];
+const CAUGHT = ['yes', 'no', 'none'];
+
+const PROPOSE = `propose {${MUTANT_KEYS.join(', ')}}; the runner runs it and writes caught`;
 
 function reviewPath(intentId, itemId) {
   return path.join(lib.SPECS_DIR, 'intents', intentId, 'reviews', `${itemId}.yaml`);
@@ -162,29 +174,91 @@ function weightOf(review) {
 }
 
 /**
+ * The mutants of a review, in either shape: a proposal the runner ran or still owes, or a mutant
+ * the released flow's reviewer ran itself. `replace` may be empty, since dropping text is a mistake.
+ */
+function mutantsOf(rel, doc) {
+  return entries(rel, doc, 'mutants', ['criterion', 'test'], [...TARGET_KEYS, ...RUNNER_KEYS], ['replace']).map((mutant, index) => {
+    const at = `mutants entry ${index + 1}`;
+    const targeted = TARGET_KEYS.some((key) => mutant[key] !== undefined);
+    if (targeted) {
+      const missing = TARGET_KEYS.find((key) => mutant[key] === undefined);
+      if (missing) throw bad(rel, `${at} has no ${missing}: ${PROPOSE}`);
+      if (typeof mutant.replace !== 'string') throw bad(rel, `${at} replace must be text, empty to drop find`);
+      if (!/^\d+$/.test(mutant.line)) throw bad(rel, `${at} line must be a line number, not ${mutant.line}`);
+    }
+    if (mutant.caught !== undefined && !CAUGHT.includes(mutant.caught)) throw bad(rel, `${at} caught must be yes, no or none`);
+    if (!targeted && mutant.caught !== 'yes' && mutant.caught !== 'no') throw bad(rel, `${at} has no file: ${PROPOSE}`);
+    if ((mutant.why !== undefined) !== (mutant.caught === 'none')) throw bad(rel, `${at} carries why exactly when caught reads none`);
+    return mutant;
+  });
+}
+
+/** Two mutants are one when they break the same text the same way for the same test; a moved line is the same mutant. */
+const sameMutant = (a, b) => ['criterion', 'file', 'find', 'replace', 'test'].every((key) => (a[key] || '') === (b[key] || ''));
+
+/**
+ * The proposals of a review as it is recorded: whole mistakes on code, each named by
+ * `criterionOf` (null when the name holds, else what is wrong with it), one per criterion. What
+ * the runner writes is left out, so a record run twice runs the same proposals. `held` names an
+ * entry the runner holds already, such as one it carried over, which is no proposal.
+ */
+function proposalsOf(rel, doc, criterionOf, held = () => false) {
+  const proposals = mutantsOf(rel, doc).flatMap((mutant, index) => {
+    if (held(mutant)) return [];
+    const at = `mutants entry ${index + 1}`;
+    if (mutant.find === undefined) throw bad(rel, `${at} has no file: ${PROPOSE}`);
+    const problem = criterionOf(mutant.criterion);
+    if (problem) throw bad(rel, `${at} ${problem}`);
+    const file = relativePath(rel, mutant.file, at);
+    if (file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`)) throw bad(rel, `${at} breaks ${file}; a mutant breaks the code, never the ledger`);
+    return [Object.fromEntries(MUTANT_KEYS.map((key) => [key, key === 'file' ? file : mutant[key]]))];
+  });
+  const counts = new Map();
+  for (const { criterion } of proposals) counts.set(criterion, (counts.get(criterion) || 0) + 1);
+  const twice = [...counts].find(([, count]) => count > 1);
+  if (twice) throw bad(rel, `criterion ${twice[0]} has ${twice[1]} mutants; propose one per criterion`);
+  return proposals;
+}
+
+/** How a first item review names a criterion: its number alone, among the item's `count`. */
+const itemCriterion = (itemId, count) => (text) => {
+  if (!/^\d+$/.test(text)) return `criterion reads ${text}; name the acceptance criterion by its number alone, 1 for the first`;
+  const n = Number(text);
+  return n >= 1 && n <= count ? null : `names criterion ${n}, and ${itemId} has ${count} acceptance criteria`;
+};
+
+/** A delta review holds no mutant the last review did not hold: the runner carries those over itself. */
+function refuseNew(rel, doc, previous) {
+  mutantsOf(rel, doc).forEach((mutant, index) => {
+    if (previous.some((entry) => sameMutant(entry, mutant))) return;
+    throw bad(rel, `mutants entry ${index + 1} is new: a delta review proposes no mutant. Leave mutants out: the runner carries ` +
+      'the last review\'s over and reruns its survivors, and a criterion still without a caught mutant is the intent review\'s');
+  });
+}
+
+/**
  * The findings and mutants of an item or intent review, held to its verdict. A surviving
  * mutant is a finding too: a test that misses a broken criterion proves nothing.
  */
 function verdictParts(rel, doc, findingKeys, optional = []) {
   // Severity is held below, so a finding without one is refused with the three it may carry.
   const required = findingKeys.filter((key) => key !== 'severity');
-  const findings = entries(rel, doc, 'findings', required, ['severity', ...optional], ['severity', ...optional]);
+  const findings = entries(rel, doc, 'findings', required, ['severity', ...optional, 'mutant'], ['severity', ...optional]);
   for (const [index, finding] of findings.entries()) {
     if (!/^\d+$/.test(finding.line)) throw bad(rel, `finding line must be a line number, not ${finding.line}`);
     if (!SEVERITIES.includes(finding.severity)) {
       throw bad(rel, `findings entry ${index + 1} severity reads ${reads(finding.severity)}; it must be ${SEVERITY_FIX}`);
     }
   }
-  const mutants = entries(rel, doc, 'mutants', MUTANT_KEYS);
-  for (const mutant of mutants) {
-    if (mutant.caught !== 'yes' && mutant.caught !== 'no') throw bad(rel, 'mutant caught must be yes or no');
-  }
+  const mutants = mutantsOf(rel, doc);
   const survivors = mutants.filter((mutant) => mutant.caught === 'no');
   if (doc.verdict === 'clean' && findings.length > 0) {
     throw bad(rel, `verdict clean with ${findings.length} finding(s); a review with a finding says fix`);
   }
   if (doc.verdict === 'clean' && survivors.length > 0) {
-    throw bad(rel, 'verdict clean with a mutant that reads caught: no; a surviving mutant says fix');
+    throw bad(rel, 'verdict clean with a mutant that reads caught: no; a surviving mutant says fix, and the runner writes caught itself, ' +
+      'so a review it records leaves caught out');
   }
   if (doc.verdict === 'fix' && findings.length === 0 && survivors.length === 0) {
     throw bad(rel, 'verdict fix with no finding and no surviving mutant; name what to fix or say clean');
@@ -193,6 +267,6 @@ function verdictParts(rel, doc, findingKeys, optional = []) {
 }
 
 module.exports = {
-  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, RECORDED_KEYS, SEVERITIES, bad, entries, isMap, parseItemReview, readDoc, recordedReviewer, relativePath,
-  reviewPath, reviewerId, verdictParts, weightOf,
+  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, RECORDED_KEYS, SEVERITIES, bad, entries, isMap, itemCriterion, mutantsOf, parseItemReview, proposalsOf,
+  readDoc, recordedReviewer, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, verdictParts, weightOf,
 };

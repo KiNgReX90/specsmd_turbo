@@ -185,7 +185,8 @@ async function batch(options) {
   const sealed = sealOf(lib.readConfig(tree, options.config));
   const recovered = recoverInterrupted(tree);
   const rel = path.relative(tree, file).split(path.sep).join('/');
-  const dirty = lib.dirtyPaths(tree, rel.startsWith('../') || path.isAbsolute(rel) ? [] : [rel]);
+  // `pending`: the review file a record step is recording, which runs this batch before it commits.
+  const dirty = lib.dirtyPaths(tree, [...(rel.startsWith('../') || path.isAbsolute(rel) ? [] : [rel]), ...(options.pending || [])]);
   if (dirty.length > 0) {
     throw new RunError(afterRecovery(recovered,
       `refusing to mutate a dirty tree: ${dirty.slice(0, 5).join(', ')} is uncommitted. Mutate once the tree is clean.`), 'DIRTY');
