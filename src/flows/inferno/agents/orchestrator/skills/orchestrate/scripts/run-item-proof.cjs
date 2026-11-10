@@ -36,6 +36,8 @@
  *                    and every line the diff adds to a test file, new ones included, that
  *                    switches a test off, as { file, line, text }, `line` 1-based in the new
  *                    file. A switch-off fails verify-item. Null when `diff` is.
+ *
+ * `proofAtHead(tree, intent, item)` tells whether the proof is of the state a review reads.
  */
 
 const fs = require('fs');
@@ -52,8 +54,9 @@ const { isSwitchOff, isTestFile, parseAddedLines } = require('./run-test-files.c
 const { RunError } = lib;
 
 const TAIL_LINES = 40;
-const DIFF = ['diff', '--cached', '--full-index', '--binary', '--no-renames', '--no-color', '--no-ext-diff', '--no-textconv',
+const DIFF_FLAGS = ['--full-index', '--binary', '--no-renames', '--no-color', '--no-ext-diff', '--no-textconv',
   '--src-prefix=a/', '--dst-prefix=b/'];
+const DIFF = ['diff', '--cached', ...DIFF_FLAGS];
 const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 const literal = (file) => `:(literal)${file}`;
 
@@ -80,6 +83,42 @@ function writeProof(file, proof) {
   const pending = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(pending, `${JSON.stringify(proof, null, 2)}\n`);
   fs.renameSync(pending, file);
+}
+
+const sha256 = (text) => createHash('sha256').update(text).digest('hex');
+
+/** The hash `diffHash` gave the item's diff, read once it is committed: from `from` to HEAD over `files`, or null. */
+function headDiffHash(tree, from, files) {
+  if (files.length === 0) return sha256('');
+  const result = spawnSync('git', ['diff', ...DIFF_FLAGS, from, 'HEAD', '--', ...files.map(literal)],
+    { cwd: tree, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  return result.status === 0 ? sha256(result.stdout) : null;
+}
+
+/**
+ * The proof of `item` as its review would read it, at HEAD, where the review reads the item.
+ * `current` when it was taken over the item's paths as HEAD holds them: its baseline is a
+ * commit, no path the proven items own changed since that baseline outside the proof's paths,
+ * and the diff from it to HEAD over those paths hashes as the proof's. `stale` for a proof of
+ * any other state, and `none` when there is no proof or it holds no diff. `items` are the items
+ * the proof checked as one unit, and `paths` the proof's, cut to the item's own for a batch.
+ */
+function proofAtHead(tree, intent, item) {
+  const file = proofPath(tree, intent, item);
+  const proof = readItemProof(tree, intent, item);
+  if (!proof || !proof.diff) return { state: 'none', file, items: [item] };
+  const { items, diff: { from, paths } } = proof;
+  const stale = { state: 'stale', file, items };
+  if (!lib.git(tree, ['rev-parse', '--verify', '--quiet', `${from}^{commit}`], { tolerate: true })) return stale;
+  // A dispatched item always has its editable list: the frontier refuses one without it.
+  const editable = (id) => lib.readItemSpec(tree, intent, id).manifest.ownership.editable;
+  const owned = items.flatMap(editable);
+  const changed = lib.gitLines(tree, ['diff', '--name-only', '--no-renames', from, 'HEAD'], { tolerate: true })
+    .filter((entry) => lib.ownedBy(entry, owned, tree));
+  if (changed.some((entry) => !paths.includes(entry))) return stale;
+  if (headDiffHash(tree, from, paths) !== proof.diff.sha256) return stale;
+  const own = items.length > 1 ? paths.filter((entry) => lib.ownedBy(entry, editable(item), tree)) : paths;
+  return { state: 'current', file, items, from, paths: own };
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +233,7 @@ function withScratchIndex(tree, files, read) {
 }
 
 function hashOf(git, from, files) {
-  return createHash('sha256').update(files.length > 0 ? git([...DIFF, from, '--', ...files.map(literal)]) : '').digest('hex');
+  return sha256(files.length > 0 ? git([...DIFF, from, '--', ...files.map(literal)]) : '');
 }
 
 /** The sha256 of the diff from `from` to the tree as it stands, over `files`. */
@@ -352,4 +391,4 @@ function verifyItem(itemId, options) {
   };
 }
 
-module.exports = { TAIL_LINES, diffHash, parseCounts, proofPath, readItemProof, tailLines, verifyItem };
+module.exports = { TAIL_LINES, diffHash, parseCounts, proofAtHead, proofPath, readItemProof, tailLines, verifyItem };
