@@ -91,7 +91,7 @@ Every brief carries all of this:
 
 **How a package is accepted.** The orchestrator did not write the code, so its check is cold. It reads the diff against the package's acceptance lines and runs the package's tests itself. A defect goes back to the same implementer while its context is warm.
 
-**Where it runs.** One linked worktree off `main`, one branch for the whole plan. Packages that share a file run in series. The INFERNO script tests are `node --test <file>` from `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`, written `S/` below. The Turbo tests are vitest files under `src/__tests__/unit/aidlc-turbo/`. Run them where the host's machine rules allow a test run.
+**Where it runs.** One linked worktree of this branch, `inferno-improvement`, which already holds the stopped flow fixes. The whole plan is built on it and reaches `main` as one pull request. Packages that share a file run in series. The INFERNO script tests are `node --test <file>` from `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`, written `S/` below. The Turbo tests are vitest files under `src/__tests__/unit/aidlc-turbo/`. Run them where the host's machine rules allow a test run.
 
 **Before the merge.** `cd src && npm run validate:all`, then `npm pack`, `evals/install-eval.sh <tarball>` and the e2e smoke harness under `evals/e2e/`. Then the version bump and one `CHANGELOG.md` entry.
 
