@@ -25,6 +25,7 @@ const { recordOwnership } = require('./run-processes.cjs');
 const { teardownCall } = require('./run-call.cjs');
 const { ownership } = require('./run-owner.cjs');
 const { resolveBudget } = require('./run-budget.cjs');
+const { dispatchOracle, isOracleDispatch } = require('./run-oracle-route.cjs');
 
 /** An in_progress intent counts as abandoned after this long with no process, edit or commit in its worktree. */
 const DEFAULT_IDLE_MINUTES = 60;
@@ -333,6 +334,8 @@ function worktree(intentId, options) {
  * they are a record of one run's dispatches, never work anyone builds from.
  */
 function dispatchLog(intentId, options) {
+  // An oracle ask is graded, routed and logged, and takes no baseline: an oracle edits nothing.
+  if (isOracleDispatch(options)) return dispatchOracle(intentId, options);
   const requested = options.items ? String(options.items).split(',').map((id) => id.trim()).filter(Boolean) : [options.item].filter(Boolean);
   if (requested.length === 0 || !options.tier || !options.agent) {
     throw new RunError('dispatch-log requires --item (or --items a,b for a chain one builder builds), --tier and --agent', 'BAD_ARGS', 1);

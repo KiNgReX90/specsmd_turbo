@@ -26,6 +26,7 @@ const { integrateCall, itemRecordCall, itemReviewCall, realAppCall } = require('
 const { realAppPaths } = require('./run-real-app.cjs');
 const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
 const { dirtyFiles } = require('./run-dirt.cjs');
+const { ladderGrades } = require('./run-oracle-route.cjs');
 
 const { RunError } = lib;
 
@@ -129,7 +130,7 @@ function nextLine(id, item, config) {
   const loop = 'then commit and run review again';
   if (next.actor === 'oracle') {
     const why = item.review_weight === 'repeat' ? 'a finding repeats an earlier round, so ' : '';
-    return `next ${label}: ${why}ask it about ${id} with every finding so far; its decision goes to the warm ` +
+    return `next ${label}: ${why}ask it about ${id} with every finding so far${ladderGrades(id, item)}; its decision goes to the warm ` +
       `${item.review_tier || 'escalate'} builder as a correction, ${loop}`;
   }
   if (next.fresh) return `next ${label}: a fresh builder takes ${id} over with every finding so far, ${loop}`;
