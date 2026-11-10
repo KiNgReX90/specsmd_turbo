@@ -61,10 +61,10 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
   node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] break one line, run the test, restore: caught yes|no
   node run.cjs mutate --batch <file> [--tree <dir>]      every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
-  node run.cjs integrate --item <id> [--tree <dir>]      fold the base in, run the checks, complete the item
-  node run.cjs integrate --items <a,b> [--tree <dir>]    the same for an explicitly batched chain
-  node run.cjs integrate [--tree <dir>] [--config <file>] fold and check without completing anything
-  node run.cjs doubles [--tree <dir>] [--config <file>] count the test doubles against the merge base: 0 held, 2 rose
+  node run.cjs integrate --item <id> [--since <ref>] [--tree <dir>] fold the base in, run the checks, complete the item
+  node run.cjs integrate --items <a,b> [--since <ref>] [--tree <dir>] the same for an explicitly batched chain
+  node run.cjs integrate [--since <ref>] [--tree <dir>] [--config <file>] fold and check without completing anything
+  node run.cjs doubles [--since <ref>] [--tree <dir>] [--config <file>] count the test doubles against the merge base: 0 held, 2 rose
   node run.cjs real-app --range <from>..<to> [--item <id>] [--tree <dir>] real_app.paths lines naming what the range removed, and files driving what it changed: 0 none stale, 2 stale
   node run.cjs cases --range <from>..<to> [--tree <dir>] [--config <file>] cases the range made stale or reached unanswered, and changed tests no case answers: 0 none, 2 refused
   node run.cjs gate [--tree <dir>] [--config <file>] [--force] run the finalize commands without matching proofs
@@ -93,7 +93,9 @@ Options
   --base <branch>   integrate, doubles, gate, ship and teardown: the base branch to fold in (default: the config's base)
   --since <ref>     verify-item: compare against this ref instead of the item's accepted dispatch;
                     gate --detach --lanes-only: pick the lanes from the diff since this ref (default the merge base,
-                    or origin/<base> on the base branch)
+                    or origin/<base> on the base branch);
+                    integrate: diff the landing from this ref (on the base branch the default is origin/<base>; with neither, every scoped check runs);
+                    doubles: on the base branch, count against this ref
   --lanes-only      gate --detach: start only the lanes, for a driver that holds its own slot ticket
   --supersede       gate --detach: stop the running lanes the fix touched first, proven by each lane's stop command
   --holder <name>   slot: the holder whose ticket is taken, renewed or released;

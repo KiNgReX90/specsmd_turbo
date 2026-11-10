@@ -20,17 +20,11 @@ const lanes = require('./run-lanes.cjs');
 const slot = require('./run-slot.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const { gateWaitCall } = require('./run-call.cjs');
+const { sinceCommit } = require('./run-since.cjs');
 
 const { RunError } = lib;
 
 const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value)}\n`, 'utf8');
-
-/** The commit `since` names, refused when it names none, so a typo never skips every lane. */
-function sinceCommit(tree, since) {
-  const sha = lib.git(tree, ['rev-parse', '--verify', '--quiet', `${since}^{commit}`], { tolerate: true });
-  if (!sha) throw new RunError(`--since ${since} names no commit in ${tree}`, 'BAD_REF');
-  return sha;
-}
 
 /**
  * The commit the lanes' diff starts from: `--since` when given. On the base branch the merge base

@@ -18,6 +18,7 @@ const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
 const gate = require('./run-gate.cjs');
 const { resolveBase } = require('./run-intents.cjs');
+const { sinceCommit } = require('./run-since.cjs');
 
 const { RunError } = lib;
 
@@ -104,12 +105,16 @@ const LISTED = 20;
  * the local base, so commits that reached origin and not the local base are the base's, never
  * the branch's. No merge base at all is refused: counting against a tip would credit the
  * branch with everything the base did since.
+ *
+ * On the base branch itself the merge base is HEAD, so the count is held to `since`: the
+ * landing's first commit, which integrate reads from --since or origin/<base>.
  */
-function baseline(tree, base) {
+function baseline(tree, base, since) {
   if (base === lib.currentBranch(tree)) {
+    if (since) return sinceCommit(tree, since);
     throw new RunError(
       `doubles: the base branch resolves to ${base}, the branch being checked, so HEAD would be counted against itself. ` +
-        'Set delivery.base_branch in the config or pass --base <branch>.',
+        'Set delivery.base_branch in the config or pass --base <branch>, or pass --since <the commit before your edit>.',
       'BAD_CONFIG'
     );
   }
@@ -125,8 +130,8 @@ function baseline(tree, base) {
 }
 
 /**
- * Count at HEAD against the merge base. Integrate passes the config it read after the fold;
- * run alone, the check reads it here.
+ * Count at HEAD against the merge base, or against `options.since` on the base branch.
+ * Integrate passes the config it read after the fold; run alone, the check reads it here.
  */
 function checkDoubles(options, config) {
   const tree = gate.treeOf(options);
@@ -137,7 +142,7 @@ function checkDoubles(options, config) {
   }
   const rules = settings(read, label);
   const base = options.base || resolveBase(read, null, tree);
-  const before = matching(tree, baseline(tree, base), rules);
+  const before = matching(tree, baseline(tree, base, options.since), rules);
   const now = matching(tree, 'HEAD', rules);
   const payload = { ok: now.length <= before.length, base: before.length, head: now.length };
   if (payload.ok) {
