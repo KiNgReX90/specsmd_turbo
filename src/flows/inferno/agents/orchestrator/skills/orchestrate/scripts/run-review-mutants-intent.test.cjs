@@ -6,6 +6,7 @@ const {
   CAUGHT_ONE, INTENT_REVIEW, REVIEW, SURVIVES_TWO, mutantRepo, proposal, read, record, runs, withMutants,
 } = require("./run-review-mutants-fixture.cjs");
 const { parseItemReview } = require("./run-review-file.cjs");
+const { intentMutants } = require("./run-review-mutants.cjs");
 
 // The intent review's mutants, run by the runner when it records review.yaml. A proposal an item
 // review left owed, because a sibling's uncommitted work stood in the tree, runs here from the
@@ -131,4 +132,44 @@ test("a proposal that reads no verdict leaves the criterion owed and the reviewe
   assert.match(result.err, /a-one owes a caught mutant for criteria 2/);
   assert.equal(read(tree, INTENT_REVIEW), body);
   assert.equal(read(tree, "src/a.ts"), "export const a = 1;\nexport const a2 = 2;\n");
+});
+
+test("a clean intent review that leaves a criterion without any mutant is refused before anything runs", () => {
+  const { fixture, tree } = intentTree();
+  // Criterion 1's proposal stays owed, and criterion 2 was never proposed.
+  write(tree, "docs/b.md", "a-two is mid-build\n");
+  write(tree, REVIEW, withMutants(CAUGHT_ONE));
+  assert.equal(record(fixture, [], tree).code, 0);
+  git(tree, ["checkout", "--", "docs/b.md"]);
+  const item = read(tree, REVIEW);
+
+  const result = intentReview(fixture, tree, "verdict: clean\n");
+
+  assert.equal(result.code, 2, shown(result));
+  assert.match(result.err, /a-one owes a caught mutant for criteria 2 "a2 reads two". Propose one mutant for each/);
+  assert.deepEqual(runs(fixture), [], "criterion 1's owed proposal did not run either");
+  assert.equal(read(tree, INTENT_REVIEW), "verdict: clean\n");
+  assert.equal(read(tree, REVIEW), item);
+});
+
+// The record refuses a dirty tree or a live mutate before it reaches the runner. The runner holds
+// to it on its own as well, for a tree that turns busy in between: it records nothing then.
+test("an intent review whose mutants cannot run is refused, and the reviewer's file stays as it wrote it", async () => {
+  const { fixture, tree } = intentTree();
+  write(tree, REVIEW, withMutants(CAUGHT_ONE));
+  assert.equal(record(fixture, [], tree).code, 0);
+  runs(fixture);
+  const finding = "findings:\n  - criterion: a-one:2\n    file: src/a.ts\n    line: 2\n    evidence: read it\n    fix: test it\n" +
+    "    severity: major\n    owner: a-one\n";
+  const body = `verdict: fix\n${finding}mutants:\n${proposal("a-one:2", { line: 2, find: "a2 = 2", replace: "a2 = 8", expect: "checks/a2.expect" })}`;
+  write(tree, INTENT_REVIEW, body);
+  write(tree, "docs/b.md", "a-two is mid-build\n");
+
+  await assert.rejects(intentMutants(tree, { intent: "alpha", rel: INTENT_REVIEW }), (error) => {
+    assert.equal(error.code, "DIRTY");
+    assert.match(error.message, /no mutant could run: the tree holds uncommitted work in docs\/b\.md\. Nothing is recorded/);
+    return true;
+  });
+  assert.equal(read(tree, INTENT_REVIEW), body);
+  assert.deepEqual(runs(fixture), []);
 });
