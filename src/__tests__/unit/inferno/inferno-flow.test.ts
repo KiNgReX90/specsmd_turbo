@@ -301,7 +301,7 @@ describe('inferno flow', () => {
     );
     expect(config).toMatch(/^\s*strong:\s*claude-opus-5-5\b/m);
     expect(config).toMatch(/^\s*cheap:\s*claude-sonnet-5-5\b/m);
-    // Every scan and review runs on Opus 5.5, never on Sonnet (Ruben, 2026-10-25).
+    // Every scan and review runs on Opus 5.5, never on Sonnet (the owner's decision of 2026-10-25).
     expect(config).toMatch(/^review:\s*\n\s*model:\s*claude-opus-5-5\b/m);
     expect(config).toMatch(/^scan:\s*\n\s*model:\s*claude-opus-5-5\b/m);
     expect(config).toMatch(/^#\s*scanner:\s*\{model:\s*claude-opus-5-5, effort:\s*high\}/m);
