@@ -60,6 +60,6 @@ mutants:
   - criterion: "a call that throws records nothing (Description 2)"
     test: bash /tmp/claude-1000/-home-ruben-dev-Skoft-CRA/af63669a-38f5-4973-ad61-cea5bfe2fa1c/scratchpad/cr-rr.sh /home/ruben/dev/specsmd_new-scratch-config-review src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs
     caught: yes
-tree: 2e95f424a77e7cfea2ae6ce9d41ce436a408994c0c9615ad4125dbd28068e7fe
-commit: 85048f849824042f63d5f0064ac12f10af924b2e
-reviewer: a1dc9c001b53f62d0
+tree: 9ce86b8d074f3f4f47a07bf15bbe08449892891a477789c76f6e3761691c7bb3
+commit: 5b35acd693bc40fe4b8ab27d5753f7bcf4d184c1
+reviewer: a34f15f35eb5cc1bb

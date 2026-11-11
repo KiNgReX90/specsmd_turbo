@@ -96,12 +96,12 @@ intents:
         mode: autopilot
         status: pending
         review_misses: 2
-        review: fix
-        review_hash: 2e95f424a77e7cfea2ae6ce9d41ce436a408994c0c9615ad4125dbd28068e7fe
-        review_commit: 85048f849824042f63d5f0064ac12f10af924b2e
-        review_tier: strong
-        review_weight: serious
-        reviewed_at: 2026-11-11T09:58:06Z
+        review: clean
+        review_hash: 9ce86b8d074f3f4f47a07bf15bbe08449892891a477789c76f6e3761691c7bb3
+        review_commit: 5b35acd693bc40fe4b8ab27d5753f7bcf4d184c1
+        review_tier: escalate
+        review_weight: none
+        reviewed_at: 2026-11-11T10:06:14Z
         depends_on: []
 runs:
   active: []
