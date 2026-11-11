@@ -327,7 +327,7 @@ function onPath(binary) {
   });
 }
 
-/** Run one shell command with its whole output in a log file, never in memory. */
+/** Run one shell command with its whole output in a log file, never in memory; `options.env` adds to its environment. */
 function runShell(command, cwd, logFile, options = {}) {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   const wrapped = options.wrap !== false && isHeavy(command) && onPath('claude-build');
@@ -338,7 +338,7 @@ function runShell(command, cwd, logFile, options = {}) {
   const result = spawnSync(
     wrapped ? 'claude-build' : 'bash',
     wrapped ? ['--', 'bash', '-c', command] : ['-c', command],
-    { cwd, stdio: ['ignore', handle, handle] }
+    { cwd, stdio: ['ignore', handle, handle], ...(options.env ? { env: { ...process.env, ...options.env } } : {}) }
   );
   fs.closeSync(handle);
   return {
