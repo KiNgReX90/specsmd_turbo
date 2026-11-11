@@ -1,5 +1,5 @@
 item: ri-integrate-on-the-base-diffs-from-since-or-origin
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-since.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
@@ -7,39 +7,8 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/check-doubles.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs
-findings:
-  - criterion: "1: after a push --since names the landing"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs
-    line: 45
-    evidence: |
-      The case cannot tell whether integrate reads --since at all. Mutant in a clean scratch worktree at 3bfa91dc, run on Delta: run-integrate.cjs:157 `landingSince(tree, base, named)` made `landingSince(tree, base, null)`. That keeps the BAD_REF check at :150 but drops the ref. `node --test --test-name-pattern='after a push' run-integrate-base.test.cjs` still printed 1 pass, 0 fail. After the push origin/main is at HEAD, so the fallback runs every scoped check and prints the same `PASS \d+s echo scoped` that :47 asserts for `--since HEAD~1`. The doubles count with --since has the same gap. integrate hands `landing.ref` to checkDoubles (:180), but no case runs `integrate --since` with doubles on the base. Under the mutant, such a call counts HEAD against origin at HEAD and passes a commit that adds a double.
-    fix: |
-      In "after a push --since names the landing, and without it every scoped check runs", add `assert.doesNotMatch(named.out, /every scoped check runs/)` after :47. Then add `const none = integrate(fixture, "--since", "HEAD")`, and assert it exits 0, matches `SKIP echo scoped (no path in scope changed)` and does not match `every scoped check runs`. In "doubles on the base counts HEAD against the landing", add a third repo on DOUBLES: commit `src/fake.ts` holding FAKE, push, then assert `integrate(fixture, "--since", "HEAD~1")` exits 2 with `FAIL doubles 0 -> 1`. With those cases in place, the mutant above fails both.
-    severity: major
-  - criterion: "description step 2: the tester-case range on the base runs from the landing"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
-    line: 183
-    evidence: |
-      The diff moves the tester-case range on the base from HEAD..HEAD to <landing>..HEAD, and no test proves it. Mutant on Delta: `${since || gate.mergeBase(tree, base)}..HEAD` made `${gate.mergeBase(tree, base)}..HEAD`. `node --test run-integrate-base.test.cjs run-gate.test.cjs` printed 26 pass, 0 fail. run-gate.test.cjs:339 drives integrate only on an intent branch, where both versions read the merge base. On main the mutant brings back a range that is always empty, so a direct build never answers for a case it changes.
-    fix: |
-      Add a case to run-integrate-base.test.cjs, "a commit on the base answers for the tester cases it changes". Use BASE plus the `cases:` block of run-gate.test.cjs:322-329. Commit and push `integration/TEST-CASES.md` ("### TC-101 The form\nIt draws two columns.\n") and `e2e/form.spec.ts` (the SPEC of run-gate.test.cjs:330). Then commit, unpushed, the same spec with `toBe(2)` made `toBe(1)`. Assert integrate exits 2, matches `expectations changed while no case was edited or answered`, and does not match `echo scoped`.
-    severity: minor
-  - criterion: "description step 3: the base-branch doubles refusal adds `or pass --since <the commit before your edit>`"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/check-doubles.cjs
-    line: 170
-    evidence: |
-      The refusal at :117 now tells the reader to pass `--since`. Its own command-line entry cannot take it: the argv loop at :170 accepts only `--tree`, `--config` and `--base`, and anything else prints the usage at :174 and exits 1. check-doubles.test.cjs:75 drives that entry as a process, so it is a supported way in. A reader on main who follows the refusal there gets a usage error.
-    fix: |
-      Add `'--since'` to the flag list at :170 and `[--since <ref>]` to the usage line at :174. Add a check-doubles.test.cjs case that drives CHECK on a main whose last commit adds a FAKE file under the doubles paths, with `--since HEAD~1`, and asserts exit 2 with `FAIL doubles 0 -> 1`.
-    severity: minor
-  - criterion: "description step 3: on the base branch, doubles counts against since"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/check-doubles.cjs
-    line: 157
-    evidence: |
-      On the base, the count now runs against `since`, but the refusal still names the base: `FAIL doubles ${before.length} -> ${now.length} against ${base}`. On main that prints `FAIL doubles 0 -> 1 against main`. That reads as main counted against itself, the very confusion the old BAD_CONFIG text described, while the real baseline is origin/main or the --since commit. The tests at run-integrate-base.test.cjs:70 and :87 match only the `FAIL doubles 0 -> 1` prefix, so nothing pins the rest of the line.
-    fix: |
-      In checkDoubles, after :144, set `const from = base === lib.currentBranch(tree) && options.since ? lib.git(tree, ['rev-parse', '--short', options.since]) : base;`. Print `against ${from}` at :157. Make the two assertions above match `/FAIL doubles 0 -> 1 against [0-9a-f]{7,}:/`, so a line that names main again fails them.
-    severity: minor
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/check-doubles.test.cjs
+findings: []
 mutants:
   - criterion: "1: a commit on the base selects its scoped checks"
     test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='a commit on the base selects' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-integrate.cjs:174 diffs from the merge base again)"
@@ -47,9 +16,6 @@ mutants:
   - criterion: "1: a docs commit on the base still skips the src check"
     test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='a docs commit on the base' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-since.cjs:33 origin landing made all: true)"
     caught: yes
-  - criterion: "1: after a push --since names the landing"
-    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='after a push' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-integrate.cjs:157 landingSince given null instead of the --since ref)"
-    caught: no
   - criterion: "1: after a push, without --since every scoped check runs"
     test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='after a push' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-since.cjs:36 fallback made all: false)"
     caught: yes
@@ -62,9 +28,6 @@ mutants:
   - criterion: "1: doubles on the base counts HEAD against the landing"
     test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='doubles on the base counts HEAD' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-integrate.cjs:180 passes no since to checkDoubles)"
     caught: yes
-  - criterion: "description step 2: the tester-case range on the base runs from the landing"
-    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs (run-integrate.cjs:183 range from the merge base again)"
-    caught: no
-tree: 351969cabc084b42d0c181b4ae300f8391e43dfd8a03871a568cb75677436f73
-commit: d036061435ad35670f215feef518f51b32f17a6c
-reviewer: a3d1061ad07f8037e
+tree: 3e69a661ad4860790c33b495910072b3bf105e5ae242857a0799fc78b8600566
+commit: 28a25fdf9f6b2486380af1227676272d231b9992
+reviewer: acd8bb9087b3e3c61

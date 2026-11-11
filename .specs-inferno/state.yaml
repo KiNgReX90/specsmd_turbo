@@ -30,13 +30,13 @@ intents:
         complexity: medium
         mode: autopilot
         status: pending
+        review_misses: 1
         review: fix
-        review_hash: 351969cabc084b42d0c181b4ae300f8391e43dfd8a03871a568cb75677436f73
-        review_commit: d036061435ad35670f215feef518f51b32f17a6c
+        review_hash: 3e69a661ad4860790c33b495910072b3bf105e5ae242857a0799fc78b8600566
+        review_commit: 28a25fdf9f6b2486380af1227676272d231b9992
         review_tier: strong
-        review_rejections: 1
-        review_weight: serious
-        reviewed_at: 2026-11-10T06:07:40Z
+        review_weight: minor
+        reviewed_at: 2026-11-11T09:58:25Z
         depends_on: []
       - id: ri-the-ledger-commit-stages-only-what-completion-wrote
         title: "The ledger commit stages only the files the completion wrote, so a review file written beside an integrate stays its reviewer's"
