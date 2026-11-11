@@ -1,15 +1,11 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const fs = require("node:fs");
-const path = require("node:path");
 
 const { CONFIG, STATE, repo, run } = require("./run-fixture.cjs");
 const { currentRecords } = require("./run-dispatch.cjs");
 const { nextLine } = require("./run-review.cjs");
 const { ladderComplexity, oracleRoute, parseGrade, retryRoute } = require("./run-oracle-route.cjs");
-
-// The readout that counts oracle dispatches by route reads the log line with this parser.
-const { oracleEntry } = require(path.join(__dirname, "../../../../../../../../evals/review-loop/measure.cjs"));
 
 // --- every oracle ask carries two grades, each with its rubric line, and they set its route -----
 
@@ -85,7 +81,8 @@ const anyLog = (fixture) => fs.existsSync(fixture.cache) &&
 const logLines = (file) => fs.readFileSync(file, "utf8").split("\n").filter(Boolean);
 const fieldsOf = (line) => Object.fromEntries(line.split("\t").slice(7).map((field) => field.split(/=(.*)/s).slice(0, 2)));
 
-test("the dispatch log line holds the route and both grades the way the readout reads them", () => {
+// evals/review-loop/oracle-route.test.cjs holds the readout to these lines; a host installs no evals/.
+test("the dispatch log line holds the route and both grades as named fields after the seventh", () => {
   const fixture = repo({ config: HARD_CONFIG });
   const hard = JSON.parse(ask(fixture, graded(HIGH_IMPACT, HIGH_COMPLEXITY)).out);
   const normal = JSON.parse(ask(fixture, graded(HIGH_IMPACT, LOW_COMPLEXITY)).out);
@@ -96,8 +93,7 @@ test("the dispatch log line holds the route and both grades the way the readout 
   const [first, second] = logLines(hard.log);
   assert.equal(first.split("\t").length > 7, true);
   assert.deepEqual(first.split("\t").slice(1, 7), ["alpha", "a-one", "oracle", "specsmd-inferno-oracle", "", hard.dispatch_id]);
-  assert.deepEqual(oracleEntry(first), { route: "hard" });
-  assert.deepEqual(oracleEntry(second), { route: "normal" });
+  assert.equal(fieldsOf(second).route, "normal");
   assert.deepEqual(fieldsOf(first), {
     route: "hard", impact: "high", complexity: "high",
     impact_rubric: "contract: renames the balance field of the public gift card schema in schema/card.json",
@@ -154,7 +150,7 @@ test("dispatch-log retries a blocked normal oracle on the hard route once, and r
   assert.equal(retry.route, "hard");
   assert.equal(retry.model, "model-hard");
   const line = logLines(retry.log).at(-1);
-  assert.deepEqual(oracleEntry(line), { route: "hard" });
+  assert.equal(fieldsOf(line).route, "hard");
   assert.equal(fieldsOf(line).retry, normal.dispatch_id);
 
   const again = ask(fixture, [...graded(LOW_IMPACT, EARLIER), ...blocked]);
