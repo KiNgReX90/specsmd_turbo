@@ -20,30 +20,40 @@ CLAUDE = "CLAUDE.md"
 AGENTS = "AGENTS.md"
 CODEX_SKILLS = ".agents/skills"
 
+# The shop's own charter words: all of CLAUDE.md; the shop's part of AGENTS.md plus the managed
+# block at its flow-side ceiling (171) and the block's three-word end marker.
+CLAUDE_CHARTER = 762
+CODEX_CHARTER = 412 + 171 + 3
+
+# A file the flow-side test does not bound gets its words as shipped plus ten percent, about the
+# room that test leaves the orchestrator's agent.md over its text today.
+ORCHESTRATOR_COMMAND = 264  # .claude/commands/specsmd-inferno.md, 240 words
+CODEX_BUILDER = 1779  # largest builder toml, builder SKILL.md and procedure.md, 1617 words
+
 # Each role: its ceiling, the charter files it reads, and its variants, each a list of flow files.
-# A ceiling sits forty to fifty words above the role's text as the flow ships it, so a release
-# that grows one role by a hundred words is refused here before a host meets it.
+# A ceiling is what the shop allows: its charter words plus the flow-side ceiling of the same
+# files in src/__tests__/unit/inferno/text-budget.test.ts. These numbers move with that test.
 ROLES = {
-    "claude orchestrator": (4030, [CLAUDE], [[
+    "claude orchestrator": (CLAUDE_CHARTER + ORCHESTRATOR_COMMAND + 3385, [CLAUDE], [[
         ".claude/commands/specsmd-inferno.md",
         ".specsmd/inferno/agents/orchestrator/agent.md",
     ]]),
-    "claude planner": (3870, [CLAUDE], [[".claude/agents/specsmd-inferno-planner.md"]]),
-    "claude builder": (3080, [CLAUDE], [
+    "claude planner": (CLAUDE_CHARTER + 3125, [CLAUDE], [[".claude/agents/specsmd-inferno-planner.md"]]),
+    "claude builder": (CLAUDE_CHARTER + 2353, [CLAUDE], [
         [".claude/agents/specsmd-inferno-builder.md"],
         [".claude/agents/specsmd-inferno-builder-cheap.md"],
         [".claude/agents/specsmd-inferno-builder-escalate.md"],
     ]),
-    "codex orchestrator": (3880, [AGENTS], [[
+    "codex orchestrator": (CODEX_CHARTER + 3406, [AGENTS], [[
         f"{CODEX_SKILLS}/specsmd-inferno/SKILL.md",
         f"{CODEX_SKILLS}/specsmd-inferno/references/procedure.md",
     ]]),
-    "codex planner": (3470, [AGENTS], [[
+    "codex planner": (CODEX_CHARTER + 2906, [AGENTS], [[
         ".codex/agents/specsmd_inferno_planner.toml",
         f"{CODEX_SKILLS}/specsmd-inferno-planner/SKILL.md",
         f"{CODEX_SKILLS}/specsmd-inferno-planner/references/procedure.md",
     ]]),
-    "codex builder": (2250, [AGENTS], [
+    "codex builder": (CODEX_CHARTER + CODEX_BUILDER, [AGENTS], [
         [f".codex/agents/specsmd_inferno_{tier}.toml",
          f"{CODEX_SKILLS}/specsmd-inferno-builder/SKILL.md",
          f"{CODEX_SKILLS}/specsmd-inferno-builder/references/procedure.md"]

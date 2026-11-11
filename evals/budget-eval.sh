@@ -13,8 +13,8 @@
 # more for the full per-role readout. It fails when the install refuses, when the
 # script does, or when the consumer names no budget script.
 #
-# evals/fixtures/acme-shop is an invented consumer whose ceilings sit a little above
-# the flow as it ships, so a release that grows one role by a hundred words fails here.
+# evals/fixtures/acme-shop is an invented consumer whose ceilings are its own charter
+# words plus the flow-side ceilings of src/__tests__/unit/inferno/text-budget.test.ts.
 set -uo pipefail
 
 usage() { printf 'usage: budget-eval.sh [--source <path-to-src> | <path-to-specsmd-tarball>] --consumer <dir>\n' >&2; exit 2; }
