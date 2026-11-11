@@ -98,3 +98,35 @@ Seen 2026-11-11 on the app repo, on 0.1.83. The code is the same on every versio
 ### How the host got through
 
 It sets the key, and a timer on each machine removes the folders of intents that are already archived.
+
+## 4. A test for the real binary is written by a builder that never runs it, and the final gate's lane is the first to execute it
+
+Seen 2026-11-06 to 2026-11-11 on the app repo, on 0.1.82 and 0.1.83.
+
+### What happens
+
+- `src/flows/inferno/agents/planner/agent.md:155`: what only the real binary shows becomes "a tester case, written in the run and proved by hand afterwards, never asked to be green".
+- `src/flows/inferno/agents/builder/agent.md:41` sends "anything only the real binary shows" to the project's integration case list "with a test beside it, proved on the built binary by the harness that owns it". The builder's verification names its unit test. Nothing runs the new case.
+- `S/run-real-app.cjs:5-6` says it outright: "No gate runs those journeys inside an agent run, so the review is where a stale one is caught". The command reads which test ids, labels and routes a diff took away. It executes nothing.
+- So on a host with real-app lanes (`verification.smoke`, `verification.windows`) the first execution of a new or changed case is the final gate's lane walk, after every item is built and reviewed. A test that is wrong is found there, one lane walk per find.
+
+### Evidence
+
+All on the host's intent `the-confirmed-launch-findings-are-fixed-before-the-freeze`, whose complete lane walk takes 1.9 to 4.2 hours.
+
+- TC-368: the new test looked for a test id in the tester's snapshot, which never lists a node without a role. Its first run was the Windows lane on 2026-11-11, which called it PRODUCT RED (host fix `34b3e91bc`).
+- TC-159: the helper waited for a cell the board does not draw when no duty applies. First run: the same lane walk (`b9ad2bc8a`).
+- TC-034 (twice) and TC-035: assertions that could not fail. The fix then met the host's red-first rule and was reverted to ship (`1c313cf86`).
+- TC-024 on 2026-11-08: waited for text the screen already showed (`1f6ea42aa`, `f480cd366`), 8.4 hours.
+- On 2026-11-11 that intent's four complete lane walks were all red, none on a product defect.
+
+### What the flow should do
+
+- A host can name a command that proves real-app journeys: `real_app.prove`, which gets the journey files an item changed. When it is set, an item whose diff touches `real_app.paths` owes that proof before its review. `verify-item` runs it and records the result with the item's other proofs, and a red goes back to the warm builder like any failing verification.
+- The planner's and the builder's text follow: on a host with `real_app.prove` a tester case runs in the item and is green there. "Proved by hand afterwards, never asked to be green" stays only for a host without the key.
+- `run.cjs real-app` keeps what it does. Its header stops saying that no gate runs the journeys.
+- Tests: on a fixture host with the key, an item that touches a real-app path cannot complete without the recorded proof. Without the key the flow behaves as today.
+
+### How the host got through
+
+It plans a scoped check in `verification.integrate` that walks only the journey files an item changed (host statement of 2026-11-11, not built yet). Until then its lanes stay the first to run a new case.
