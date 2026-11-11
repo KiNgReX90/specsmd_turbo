@@ -5,6 +5,7 @@ const path = require("node:path");
 const { CONFIG, INTENT_TREE, git, intentReviewed, repo, run, worktree, write } = require("./review-fixture.cjs");
 const { tempDir } = require("./test-temp.cjs");
 const { withMarks } = require("./run-gate-marks.cjs");
+const { caller } = require("./run-call.cjs");
 
 // The gate lists each criterion the plan marked with the command or lane that proves it, beside
 // the verdict this gate gave that command or lane. With no mark it prints nothing new.
@@ -37,12 +38,20 @@ const marked = (result, root) => withMarks({ tree: root, intent: "alpha" }, resu
 
 test("each marked criterion stands beside the verdict of its finalize command, and a lane is not run by a gate in this process", () => {
   const root = tree(MARKED);
-  const result = withMarks({ tree: root, intent: "alpha" }, gateResult(0, PASSED));
+  // The start call it names carries the tree, intent and host config of this gate call.
+  const codex = ".specs-inferno/config.codex.yaml";
+  caller({ intent: "alpha", config: codex });
+  let result;
+  try {
+    result = withMarks({ tree: root, intent: "alpha" }, gateResult(0, PASSED));
+  } finally {
+    caller({});
+  }
 
   assert.deepEqual(result.out, [
     "PASS 1s npm run check",
     "MARKED a-one:2 (gate: npm run size): GREEN, unchanged since its last pass",
-    "MARKED a-one:3 (gate: verification.windows): not run by this gate, gate --detach starts the lanes",
+    `MARKED a-one:3 (gate: verification.windows): not run by this gate, run.cjs gate --detach --tree ${root} --intent alpha --config ${codex} starts the lanes`,
     "MARKED a-two:1 (gate: npm run check): PASS",
     "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize and no lane of this config",
     "last line",

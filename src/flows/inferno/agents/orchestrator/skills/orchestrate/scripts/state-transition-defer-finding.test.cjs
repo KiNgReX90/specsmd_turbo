@@ -147,8 +147,15 @@ test("a rule file that says anything else is refused by name", () => {
 test("defer-finding refuses an intent with no recorded intent review", () => {
   refused(() => defer(box({ review: null }), 1), "NO_REVIEW", /no intent review of gift-cards at .*intents\/gift-cards\/review\.yaml: defer-finding moves a finding of a recorded intent review/);
   for (const review of ["verdict: fix\nfindings: []\n", ""]) {
-    refused(() => defer(box({ review }), 1), "NOT_RECORDED", /review\.yaml is not recorded: record it with run\.cjs review first, then defer from what it found/);
+    refused(() => defer(box({ review }), 1), "NOT_RECORDED", /review\.yaml is not recorded: run run\.cjs review --tree \S+ .*first, then defer from what it found$/);
   }
+  // The call it names carries the caller's tree, intent and host config, so run as printed it stays on the caller's host.
+  const made = box({ review: "verdict: fix\nfindings: []\n" });
+  const root = path.dirname(made.dir);
+  const args = ["defer-finding", "--intent", "gift-cards", "--entry", "1", "--to", "first-update.md", "--reason", "after the release",
+    "--file", made.file, "--config", ".specs-inferno/config.codex.yaml"];
+  refused(() => main(args), "NOT_RECORDED", new RegExp(`intents/gift-cards/review\\.yaml is not recorded: run run\\.cjs review --tree ${root.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} ` +
+    "--intent gift-cards --config \\.specs-inferno/config\\.codex\\.yaml first, then defer from what it found$"));
 });
 
 function cli(args) {
