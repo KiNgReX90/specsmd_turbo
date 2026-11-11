@@ -19,6 +19,7 @@ const lib = require('./run-lib.cjs');
 const gate = require('./run-gate.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { sinceCommit } = require('./run-since.cjs');
+const { exitAfter } = require('./run-exit.cjs');
 
 const { RunError } = lib;
 
@@ -183,11 +184,11 @@ if (require.main === module) {
   try {
     const result = checkDoubles(options);
     process.stdout.write(options.json ? `${JSON.stringify(result.payload)}\n` : `${lib.capLines(result.out).join('\n')}\n`);
-    process.exit(result.exit);
+    exitAfter(process.stdout, result.exit);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
     process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
-    process.exit(error.exit);
+    exitAfter(process.stderr, error.exit);
   }
 }
 

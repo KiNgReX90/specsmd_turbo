@@ -22,9 +22,13 @@ const RUN = path.join(__dirname, 'run.cjs');
 const ITEM_REVIEW = (id) => `.specs-inferno/intents/alpha/reviews/${id}.yaml`;
 const LOCK = `${JSON.stringify({ flow: 'inferno', rules: { review: '2026-09-20T00:00:00.000Z' }, files: {} })}\n`;
 
+const ITEMS = { a: { editable: ['a.cjs', 'a.test.cjs', 'a2.cjs'], check: 'node -e "0"' }, b: ['b.cjs'] };
+const CONFIG = '.specs-inferno/config.yaml';
+const HOST = 'delivery:\n  base_branch: main\n';
+
 /** Items a and b on an intent branch, with a sibling's commit on it first, so the fork point is not the item's baseline. */
-function setup(t) {
-  const f = fixture(t, { a: { editable: ['a.cjs', 'a.test.cjs', 'a2.cjs'], check: 'node -e "0"' }, b: ['b.cjs'] });
+function setup(t, items = ITEMS) {
+  const f = fixture(t, items);
   // proofPath reads the cache from the environment, as the runner's own process does.
   const before = process.env.XDG_CACHE_HOME;
   process.env.XDG_CACHE_HOME = f.cache;
@@ -34,7 +38,9 @@ function setup(t) {
   });
   f.write('.specsmd/inferno/flow.lock', LOCK);
   f.write('other.cjs', 'a sibling landed first\n');
-  f.land('.specsmd/inferno/flow.lock', 'other.cjs');
+  // The fixture writes every editable file as code: a host config an item owns starts as a config.
+  f.write(CONFIG, HOST);
+  f.land('.specsmd/inferno/flow.lock', 'other.cjs', CONFIG);
   return f;
 }
 
@@ -233,4 +239,30 @@ test("a batch's proof gives each item's review only that item's paths, and its s
   const stale = review(f);
   assert.equal(stale.code, 3, stale.out);
   assert.match(stale.out, new RegExp(`^then run\\.cjs verify-item --items a,b --tree ${f.root}, then run\\.cjs review --item a --tree `, 'm'));
+});
+
+test('an item that owns a host config under .specs-inferno/ is reviewed: the config is outside its proof and its review, its code is not', (t) => {
+  const f = setup(t, { a: { editable: [CONFIG, 'a.cjs'], check: 'node -e "0"' } });
+  const baseline = f.git('rev-parse', 'HEAD');
+  build(f, ['--item', 'a'], { [CONFIG]: `${HOST}verification:\n  finalize: []\n`, 'a.cjs': 'module.exports = 2;\n' });
+  const file = proofPath(f.root, 'alpha', 'a');
+  const first = review(f);
+  assert.equal(first.code, 3, first.out);
+  assert.deepEqual(block(first.out).slice(0, 3), ['dispatch specsmd-inferno-reviewer item a', `  range ${short(f, baseline)}..${short(f, 'HEAD')} paths a.cjs`, `  proof ${file}`]);
+  assert.deepEqual(payload(f).paths, ['a.cjs']);
+
+  // A later change of the config alone leaves the proof of the code current.
+  f.write(CONFIG, `${HOST}verification:\n  finalize: [true]\n`);
+  f.land(CONFIG);
+  const config = review(f);
+  assert.equal(config.code, 3, config.out);
+  assert.equal(block(config.out)[2], `  proof ${file}`);
+
+  // A source file it owns that changed after the proof still makes the proof one of an older state.
+  f.write('a.cjs', 'module.exports = 3;\n');
+  f.land('a.cjs');
+  const stale = review(f);
+  assert.equal(stale.code, 3, stale.out);
+  assert.match(stale.out, /^verify-item owed for a before its review/m);
+  assert.doesNotMatch(stale.out, /^dispatch /m);
 });
