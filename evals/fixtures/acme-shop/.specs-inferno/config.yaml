@@ -1,0 +1,7 @@
+# INFERNO config of the invented Acme Shop consumer that evals/budget-eval.sh installs into.
+mode: production
+
+# The installer and every claim run this script, which holds each role's standing text,
+# the shop's charter files included, to a word ceiling.
+budget:
+  script: scripts/flow-text-budget.py

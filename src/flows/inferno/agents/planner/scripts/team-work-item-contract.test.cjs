@@ -9,14 +9,12 @@ const { readItemSpec } = require(`${SCRIPTS}/run-lib.cjs`);
 const { acceptanceCriteria } = require(`${SCRIPTS}/run-mutant-coverage.cjs`);
 const { tempDir } = require(`${SCRIPTS}/test-temp.cjs`);
 const { writeFile } = require(`${SCRIPTS}/test-write.cjs`);
+const { codexSkillFile } = require(`${SCRIPTS}/test-codex-text.cjs`);
 
 const templatePath = path.resolve(__dirname, "../templates/work-item.md.hbs");
 const briefPath = path.resolve(__dirname, "../templates/brief.md.hbs");
 const agentPath = path.resolve(__dirname, "../agent.md");
 const AGENTS = path.resolve(__dirname, "../..");
-// The Codex twins ship in the flow source, not under an installed `.specsmd/inferno/`.
-const CODEX = path.resolve(AGENTS, "../codex/skills");
-const present = (files) => files.filter((file) => fs.existsSync(file));
 const headings = (text) => text.split("\n").filter((line) => /^## /.test(line));
 
 test("planner body tells the planner to list the tests the change reaches", () => {
@@ -212,9 +210,8 @@ test("brief template numbers its success criteria and carries the item map", () 
 });
 
 test("every planner text tells the planner to fill the four sections and number the criteria", () => {
-  const texts = present([agentPath, path.join(CODEX, "specsmd-inferno-planner/references/procedure.md")]);
+  const texts = [agentPath, codexSkillFile("specsmd-inferno-planner", "references/procedure.md")];
 
-  assert.ok(texts.includes(agentPath));
   for (const file of texts) {
     const text = fs.readFileSync(file, "utf8");
     for (const token of ["`delivers:`", "Edge Cases", "Out of Scope", "Test Plan", "Reuse", "`SC-<n>`", "Item Map", "`None.`"]) {
@@ -230,11 +227,10 @@ test("the contract reviewer checks each edge-case row and every builder builds t
   const check = reviewer.split("\n").find((line) => line.startsWith("1. **Every criterion is proven.**"));
 
   assert.match(check, /each row of its Edge Cases/);
-  const builders = present([
+  const builders = [
     path.join(AGENTS, "builder/agent.md"),
-    path.join(CODEX, "specsmd-inferno-builder/references/procedure.md"),
-  ]);
-  assert.ok(builders.length >= 1);
+    codexSkillFile("specsmd-inferno-builder", "references/procedure.md"),
+  ];
   for (const file of builders) {
     assert.match(fs.readFileSync(file, "utf8"), /each Edge Cases row and each Test Plan line/, path.relative(AGENTS, file));
   }
