@@ -1,6 +1,6 @@
 # Codex INFERNO planning procedure
 
-The planner captures or repairs intent artifacts, decides their work-item records, renders every file itself, updates state once, prints a handoff and stops. It never starts implementation.
+The planner captures or repairs intent artifacts, decides their work-item records, renders every file itself, updates state once, prints a handoff and stops.
 
 ## Paths and canonical resources
 
@@ -17,7 +17,7 @@ Read the rule files under `.specs-inferno/standards/`, else the applicable `AGEN
 ## Activation and user input
 
 1. If `.specs-inferno/config.codex.yaml` is absent, return a compact `needs_config` result so the parent can complete `$specsmd-inferno-config`; never create a silent default file.
-2. Read config, state when present, project instructions and the repository metadata needed to ground real paths. Classify a new scope against the other intents cheap-first: titles and state entry comments rule out a disjoint subsystem, and only a plausible overlap has its brief opened.
+2. Read config, state when present, project instructions and the repository metadata needed to ground real paths.
 3. Determine whether to capture a new intent, decompose a pending one, or repair missing or invalid planning artifacts.
 4. Settle essential product facts from the project's specs and the live code, never by asking. A call they leave open is returned as one `oracle` block (the question, the readings, what was measured, the paths) for the parent to settle, and no artifact is written for the scope that call gates. Never return a `questions` list and never pause for a person.
 
@@ -25,20 +25,20 @@ Read the rule files under `.specs-inferno/standards/`, else the applicable `AGEN
 
 Run this triage on every request before capture. The wording of a request is never a criterion, and neither is the user's explicit order to make an intent.
 
-The test is the builder's context, not whether one builder could in theory finish the work. INFERNO exists to keep each model's context compact. Five to ten findings fill one builder's context.
+The test is the builder's context, not whether one builder could in theory finish the work. Five to ten findings fill one builder's context.
 
 A request is a direct build when it is one small change, or two closely tied ones, in files a builder reads in full, that one builder finishes and one session proves with its context still compact: a red check, one defect, one regression, one missing value.
 
-Anything larger is an intent, and one builder being able to finish it is no reason to skip one. It is an intent when any of these holds:
+Anything larger is an intent when any of these holds:
 
-- **(a)** a batch: findings from a hand test, a review or a board of decisions, several cards, or changes across more than one screen, module or concern. Split it into work items of one or two changes each, so every item gets a fresh builder and a cold reviewer;
+- **(a)** a batch: findings from a hand test, a review or a board of decisions, several cards, or changes across more than one screen, module or concern. Split it into work items of one or two changes each;
 - **(c)** a dependency chain where a later change cannot be tested before an earlier one lands;
 - **(d)** disjoint ownership worth parallelising on disjoint compile trees;
 - **(e)** a change that must not reach the default branch until the full gate proves it whole, such as a persisted-format migration or a definition version bump several documents read.
 
 Everything else is a direct build: write no brief, no work item and no state entry for one. Every intent's state entry comment carries `INTENT. (<letter>) <what makes it more than one compact change>`, and `state-transition.cjs check` refuses a reason that names no criterion letter or only restates size.
 
-Report the verdict on the first handoff line. When the request asked for an intent and no criterion holds, the line reads `Triage: direct, the request asked for an intent`, and the direct recipe follows. That line is for one compact change only: a batch is an intent under (a), however it is asked for. Return each direct build as a recipe the strong builder executes in its first round, one labelled line each:
+When the request asked for an intent and no criterion holds, the line reads `Triage: direct, the request asked for an intent`, and the direct recipe follows. Return each direct build as a recipe the strong builder executes in its first round, one labelled line each:
 
 ```text
 direct: <slug>
@@ -51,22 +51,20 @@ direct: <slug>
   measured: <what was measured and the command>
 ```
 
-`grade` follows the work-item grading rules, because the parent tiers the builder by it. `hard: yes` when the change has more than one defensible shape, or a cause the measurement did not settle, so the parent asks the oracle first. Measure before writing a recipe and never hand over a slug the builder must search for.
+`grade` follows the work-item grading rules. `hard: yes` when the change has more than one defensible shape, or a cause the measurement did not settle. Measure before writing a recipe and never hand over a slug the builder must search for.
 
 ## Capture and cross-intent reconciliation
 
 1. Establish the goal, users, problem, constraints, non-goals and preferences. Number each success criterion `SC-<n>`, never renumbered, with its instrument and the value it must show; the brief's Item Map names the items delivering each.
-2. Compare the proposal with every non-completed intent and classify the relationship: **independent** when scopes and ownership proceed separately, **integrate** to fold it into an existing pending intent, **depend** to create it separately with the prerequisite id in `depends_on_intents`, **conflict** to read both briefs and the specs and return an `oracle` block when they do not settle it.
+2. Compare the proposal with every non-completed intent cheap-first, titles and state entry comments before a brief, and classify the relationship: **independent** when scopes and ownership proceed separately, **integrate** to fold it into an existing pending intent, **depend** to create it separately with the prerequisite id in `depends_on_intents`, **conflict** to read both briefs and the specs and return an `oracle` block when they do not settle it.
 3. Keep intent-level dependencies acyclic, pointing only to known non-completed intents.
-4. A request the triage calls direct never enters state: return it as a direct recipe for the parent to dispatch, with no ledger entry. Never write `.specs-inferno/quick-fixes.md` or any other parking file; `state-transition.cjs check` reports it as drift. Couple work that changes one surface; a batch of unrelated findings is one intent of small items, never one large item.
-5. Resolve every choice the specs settle and record the assumption, whatever `autonomy.level` says; there is no review pause in any mode.
+4. Couple work that changes one surface; a batch of unrelated findings is one intent of small items, never one large item.
+5. Resolve every choice the specs settle and record the assumption.
 6. Render the brief with the canonical template and add or update the state intent record, preserving unknown state fields and unrelated comments.
 
 ## Repository grounding
 
 Before decomposition, use `rg`, `rg --files`, manifests, tests and focused source reads to verify every path and pattern. Never place a guessed path in a work item. A write the plan routes through an existing function is planned at its nearest command wrapper: grep the function's callers in the round that opens it, because the side effects the store alone skips (a sync, a recomputed index, an event) live in the wrapper.
-
-For each planned change, identify the primary implementation target and why it is required, an existing pattern for behavior, architecture, UI or API work, the relevant tests or an explicit docs-only or config-only exemption, every path the builder may edit, dependencies on earlier outputs, the narrow verification command, any `finalize_check`, and an exact design source when visual or contract values must be matched.
 
 ## Work-item decomposition
 
@@ -108,20 +106,19 @@ diagnosis:            # required on corrective items
   shows: "1 failed"
 ```
 
-Also decide id, title, kind, complexity, acceptance criteria, `depends_on`, exact verification, optional `finalize_check` and optional `design_contract`.
+Also decide id, title, kind, complexity, acceptance criteria, `depends_on`, the narrow verification command, an optional `finalize_check`, and a `design_contract` naming the exact source when visual or contract values must be matched.
 
 ### Four sections beside the manifest
 
-`delivers:` names the `SC-<n>` the item delivers. Edge Cases: a row per case. Out of Scope: what it does not build. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. A test reads `` `<path>` :: <case> ``, an empty section `None.` The Description says what changes and why, never what the code does today.
+`delivers:` names the `SC-<n>` the item delivers. Edge Cases: a row per case. Out of Scope: what it does not build. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. An empty section reads `None.` The Description says what changes and why, never what the code does today.
 
 ### Contract rules
 
-- `context.required` and `ownership.editable` are always non-empty. Patterns are required for behavior, architecture, UI and API work. Tests are required unless the item is explicitly docs-only or config-only.
-- `reads:` is optional. An item whose surface draws a value the backend owns carries one entry per value; an item drawing nothing from the backend omits the field. The `stale` sentence names what the user sees when the surface never reads again, because that is what the builder's first failing test asserts.
-- `probes:` is optional. Every number the plan depends on becomes a probe on the item that depends on it. `run` is one read-only shell line, never a suite and never a write; `shows` is the exact trimmed stdout seen. Both are double-quoted. A probe is never an acceptance criterion: the orchestrator reruns it with `run.cjs probes <item-id> --tree <dir> --config .specs-inferno/config.codex.yaml` and hands the drift to the builder.
-- `diagnosis:` is required on a ui or behavior item that exists because something is wrong on the screen today. `claim` is the cause in one sentence, `probe` the bare command that shows it, `shows` the line it printed. A pixel or position claim comes from browser geometry, never from adding up declarations. `run.cjs frontier` replays it and blocks the dispatch on a missing block, a failing probe or output that no longer matches.
+- `reads:` is optional. An item whose surface draws a value the backend owns carries one entry per value. The `stale` sentence names what the user sees when the surface never reads again, because that is what the builder's first failing test asserts.
+- `probes:` is optional. Every number the plan depends on becomes a probe on the item that depends on it. `run` is one read-only shell line, never a suite and never a write; `shows` is the exact trimmed stdout seen. Both are double-quoted. A probe is never an acceptance criterion: the orchestrator reruns it with `run.cjs probes <item-id> --tree <dir> --config .specs-inferno/config.codex.yaml` before the dispatch and hands the drift to the builder.
+- `diagnosis:` is required on a ui or behavior item that exists because something is wrong on the screen today. `claim` is the cause in one sentence, `probe` the bare command that shows it, `shows` the line it printed. A pixel or position claim comes from browser geometry, never from adding up declarations.
 - Dependencies are known and acyclic.
-- Prefer disjoint ownership when it reflects the code, and never falsify it to create parallelism. When several items truly edit one file, encode dependencies or accept scheduler serialization.
+- Prefer disjoint ownership when it reflects the code, and never falsify it to create parallelism.
 
 ### Size both ways
 
@@ -153,20 +150,17 @@ A high-complexity item carries its decisions under Technical Notes, one line eac
 
 ## Rendering the artifacts
 
-The planner makes every decision and writes every file.
-
 1. Build a complete decision record for each work item, every required and optional template field included.
 2. Render each record from the canonical work-item template into `.specs-inferno/intents/<intent-id>/work-items/<item-id>.md`.
-3. Parse the frontmatter of every file written and confirm each manifest field is present. A missing or unrenderable field is a defect in the record: fix it and render again.
-4. Only after all files validate, update `.specs-inferno/state.yaml` once with the work-item list and intent metadata.
+3. Only after all files validate, update `.specs-inferno/state.yaml` once with the work-item list and intent metadata.
 
 ## Validation
 
 Before handoff:
 
-1. Parse state and every new frontmatter block.
-2. Confirm every manifest field, editable path, dependency, complexity and verification command, that item and intent dependencies are acyclic, that no two supposedly parallel items overlap editable ownership, and that design contracts cite an exact source.
-3. Confirm the blast-radius grep ran for this plan or repair, and every behavior, ui, api and architecture item carries what it found: the consumers in its ownership and context, the test files in `ownership.editable`, and one acceptance criterion each.
+1. Parse state, and run `state-transition.cjs check --intent <intent-id> --config .specs-inferno/config.codex.yaml` and `run.cjs frontier <intent-id> --config .specs-inferno/config.codex.yaml` until both exit 0; `frontier` names a missing manifest field or path.
+2. Confirm that item and intent dependencies are acyclic, every verification command is narrow, and design contracts cite an exact source.
+3. Confirm the blast-radius grep ran for this plan or repair and every item carries what it found.
 4. Repair every finding `run.cjs plan-lint <intent-id>` prints before returning.
 5. Run the canonical decomposition contract test when its prerequisites are available:
 
