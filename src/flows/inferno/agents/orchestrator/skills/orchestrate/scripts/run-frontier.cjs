@@ -178,7 +178,7 @@ function frontier(intentId, options) {
   const integrated = (item) => itemIntegrated(item, since);
 
   // The plan's form comes first: a finding goes back to the planner before anything is ready.
-  const planFindings = frontierFindings(tree, intent);
+  const planFindings = frontierFindings(tree, intent, config);
   if (planFindings.length > 0) return { exit: 2, payload: { ok: false, errors: planFindings }, out: planFindings };
 
   const errors = contractErrors(tree, items);

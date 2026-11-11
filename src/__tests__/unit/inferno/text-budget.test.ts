@@ -26,6 +26,7 @@ function managedBlock(): number {
   return words(agents.slice(start, end));
 }
 
+// evals/fixtures/acme-shop/scripts/flow-text-budget.py builds its ceilings on these numbers; change both together.
 /** Each role as installed, its files and the ceiling. */
 const ROLES: Array<[string, () => number, number]> = [
   ['the builder', () => count('.claude/agents/specsmd-inferno-builder.md'), 2353],

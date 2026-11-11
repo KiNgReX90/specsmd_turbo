@@ -10,6 +10,7 @@ const { resolveBase } = require('./run-intents.cjs');
 const jobs = require('./run-jobs.cjs');
 const lanes = require('./run-lanes.cjs');
 const intentReview = require('./run-intent-owed.cjs');
+const { asideLines } = require('./run-review-aside.cjs');
 const { gateStartCall, gateWaitCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const cases = require('./run-cases.cjs');
@@ -18,6 +19,7 @@ const { mergeSlot } = require('./run-config-gates.cjs');
 const { lanesSince, startLanesOnly, startOneLane } = require('./run-lanes-only.cjs');
 const supersede = require('./run-supersede.cjs');
 const { foldBlockers, refuseDirt } = require('./run-dirt.cjs');
+const { withMarks } = require('./run-gate-marks.cjs');
 
 const { RunError } = lib;
 
@@ -137,6 +139,7 @@ function gateNow(options) {
   }
   const unreviewed = intentReview.gateRefusal(tree, config, intent, before, shown);
   if (unreviewed) return unreviewed;
+  shown.push(...asideLines(tree, intent, { withdrawn: true }));
   // Reject a verdict if the inputs change while the gate runs.
   const codeHash = lib.codeTreeHash(tree);
   const started = proofs.scopeHash(tree);
@@ -218,6 +221,7 @@ function gateDetach(options) {
   // Refused here too, or the child dies refusing and --wait reports a gate with no result.
   const unreviewed = intentReview.gateRefusal(tree, current, intent, before, folded);
   if (unreviewed) return unreviewed;
+  folded.push(...asideLines(tree, intent, { withdrawn: true }));
   const laneStart = lanes.startLanes(tree, options, current, changedPaths(tree, mergeBase(tree, base)));
   const args = ['gate', '--tree', tree, '--json'];
   if (options.base) args.push('--base', options.base);
@@ -297,7 +301,12 @@ function laneDetach(options) {
   return startOneLane(tree, options, lib.readConfig(tree, options.config), restored);
 }
 
+/** Route a gate call; a verdict carries the marked criteria beside it (run-gate-marks.cjs). */
 function gate(options) {
+  return withMarks(options, gateCall(options));
+}
+
+function gateCall(options) {
   if (options.detach && options.wait) throw new RunError('gate takes --detach or --wait, not both', 'BAD_ARGS', 1);
   if (options.lane && options.detach && (options.lanes_only || options.supersede)) {
     throw new RunError('gate takes --lane with --detach alone, not with --lanes-only or --supersede', 'BAD_ARGS', 1);

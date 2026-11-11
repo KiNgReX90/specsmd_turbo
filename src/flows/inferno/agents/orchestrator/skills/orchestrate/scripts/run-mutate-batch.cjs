@@ -30,7 +30,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { afterRecovery, openSession, recoverInterrupted } = require('./run-mutate-journal.cjs');
 const { readBatch } = require('./run-mutate-entries.cjs');
-const { applySwitches, blame, planRust } = require('./run-mutate-rust.cjs');
+const { applySwitches, blame, planRust, runsCompiled } = require('./run-mutate-rust.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
 const { reseal, sealOf } = require('./run-mutate-seal.cjs');
 const { runGroup, sessionGroups, sessionOf, unsealedVerdict } = require('./run-mutate-session.cjs');
@@ -40,11 +40,19 @@ const { RunError } = lib;
 const OFF = 'unset INFERNO_MUTANT; ';
 const ON = (k) => `export INFERNO_MUTANT=${k}; `;
 
-/** The plan of every entry: a switch for the Rust ones that can hold one, the classic build otherwise. */
-function planAll(tree, entries) {
-  const plans = new Map(entries.filter((e) => !e.rust).map((e) => [e.k, { form: 'classic' }]));
-  for (const rel of [...new Set(entries.filter((e) => e.rust).map((e) => e.rel))]) {
-    const mine = entries.filter((e) => e.rust && e.rel === rel);
+const SOURCE_READ = 'its test starts no cargo run, so it reads the source in place';
+
+/**
+ * The plan of every entry: a switch for the Rust ones that can hold one and whose test runs
+ * compiled code (run-mutate-rust.cjs `runsCompiled`, through `hosted`'s wrapper too), the classic
+ * build otherwise.
+ */
+function planAll(tree, entries, hosted) {
+  // `why` is shown for a Rust entry only: every other language runs in place anyway.
+  const plans = new Map(entries.map((e) => [e.k, { form: 'classic', why: SOURCE_READ }]));
+  const switchable = entries.filter((e) => e.rust && runsCompiled(e.test, hosted && hosted.match));
+  for (const rel of [...new Set(switchable.map((e) => e.rel))]) {
+    const mine = switchable.filter((e) => e.rel === rel);
     const text = fs.readFileSync(path.join(tree, rel), 'utf8');
     planRust(text, mine).forEach((plan, index) => plans.set(mine[index].k, plan));
   }
@@ -206,8 +214,8 @@ async function batch(options) {
       `refusing to mutate a dirty tree: ${dirty.slice(0, 5).join(', ')} is uncommitted. Mutate once the tree is clean.`), 'DIRTY');
   }
   const entries = readBatch(tree, file);
-  const plans = planAll(tree, entries);
   const hosted = sessionOf(config);
+  const plans = planAll(tree, entries, hosted);
   const groups = { hosted, list: sessionGroups(hosted, entries, plans) };
   // What git calls changed before the first write: the batch file and the review being recorded.
   const before = snapshot(tree);

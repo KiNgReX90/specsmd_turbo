@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { INTENT_TREE, git, repo, run, worktree, write } = require("./review-fixture.cjs");
+const { codexSkillFile } = require("./test-codex-text.cjs");
 
 // The slice check: once per item, just before its dispatch, one cross-checker reads the item's
 // spec against the tree its predecessors left. The plan's cross-check read the item before any
@@ -11,7 +12,6 @@ const { INTENT_TREE, git, repo, run, worktree, write } = require("./review-fixtu
 // on it but a conflict, which goes to the planner once.
 
 const INSTALLED = { ".claude/agents/specsmd-inferno-scanner.md": "---\nname: specsmd-inferno-scanner\n---\n" };
-const CODEX_PROCEDURE = "../../../../../codex/skills/specsmd-inferno/references/procedure.md";
 
 /** An intent worktree whose first item, a-one, has landed; a-two depends on it. */
 function landed() {
@@ -120,7 +120,7 @@ test("the orchestrator runs the slice check beside its probes, on both hosts", (
   assert.ok(probes);
   assert.match(probes, /`run\.cjs scan --item \{item-id\} --tree \{path\}`/);
   assert.match(probes, /`SLICE`/);
-  const codex = fs.readFileSync(path.resolve(__dirname, CODEX_PROCEDURE), "utf8");
+  const codex = fs.readFileSync(codexSkillFile("specsmd-inferno", "references/procedure.md"), "utf8");
   const bullet = codex.split("\n").find((line) => line.includes("run.cjs probes <item-id>"));
   assert.match(bullet, /`run\.cjs scan --item <item-id> --tree <path> --config \.specs-inferno\/config\.codex\.yaml`/);
 });

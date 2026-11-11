@@ -1,7 +1,7 @@
 'use strict';
 
 const { TransitionError } = require('./state-ledger.cjs');
-const { caller } = require('./run-call.cjs');
+const { caller, intentReviewCall } = require('./run-call.cjs');
 const DEFAULT_STATE_PATH = '.specs-inferno/state.yaml';
 
 // ---------------------------------------------------------------------------
@@ -18,6 +18,7 @@ const USAGE = `INFERNO state.yaml single-writer
   node state-transition.cjs close-intent  --intent <id>
   node state-transition.cjs review-item --intent <id> --item <id> --verdict clean|fix|settled --files-hash <hex> --tier cheap|strong|escalate --commit <sha>
   node state-transition.cjs defer-item --intent <id> --item <id> --reason "<why>" [--rewire <item>=<new-dep>]...
+  node state-transition.cjs defer-finding --intent <id> --entry <n> --to <file> --reason "<why>"
   node state-transition.cjs archive-intent [--intent <id>] [--sweep]
   node state-transition.cjs check [--intent <id>]
 
@@ -63,7 +64,15 @@ reason for the next plan. It refuses an item a builder was dispatched on, review
 file only it owns, a completed one, and the last item not deferred. Every open item that depends
 on it needs a --rewire, which changes the edge in the ledger and the spec front matter together;
 a Test Plan line that integrates with the deferred item is the planner's to repair, and plan-lint
-names it. The caller commits what it wrote.`;
+names it. The caller commits what it wrote.
+
+defer-finding moves one finding of the recorded intent review, numbered from 1 as its findings list
+them, into its deferred list with --to, a file in the intent folder that names the finding's file:line
+for the next plan, and the reason. Only the orchestrator defers, on a rule the user gave, and only what
+.specs-inferno/standards/defer-findings.yaml lets leave (severities: [...], survivors: true); without
+that file only minor, never a surviving mutant. A deferred survivor stops running. With no finding
+left open the review says clean, or stays fix while a criterion owes a proof, and the next review call
+dispatches its reviewer for those criteria. The caller commits the review file.`;
 
 function parseArgs(argv) {
   const options = { file: DEFAULT_STATE_PATH };
@@ -91,7 +100,7 @@ function parseArgs(argv) {
 function main(argv, commands) {
   const {
     claimIntent, unclaimIntent, blockIntent, unblockIntent, completeItem, closeIntent,
-    archiveIntent, check, reviewItem, deferItem,
+    archiveIntent, check, reviewItem, deferItem, deferFinding,
   } = commands;
   const { command, options } = parseArgs(argv);
   caller(options);
@@ -196,6 +205,23 @@ function main(argv, commands) {
       }
       process.stdout.write(`  wrote ${[options.file, ...result.markdown].join(', ')}: commit them\n`);
     } else process.stdout.write(`${result.item} ${result.note}. no change\n`);
+    return 0;
+  }
+
+  if (command === 'defer-finding') {
+    for (const flag of ['intent', 'entry', 'to', 'reason']) {
+      if (!options[flag]) throw new TransitionError(`defer-finding requires --${flag}`, 'BAD_ARGS');
+    }
+    const result = deferFinding(options);
+    if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+    else {
+      const closed = result.gaps.length > 0
+        ? `no finding stays open, and ${result.gaps.join('; ')}: the review stays fix; run ${intentReviewCall(result.tree)} to dispatch its reviewer for them`
+        : 'no finding stays open, so the review now says clean';
+      const open = result.open === 0 ? closed : `${result.open} finding${result.open === 1 ? ' stays' : 's stay'} open, numbered as the file lists them now`;
+      process.stdout.write(`deferred findings entry ${result.entry} of ${result.intent} (${result.severity} at ${result.at}) to ${result.to}: ${result.reason}\n` +
+        `  ${open}\n  wrote ${result.review}: commit it before the next review call\n`);
+    }
     return 0;
   }
 

@@ -13,7 +13,10 @@
  *   - every acceptance criterion carries a code span. The planner text says a criterion names
  *     its test file, case id or command and the value it must show. A code span is what a
  *     script can tell apart: whether it names a path, a case id or a command, and whether the
- *     prose around it states a value, only a reader can judge, so the lint holds it to no more;
+ *     prose around it states a value, only a reader can judge, so the lint holds it to no more.
+ *     A criterion whose line ends in a gate mark, `(gate: <name>)`, names its command there, and
+ *     the name is one the config's verification block holds (run-criterion-marks.cjs). The config
+ *     is read only for a plan that marks a criterion;
  *   - every open item has the nine sections in order, Edge Cases, Out of Scope and Reuse hold
  *     their content or exactly `None.`, every fixed line holds its form, and no line holds a
  *     TBD or a TODO;
@@ -40,6 +43,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { isComplete, isDeferred } = require('./state-transition.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
+const { gateMark, gateNames } = require('./run-criterion-marks.cjs');
 
 const ITEM_SECTIONS = [
   'Description', 'Acceptance Criteria', 'Edge Cases', 'Out of Scope', 'Test Plan', 'Reuse',
@@ -241,8 +245,11 @@ function testPlanFindings(id, item, editable, parsed, tree, add) {
   if (!breaks.none && !breaks.named) add('Test Plan has no Breaks line');
 }
 
-/** Every finding on one open item's own text. */
-function itemFindings(tree, item, spec, criteria, findings) {
+const UNHELD = "which the config's verification block does not hold: " +
+  'name a command of verification.finalize verbatim or a lane the config sets as verification.<lane>';
+
+/** Every finding on one open item's own text. `names` gives the names a gate mark may give. */
+function itemFindings(tree, item, spec, criteria, findings, names) {
   const add = (message) => findings.push(`${item.id}: ${message}`);
   const parsed = sections(spec.content);
   const delivers = list(spec.frontmatter.delivers);
@@ -255,7 +262,10 @@ function itemFindings(tree, item, spec, criteria, findings) {
   const acceptance = acceptanceCriteria(spec.content);
   if (section(parsed, 'Acceptance Criteria') && acceptance.length === 0) add('## Acceptance Criteria lists no criterion');
   acceptance.forEach((criterion, index) => {
-    if (codeSpans(criterion).length === 0) add(`acceptance criterion ${index + 1} names no test file, case id or command in a code span`);
+    const mark = gateMark(criterion);
+    if (mark !== null) {
+      if (!names().includes(mark)) add(`acceptance criterion ${index + 1} is marked (gate: ${mark}), ${UNHELD}`);
+    } else if (codeSpans(criterion).length === 0) add(`acceptance criterion ${index + 1} names no test file, case id or command in a code span`);
   });
 
   tableFindings(parsed, 'Edge Cases', EDGE_HEADER, add, (row, label) => {
@@ -329,9 +339,11 @@ function overlaps(tree, intent, editable) {
 
 /**
  * The lint of one intent from the ledger. `form` is `old` for a plan written before the lint,
- * which then carries no finding.
+ * which then carries no finding. `configOf` reads the config the step runs with, only for a
+ * criterion that carries a gate mark.
  */
-function lintPlan(tree, intent) {
+function lintPlan(tree, intent, configOf) {
+  const names = () => gateNames(configOf());
   const findings = [];
   const brief = readBrief(tree, intent.id, findings);
   if (!brief) return { form: 'old', findings: [], overlaps: [], open: 0, criteria: 0 };
@@ -352,7 +364,7 @@ function lintPlan(tree, intent) {
       delivered.set(item.id, []);
       continue;
     }
-    delivered.set(item.id, itemFindings(tree, item, spec, brief.criteria, findings));
+    delivered.set(item.id, itemFindings(tree, item, spec, brief.criteria, findings, names));
     const manifest = spec.manifest || {};
     editable.set(item.id, list(manifest.ownership && manifest.ownership.editable));
   }
@@ -372,14 +384,14 @@ const overlapLine = (pair) =>
   'not a finding: order them on purpose or leave them to be serialized';
 
 /** The finding lines `run.cjs frontier` stops on; none for a plan written before the lint. */
-function frontierFindings(tree, intent) {
-  return lintPlan(tree, intent).findings.map(findingLine);
+function frontierFindings(tree, intent, config) {
+  return lintPlan(tree, intent, () => config).findings.map(findingLine);
 }
 
 function planLint(intentId, options) {
   const tree = options.tree || lib.repoRoot(options.cwd);
   const intent = lib.findIntent(lib.readLedger(tree), intentId);
-  const result = lintPlan(tree, intent);
+  const result = lintPlan(tree, intent, () => lib.readConfig(tree, options.config));
   const payload = { ok: result.findings.length === 0, form: result.form, findings: result.findings, overlaps: result.overlaps };
   if (result.form === 'old') {
     return { exit: 0, payload, out: [`plan of ${intent.id} was written before the plan lint, so it is not linted`] };
