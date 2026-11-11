@@ -29,7 +29,10 @@ intents:
         kind: behavior
         complexity: medium
         mode: autopilot
-        status: pending
+        status: completed
+        completed_at: 2026-11-11T10:02:48Z
+        integrated_at: 2026-11-11T10:02:48Z
+        integrated_sha: a3c3c3ba
         review_misses: 1
         review: settled
         review_hash: 787d9d1b1f3ee91df61f6e0e04b2b140bda7fb731dbc56dd328014f65763fc68
