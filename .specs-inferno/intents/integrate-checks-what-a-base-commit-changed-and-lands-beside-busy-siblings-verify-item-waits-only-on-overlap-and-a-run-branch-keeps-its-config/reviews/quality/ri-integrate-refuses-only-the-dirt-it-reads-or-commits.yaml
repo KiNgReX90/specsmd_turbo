@@ -8,20 +8,13 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-beside.test.cjs
 findings:
-  - id: Q1
-    check: errors
+  - id: Q3
+    check: correctness
     file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
-    line: 168
-    evidence: "Read integrate at 166-181. Before this change the first statement after treeOf was gate.refuseDirty, which ran recoverInterrupted, and readConfig ran inside the try in checkAndLand, so every refusal carried afterRecovery, as the docstring at 157-158 still promises (\"every way out says so, a refusal included\"). Now lib.readConfig(tree, options.config) (168) and landingFiles (169, which calls lib.readItemSpec) run before recoverInterrupted (171) and outside the try. readConfig throws BAD_CONFIG for a --config path that does not exist and parseYaml throws on a broken file (run-lib.cjs readConfig); readItemSpec throws SPEC_MISSING for a ledger item with no work-item file (run-item-spec.cjs:65-67). On each of those paths a killed mutate's leftover stays in the source file and the refusal does not say so. No test covers it."
-    fix: "Read the config and the landing files inside a guard that still restores first: wrap lines 168-170 in a try, and on a RunError call recoverInterrupted(tree) with no keepLive (so a live mutant holds the landing as it did before this change), then rethrow with error.message = afterRecovery(restored, error.message). Or move the readConfig and landingFiles calls behind a plain recoverInterrupted(tree) when either throws. Add one case to run-integrate-beside.test.cjs or run-review-recover.test.cjs: a dead mutate journal and --config naming a missing file; integrate exits with BAD_CONFIG and the message names the restored file."
+    line: 122
+    evidence: "Read e2eSelection at 118-124 and its caller at 238. The selection's own window is impact.sinceRef: off the base it returns the anchor, so changedSince takes every path the intent committed since merge-base(base, HEAD); on the base it returns the latest integrated_sha proof (run-e2e-impact.cjs 136-152, 116-134). The new filter keeps a dirty path only when it is in a different window, from..HEAD, where from is checkAndLand's since: the --since commit when one is named, origin/<base> on the base, or the merge base, which is HEAD on the base when landing.all is set (run-since.cjs 39-45). So a browser-facing path the intent committed inside the selection window but before from (an item committed before --since, or on the base after the last proof but already pushed, or every committed path in the landing.all case) is selected while clean and silently dropped once a sibling has the same file dirty: the browser step reports SKIP for a committed change instead of running it or refusing the dirty file, which is what happened before this range. The comment at 119-120 says committed paths still select. No test covers a committed and dirty path outside from..HEAD."
+    fix: "Decide committed from the same window the selection reads, not from checkAndLand's since. In run-e2e-impact.cjs split changedSince into its committed part (the committedPaths result it already computes) and the working plus untracked part, export the committed part as committedSince(tree, since), and in e2eSelection keep a dirty path only when committedSince(tree, since) holds it; then drop the from parameter and its argument at 238. Add a case to run-integrate-beside.test.cjs: an item commits a mapped path, integrate runs with --since naming a later commit, a sibling leaves that path dirty, and the result is the DIRTY refusal (or the browser step selected), never SKIP e2e."
     severity: major
-  - id: Q2
-    check: errors
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-dirt.cjs
-    line: 65
-    evidence: "foldBlockers returns only the dirty files that HEAD...ref changes, and foldBase (run-gate.cjs:72-75) falls through to FOLD_CONFLICT when that list is empty. Git also refuses a non fast forward merge over any staged change, touched or not. Ran in a scratch repo: staged a change to b, merged a branch that changes only a; git printed \"Your local changes to the following files would be overwritten by merge: b\" and exited 2 with no unmerged path. foldBlockers would return [] (b is not incoming), so integrate prints \"conflict folding <ref> into <branch>: .\" and asks to resolve conflicts that do not exist, the empty list this item set out to remove. Integrate now folds beside a sibling's uncommitted files, so a sibling between its git add and its git commit reaches this path; before, refuseDirty kept it unreachable."
-    fix: "In foldBlockers, add the staged files to what it returns: union the incoming filter with gitFiles(tree, ['diff', '--cached', '--name-only', '--no-renames', '-z', 'HEAD']), since git refuses a merge over any of them. In foldBase, when conflicts and blockers are both empty, keep a message that does not claim a conflict (say the merge of <ref> failed and to run git merge <ref> in the tree to see why) rather than an empty conflict list."
-    severity: minor
-tree: 3931a368ce278ec2be36be9d7cee1848b256391cb72ecf438c76740f52b3e3a2
-commit: 5cae63184b6d9959c2c7d83574f824e8df007373
-reviewer: a6d8947d656d2e2ed
+tree: 4c40cd7ab87ae064bfbf24b1512e115d6cd4358d7597d91165a42c98371d7a61
+commit: dbbdfd280ad2f6bc39eb8ea6ebc450f1eb20ecbb
+reviewer: a64048ed19a282275
