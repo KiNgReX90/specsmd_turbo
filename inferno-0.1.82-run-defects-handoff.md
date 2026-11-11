@@ -66,6 +66,7 @@ How to fix. Give a finding the way out an item has, and keep it narrow.
 - The reviewer never defers. The orchestrator moves an entry with one command, `state-transition.cjs defer-finding --intent <id> --entry <n> --to <file> --reason <text>`, on a rule the user gave. Which severities may leave is the host's, in a rule file under `.specs-inferno/standards/`. Without such a file only `minor` may, and a surviving mutant never without it.
 - The gate and the ship summary print the number of deferred findings and the file that holds them, so the next plan picks them up.
 - A test: an intent review with one blocker and two minor findings, the two deferred under the default rule, stays `fix` until the blocker is closed and then records `clean` with both entries kept.
+- A survivor that is deferred stops running. Today the runner carries every entry of the committed intent review that reads `caught: no`, runs it again in each later record and writes its finding again (`intentMutants`, `S/run-review-mutants.cjs` :166), so a survivor the user put after the release comes back on every record until someone deletes it from the committed file by hand. A `deferred` entry that carries `mutant` keeps the mutant in the file with `caught: no` and takes it out of the entries that are due.
 
 ## 7. A test command that writes into the tree leaves it changed, and the runner says every file is restored
 
@@ -77,4 +78,31 @@ How to fix. Two small things.
 
 - After a batch, and after a single mutant, the runner reads `git status` and compares it with what it read before the first write. A path that changed and is not one it restored makes the result `restored: false`, names the path, and says that a host which seals files names them under `mutate.sealed`. A test: a test command that appends to a tracked file ends with that refusal.
 - The installer, or the config check, tells a host what section 2 of `inferno-improvement.md` only says in prose: a host config with no `mutate` block gets one line at install that names `mutate.sealed` and `mutate.session` and what each is for.
+
+## 8. A criterion no mutant can reach still owes one
+
+What is wrong. `mutantGaps` in `S/run-mutant-coverage.cjs` (:96-109) asks a caught mutant or a checked pin for every list line under `## Acceptance Criteria` of an item that names a test. Some criteria are proven by something no mutant in the tree can turn red: the code compiles on the Windows lane, a lint passes, no file is over the size cap, a journey holds on the built binary. A pin fits only reader-facing copy a test holds verbatim. So a clean intent review is refused for such a criterion with no honest way to answer. The host moved those lines out of `## Acceptance Criteria` into a section of its own making, which `acceptanceCriteria` (:23) does not read. That move renumbers every criterion after it, while the recorded mutants name criteria by number.
+
+Evidence. Skoft_CRA, intent `the-confirmed-launch-findings-are-fixed-before-the-freeze`, commit `5338adad5` on its intent branch: five criteria in four item specs moved to a section "Proven at the gate", each with the gate command or lane that proves it. One of them reads "is rewritten over the scanner rule and compiles on the Windows lane".
+
+How to fix. A third proof beside the mutant and the pin, written at plan time.
+
+- The planner marks such a criterion in the item spec with the command or lane that proves it, on the criterion's own line, so no number moves: for instance a trailing `(gate: verification.windows)`. The plan lint checks that the name is a key or a command of the host config's `verification` block.
+- `mutantGaps` leaves a marked criterion out, and the gate summary lists the marked criteria beside the verdict of the command each names.
+- The reviewer may not add the mark. A criterion that turns out to be unreachable after planning goes to the orchestrator, which amends the spec with one scoped commit.
+- A test: an item with three criteria, the second marked with a gate command the config holds, records a clean intent review with mutants for the first and the third only, and the same spec with a name the config does not hold is refused by the plan lint.
+
+Not a defect, for the record. The same host read this rule as new in 0.1.82 for items reviewed on 0.1.81. It is not: 0.1.81 held the same rule, and old reviews fail it because their mutants name a criterion in free text. 0.1.82 refuses a free-text name at the item review, so this ends with the intents whose items were reviewed before the reinstall.
+
+## 9. A mutant that was a mistake cannot be withdrawn
+
+What is wrong. A reviewer sometimes proposes a mutant that proves nothing: a change inside a comment, or one that leaves the behaviour the same. It survives, as it must. From then on the runner carries it from the committed review, runs it again in every record and writes its finding again (section 6 names the lines). Neither reviewer nor orchestrator has a way to say that the mutant was wrong. The host deleted the entry and its finding from the committed review file by hand.
+
+Evidence. The same commit `5338adad5`: the entry for criterion 11 of `w2-every-job-that-holds-a-signing-or-bucket-secret-reads-only-named-commands` changed the comment `# Node alone runs every script in this job.` in a workflow file, with a test that counts the word `uses:` in that file. It was recorded as a survivor of major weight and then removed by hand.
+
+How to fix.
+
+- The recorder refuses a proposal whose line is a comment in the file's language, where it can tell: the leading `#`, `//` or `--` of the common ones is enough to catch this case.
+- The intent review file takes a list `withdrawn`: a mutant as recorded, plus `reason`. The runner stops running a withdrawn mutant and writes no finding for it. A clean verdict still needs another caught mutant or a checked pin for its criterion, so a withdrawal never closes a gap. The gate summary prints the count.
+- A test: a survivor that is withdrawn with a reason no longer makes the record `fix`, and the same record is refused as clean until its criterion has a caught mutant.
 
