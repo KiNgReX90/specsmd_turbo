@@ -148,6 +148,14 @@ test("review-item weighs a fix only by its review file, and refuses one it canno
   assert.doesNotMatch(fs.readFileSync(file, "utf8"), /review:/);
 });
 
+test("review-item weighs a fix review that lists a file no longer in the tree, which only makes it stale", () => {
+  const { file } = sandbox();
+  reviewFile(file, findingOf("major").replace("files: [src/a.ts]", "files: [src/a.ts, src/old/legacy.ts]"));
+  const result = review(file);
+  assert.equal(result.weight, "serious");
+  assert.match(block(file), /review: fix/);
+});
+
 test("review-item refuses a verdict, a hash, a tier or a commit it cannot use", () => {
   const { file } = sandbox();
   assert.throws(() => review(file, { verdict: "maybe" }), /clean, fix or settled, not maybe/);

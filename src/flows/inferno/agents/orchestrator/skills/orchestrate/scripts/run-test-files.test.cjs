@@ -7,6 +7,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
+const { fixture } = require('./run-attribution-fixture.cjs');
 const { isSwitchOff, isTestFile, parseAddedLines } = require('./run-test-files.cjs');
 
 test('a test file is known by its name or its folder, per language', () => {
@@ -101,6 +102,67 @@ test('a line that only looks like a switch-off is none', () => {
   ]) {
     assert.equal(isSwitchOff(line), false, line);
   }
+});
+
+test('a marker is read only in the languages whose runner knows it', () => {
+  // [line, file, switches off]
+  for (const [line, file, off] of [
+    ['    assert_eq!(fit(400, 300), (4_800_000, MAX_HEIGHT_EMU));', 'crate/src/graphics/image_tests.rs', false],
+    ['    assert!(fit(0, 300).0 > 0 && fit(400, 0).1 > 0, "never a box of zero");', 'crate/src/graphics/image_tests.rs', false],
+    ["fit('focused', () => {", 'src/a.test.ts', true],
+    ['#[ignore]', 'crate/src/cart_tests.rs', true],
+    ['#[ignore]', 'src/a.test.ts', false],
+    // A bare helper call named fit stays refused in a JS or TS test file: lines are read, not syntax.
+    ['expect(fit(4, 3)).toEqual([4, 3]);', 'src/box.test.tsx', true],
+    ["xit('later', () => {", 'lib/cart.test.mjs', true],
+    ["test('pays', { skip: true }, () => {", 'scripts/pay.test.cjs', true],
+    ["test.skip('x', () => {})", 'web/app.spec.jsx', true],
+    ["it.skip('x', () => {})", 'web/app.spec.js', true],
+    ["it.skip('x', () => {})", 'web/app.spec.mts', true],
+    ['  // @Ignore the flaky ledger for now', 'src/ledger.test.ts', false],
+    ['    @Disabled("flaky")', 'src/test/java/shop/CartTest.java', true],
+    ['    @Ignore', 'src/test/kotlin/shop/CartTest.kt', true],
+    ["fit('x', () => {})", 'src/test/java/shop/CartTest.java', false],
+    ['@pytest.mark.skip(reason="later")', 'tests/test_cart.py', true],
+    ['@unittest.skip("later")', 'tests/test_cart.py', true],
+    ['    pytest.xfail("known bug")', 'tests/test_cart.py', true],
+    ['    @Ignore', 'tests/test_cart.py', false],
+    ['\tt.Skip("later")', 'pkg/cart_test.go', true],
+    ['\tt.skip(x)', 'pkg/cart_test.go', false],
+    ["\tit.skip('x')", 'pkg/cart_test.go', false],
+    ['#[cfg_attr(windows, ignore)]', 'crate/tests/checkout.rs', true],
+    ['    t.Skip("later")', 'crate/tests/checkout.rs', false],
+    ['@pytest.mark.skip', 'crate/tests/checkout.rs', false],
+    // An extension no runner here is known by reads every marker, as before.
+    ["fit('focused', () => {", 'module/src/test/resources/case.txt', true],
+    ['#[ignore]', 'tests/checkout.feature', true],
+    ['@Ignore', 'test/Cart.groovy', true],
+    ['assert_eq!(fit(4, 3), (4, 3));', 'test/README', true],
+  ]) {
+    assert.equal(isSwitchOff(line, file), off, `${file}: ${line}`);
+  }
+});
+
+test('a path with backslashes or a leading ./ is read by its extension too', () => {
+  assert.equal(isSwitchOff('assert_eq!(fit(4, 3), (4, 3));', 'crate\\src\\image_tests.rs'), false);
+  assert.equal(isSwitchOff('assert_eq!(fit(4, 3), (4, 3));', './crate/src/image_tests.RS'), false);
+  assert.equal(isSwitchOff('#[ignore]', './src/A.TEST.TS'), false);
+});
+
+test('verify-item reads each added test line against the markers of its own file\'s language', (t) => {
+  const files = ['crate/src/image.rs', 'crate/src/image_tests.rs', 'web/box.test.ts'];
+  const f = fixture(t, { a: { editable: files, check: 'node -e "0"' } });
+  const dispatch = f.start('--item', 'a');
+  f.write('crate/src/image.rs', 'pub fn fit(w: u32, h: u32) -> (u32, u32) { (w, h) }\n');
+  f.write('crate/src/image_tests.rs', '#[test]\nfn fits() {\n    assert_eq!(fit(400, 300), (400, 300));\n}\n#[ignore]\nfn later() {}\n');
+  f.write('web/box.test.ts', "// #[ignore] is cargo's, not vitest's\nconst note = '#[ignore]';\ntest('box', () => {});\n");
+  f.accepted(dispatch, files);
+
+  const human = f.human('verify-item', 'a', '--tree', f.root);
+  assert.equal(human.code, 2, human.out);
+  assert.deepEqual(human.out.split('\n').filter((line) => line.startsWith('switched off:')), [
+    'switched off: crate/src/image_tests.rs:5: #[ignore]',
+  ]);
 });
 
 test('the added lines of a zero-context diff carry their line in the new file', () => {

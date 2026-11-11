@@ -147,6 +147,20 @@ function rangeLines(tree, context, which, range, read) {
   return { file, lines: [`  range ${range} paths ${read.length}, one per line in the paths-file below`, `  paths-file ${file}`] };
 }
 
+/** The paths a delta reads that left the tree since the previous review: deleted, or renamed away. */
+const goneFiles = (tree, read) => read.filter((file) => !fs.existsSync(path.join(tree, file)));
+
+/**
+ * The line that tells a delta's reviewer which paths are gone, so it reads their removal in the
+ * range, never looks for them, and leaves them out of the files it lists, which hold only files
+ * the tree holds.
+ */
+function goneLine(gone) {
+  if (gone.length === 0) return [];
+  const it = gone.length > 1 ? 'them' : 'it';
+  return [`  gone ${gone.join(' ')}: not in the tree since the previous review, so read the removal in the range and leave ${it} out of files`];
+}
+
 /**
  * The dispatch of one lens and its payload. A lens with a file on record reads `span`, the fix,
  * and names that file as its previous one. A first review reads the proof's own diff when one is
@@ -168,15 +182,17 @@ function lensDispatch(tree, context, which, span, proof) {
   const spec = path.relative(tree, lib.readItemSpec(tree, intent.id, item.id).file);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
   const ranged = rangeLines(tree, context, which, range, read);
-  const payload = { agent, model, range, previous, paths: read, paths_file: ranged.file, spec, brief, write: rel };
+  const gone = previous ? goneFiles(tree, read) : [];
+  const lines = [...ranged.lines, ...goneLine(gone)];
+  const payload = { agent, model, range, previous, paths: read, paths_file: ranged.file, gone, spec, brief, write: rel };
   if (quality) {
-    const body = lens.qualityBody(tree, context, { ranged: ranged.lines, read, spec, brief });
+    const body = lens.qualityBody(tree, context, { ranged: lines, read, spec, brief });
     return { payload: { ...payload, standards: body.standards, lint: body.lint }, lines: reviewerLines(config, `item ${item.id}`, previous, body.lines, 'quality') };
   }
   return {
     payload: { ...payload, proof: named },
     lines: reviewerLines(config, `item ${item.id}`, previous, [
-      ...ranged.lines,
+      ...lines,
       ...(named ? [`  proof ${named}`] : []),
       ...realAppLine(tree, config, range, item.id),
       `  spec ${spec}`,
@@ -431,6 +447,7 @@ function owedReviews(tree, ledger, ids, options) {
     }
     let reviewed;
     try {
+      // A recorded review keeps a path that left the tree, which reads as stale below.
       reviewed = lens.readItemReview(tree, intent.id, id, { recorded: true });
     } catch (error) {
       lines.push(`${id} has no readable review file, run ${command}`);
