@@ -265,7 +265,7 @@ function readDiff(tree, from, files) {
       if (letter === 'D') changed.deleted.push(file);
       if (!letter || letter === 'D') continue;
       for (const added of parseAddedLines(git([...DIFF, '-U0', from, '--', literal(file)]))) {
-        if (isSwitchOff(added.text)) changed.switched_off.push({ file, line: added.line, text: added.text.trim() });
+        if (isSwitchOff(added.text, file)) changed.switched_off.push({ file, line: added.line, text: added.text.trim() });
       }
     }
     return { diff: { from, paths: files, sha256: hashOf(git, from, files) }, tests_changed: changed };
