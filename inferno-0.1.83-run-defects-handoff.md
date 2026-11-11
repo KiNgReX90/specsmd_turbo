@@ -244,4 +244,4 @@ The named dispatch is that of a later item of the same intent, which owns the sa
 
 ### How the host got through
 
-No way through inside the flow was found. The host ran each item's own check by hand, committed the correction without a `verify-item` proof, and had both lenses read it.
+No way through inside the flow was found. Each correction's builder ran the item's own narrow check and reported it in its result (commits `ead393607` and `3a4519a86`). The corrections were committed without a `verify-item` proof, and both lenses read each one with every changed file named in their brief.
