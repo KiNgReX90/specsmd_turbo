@@ -131,13 +131,16 @@ test('the text readout prints one line per item and the section 1 rows', () => {
     /Fix rounds with minor findings only and no survivor\s+2/,
     /Findings in round 2 and later\s+4: 1 blocker, 1 major, 2 minor/,
     /Acceptance criteria of the 3 items\s+6/,
-    /Mutants run\s+15 in 7 rounds, so 2\.5 per acceptance criterion/,
+    /Mutants, each counted once\s+15 in 7 rounds, so 2\.5 per acceptance criterion/,
+    /Mutants counted as run\s+15: a carried mutant counts again only when its verdict changed/,
     /Mutants in a first round\s+5, of which 4 name a numbered criterion/,
     /Mutants in round 2 and later\s+10, of which 5 name a criterion in free text/,
     /Surviving mutants\s+3: 2 on a numbered criterion, 1 on a free-text one/,
     /Largest single round\s+4 mutants, on an item with 3 acceptance criteria \(a-one\)/,
     /Commits that grant an item more ownership\s+2/,
     /Files an item's review lists, first round to last\s+1 to 4, 1 to 3/,
+    /Contract lens\s+9 rounds over 3 items, fix 6; findings 6, so 2\.0 per item: 1 blocker, 2 major, 3 minor; in its first round 0 blocker, 1 major, 1 minor/,
+    /Quality lens\s+none/,
     /Oracle dispatches\s+no dispatch log/,
   ]) {
     assert.match(result.out, row);

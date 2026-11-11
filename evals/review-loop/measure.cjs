@@ -1,38 +1,22 @@
 'use strict';
 
 /**
- * The numbers of the review loop: per item and in total, from the item review files and the
- * item specs between base and head, plus the oracle dispatches of the dispatch log.
+ * The numbers of the review loop: per item and in total, from the item review files of both
+ * lenses and the item specs between base and head, plus the oracle dispatches of the dispatch log.
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
 
 const { specsAt, versions } = require('./history.cjs');
-const { comparable, criteriaOf, editableOf, numbered, readRound } = require('./rounds.cjs');
+const { LENSES, NONE, add, roundsByItem, severities, summarize } = require('./item-rounds.cjs');
+const { editableOf } = require('./rounds.cjs');
 
 const S = path.join(__dirname, '..', '..', 'src', 'flows', 'inferno', 'agents', 'orchestrator', 'skills', 'orchestrate', 'scripts');
 
 const keyOf = (change) => `${change.intent}/${change.item}`;
 const ratio = (part, whole) => (whole === 0 ? 0 : Math.round((part / whole) * 10) / 10);
 const sum = (list, pick) => list.reduce((total, entry) => total + pick(entry), 0);
-
-/** Every round of every item: a version whose content differs from the version before it. */
-function roundsByItem(tree, base, head, wanted) {
-  const { changes, atBase } = versions(tree, base, head, 'reviews');
-  const last = new Map([...atBase].map(([key, text]) => [key, text == null ? null : comparable(text)]));
-  const items = new Map();
-  for (const change of changes) {
-    if (change.deleted || change.text == null || !wanted(change.intent)) continue;
-    const key = keyOf(change);
-    const content = comparable(change.text);
-    if (last.get(key) === content) continue;
-    last.set(key, content);
-    if (!items.has(key)) items.set(key, { intent: change.intent, item: change.item, rounds: [] });
-    items.get(key).rounds.push({ sha: change.sha, ...readRound(change.text) });
-  }
-  return items;
-}
 
 /** The commits that grow an item's editable list, by item: a new spec or a shrink grants nothing. */
 function grantsByItem(tree, base, head, wanted) {
@@ -54,64 +38,20 @@ function grantsByItem(tree, base, head, wanted) {
   return grants;
 }
 
-const split = (mutants) => {
-  const named = mutants.filter(numbered).length;
-  return { mutants: mutants.length, numbered: named, freeText: mutants.length - named };
-};
-const add = (a, b) => ({ mutants: a.mutants + b.mutants, numbered: a.numbered + b.numbered, freeText: a.freeText + b.freeText });
-const NONE = { mutants: 0, numbered: 0, freeText: 0 };
-
-/** The later findings by severity. A finding with no severity the schema holds counts as unrated. */
-function severities(findings) {
-  const counts = { total: findings.length, blocker: 0, major: 0, minor: 0 };
-  for (const finding of findings) {
-    if (['blocker', 'major', 'minor'].includes(finding.severity)) counts[finding.severity] += 1;
-    else counts.unrated = (counts.unrated || 0) + 1;
+/** Findings by severity added up; unrated appears once a list holds it. */
+function addCounts(list) {
+  const all = severities([]);
+  for (const counts of list) {
+    for (const [severity, value] of Object.entries(counts)) all[severity] = (all[severity] || 0) + value;
   }
-  return counts;
-}
-
-function summarize(entry, grants, spec) {
-  const { rounds } = entry;
-  const read = rounds.filter((round) => round.readable);
-  const kinds = rounds.map((round) => (round.readable ? round.kind : null));
-  const count = (kind) => kinds.filter((value) => value === kind).length;
-  const later = read.filter((round) => round !== rounds[0]);
-  const first = rounds[0].readable ? rounds[0] : null;
-  const withFiles = read.filter((round) => round.files.length > 0);
-  return {
-    intent: entry.intent,
-    item: entry.item,
-    rounds: rounds.length,
-    unreadable: rounds.length - read.length,
-    kinds,
-    fix: read.filter((round) => round.verdict === 'fix').length,
-    serious: count('serious'),
-    survivorOnly: count('survivor'),
-    minorOnly: count('minor'),
-    laterFindings: severities(later.flatMap((round) => round.findings)),
-    criteria: spec == null ? null : criteriaOf(spec),
-    mutants: sum(read, (round) => round.mutants.length),
-    mutantRounds: read.filter((round) => round.mutants.length > 0).length,
-    firstRound: first ? split(first.mutants) : NONE,
-    laterRounds: later.map((round) => split(round.mutants)).reduce(add, NONE),
-    survivors: split(read.flatMap((round) => round.survivors)),
-    largest: Math.max(0, ...read.map((round) => round.mutants.length)),
-    filesFirst: withFiles.length ? withFiles[0].files.length : 0,
-    filesLast: withFiles.length ? withFiles[withFiles.length - 1].files.length : 0,
-    grants: grants ? grants.size : 0,
-  };
+  return all;
 }
 
 function totalsOf(items, grants) {
   const rounds = sum(items, (item) => item.rounds);
   const criteria = sum(items, (item) => item.criteria || 0);
   const mutants = sum(items, (item) => item.mutants);
-  const later = items.map((item) => item.laterFindings);
-  const laterFindings = { total: 0, blocker: 0, major: 0, minor: 0 };
-  for (const counts of later) {
-    for (const [severity, value] of Object.entries(counts)) laterFindings[severity] = (laterFindings[severity] || 0) + value;
-  }
+  const laterFindings = addCounts(items.map((item) => item.laterFindings));
   const top = items.reduce((best, item) => (item.largest > (best ? best.largest : 0) ? item : best), null);
   return {
     items: items.length,
@@ -138,6 +78,21 @@ function totalsOf(items, grants) {
       .sort((a, b) => (b.filesLast - b.filesFirst) - (a.filesLast - a.filesFirst))
       .slice(0, 4)
       .map((item) => ({ item: item.item, first: item.filesFirst, last: item.filesLast })),
+    mutantsRun: sum(items, (item) => item.mutantsRun),
+    lenses: Object.fromEntries(LENSES.map((lens) => [lens, lensTotals(items.map((item) => item.lenses[lens]).filter(Boolean))])),
+  };
+}
+
+/** One lens over the items that have it: items, rounds, fix rounds, and findings by severity, all and in a first round. */
+function lensTotals(lenses) {
+  const findings = (pick) => addCounts(lenses.map(pick));
+  return {
+    items: lenses.length,
+    rounds: sum(lenses, (lens) => lens.rounds),
+    fixRounds: sum(lenses, (lens) => lens.fix),
+    findings: findings((lens) => lens.findings),
+    firstFindings: findings((lens) => lens.firstFindings),
+    findingsPerItem: ratio(sum(lenses, (lens) => lens.findings.total), lenses.length),
   };
 }
 
