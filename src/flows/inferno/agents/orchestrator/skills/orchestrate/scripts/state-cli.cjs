@@ -1,7 +1,7 @@
 'use strict';
 
 const { TransitionError } = require('./state-ledger.cjs');
-const { caller } = require('./run-call.cjs');
+const { caller, intentReviewCall } = require('./run-call.cjs');
 const DEFAULT_STATE_PATH = '.specs-inferno/state.yaml';
 
 // ---------------------------------------------------------------------------
@@ -71,7 +71,8 @@ them, into its deferred list with --to, a file in the intent folder that names t
 for the next plan, and the reason. Only the orchestrator defers, on a rule the user gave, and only what
 .specs-inferno/standards/defer-findings.yaml lets leave (severities: [...], survivors: true); without
 that file only minor, never a surviving mutant. A deferred survivor stops running. With no finding
-left open the review says clean. The caller commits the review file.`;
+left open the review says clean, or stays fix while a criterion owes a proof, and the next review call
+dispatches its reviewer for those criteria. The caller commits the review file.`;
 
 function parseArgs(argv) {
   const options = { file: DEFAULT_STATE_PATH };
@@ -214,8 +215,10 @@ function main(argv, commands) {
     const result = deferFinding(options);
     if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
     else {
-      const open = result.open === 0 ? 'no finding stays open, so the review now says clean'
-        : `${result.open} finding${result.open === 1 ? ' stays' : 's stay'} open, numbered as the file lists them now`;
+      const closed = result.gaps.length > 0
+        ? `no finding stays open, and ${result.gaps.join('; ')}: the review stays fix; run ${intentReviewCall(result.tree)} to dispatch its reviewer for them`
+        : 'no finding stays open, so the review now says clean';
+      const open = result.open === 0 ? closed : `${result.open} finding${result.open === 1 ? ' stays' : 's stay'} open, numbered as the file lists them now`;
       process.stdout.write(`deferred findings entry ${result.entry} of ${result.intent} (${result.severity} at ${result.at}) to ${result.to}: ${result.reason}\n` +
         `  ${open}\n  wrote ${result.review}: commit it before the next review call\n`);
     }

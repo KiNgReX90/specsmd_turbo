@@ -7,8 +7,9 @@
  * The finding goes, as recorded, into the review's `deferred` list with `to`, a file in the intent
  * folder that names the finding's file and line so the next plan picks it up, and `reason`. A
  * surviving mutant takes its mutant along with `caught: no`, so it stops running. When no finding
- * stays open the review says clean; a criterion that still owes a proof then voids it, and the next
- * intent review is dispatched for it. The reviewer never defers (run-review-aside.cjs).
+ * stays open the review says clean, judged as the recorder judges one: while a criterion still owes
+ * a proof it stays fix, and the next review call dispatches its reviewer for those criteria alone
+ * (run-review-aside.cjs proofOwed). The reviewer never defers.
  *
  * Which findings may leave is the host's, in `.specs-inferno/standards/defer-findings.yaml`:
  *
@@ -72,7 +73,7 @@ function refuseKept(rule, n, finding) {
 function deferFinding(options) {
   // Required here, so every other ledger command loads none of the review machinery.
   const { INTENT_KEYS } = require('./run-intent-review-file.cjs');
-  const { toProblem } = require('./run-review-aside.cjs');
+  const { proofGaps, toProblem } = require('./run-review-aside.cjs');
   const { dump } = require('./run-mutant-runs.cjs');
   const specs = path.dirname(path.resolve(options.file));
   const dir = path.join(specs, 'intents', options.intent);
@@ -104,16 +105,19 @@ function deferFinding(options) {
   const open = findings.filter((one) => one !== finding);
   const next = {
     ...doc,
-    verdict: open.length > 0 ? doc.verdict : 'clean',
     findings: open,
     mutants: mutants.filter((mutant) => mutant !== survivor),
     deferred: [...(Array.isArray(doc.deferred) ? doc.deferred : []), entry],
   };
+  // With no finding open the review says clean, unless a criterion still owes a proof: then it stays fix, and its reviewer proposes one.
+  const root = path.dirname(specs);
+  const gaps = proofGaps(root, options.intent, next);
+  next.verdict = open.length > 0 || gaps.length > 0 ? 'fix' : 'clean';
   const order = [...INTENT_KEYS, ...RECORDED_ORDER];
   atomicWrite(abs, dump(Object.fromEntries(order.filter((key) => next[key] !== undefined).map((key) => [key, next[key]]))));
   return {
     changed: true, intent: options.intent, entry: n, severity: finding.severity, at: `${finding.file}:${finding.line}`, to, reason,
-    verdict: next.verdict, open: open.length, review: rel,
+    verdict: next.verdict, open: open.length, gaps, review: rel, tree: root,
   };
 }
 

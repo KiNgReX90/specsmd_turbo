@@ -24,13 +24,16 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { MUTANT_KEYS, bad, entries, isMap, mutantsOf, readDoc, sameMutant } = require('./run-review-file.cjs');
-const { owedProposals } = require('./run-mutant-coverage.cjs');
+const { itemProofs, mutantGaps, owedProposals } = require('./run-mutant-coverage.cjs');
 const { dump } = require('./run-mutant-runs.cjs');
 
 const DEFERRED_KEYS = ['criterion', 'file', 'line', 'evidence', 'fix', 'severity', 'owner', 'to', 'reason'];
 const DEFERRED_MUTANT = ['mutant', 'find', 'replace', 'test', 'caught'];
 
 const maps = (value) => (Array.isArray(value) ? value.filter(isMap) : []);
+
+/** One mutant wherever its line went: the runner places an owed proposal in the file its item moved the line to. */
+const sameWherever = (a, b) => sameMutant({ ...a, file: b.file }, b);
 
 /** The withdrawn mutants of a review: each a mutant as recorded, plus reason. */
 function withdrawnOf(rel, doc) {
@@ -93,7 +96,8 @@ const sameEntry = (a, b) => Object.keys(a).length === Object.keys(b).length && O
 /**
  * Before the intent review's record runs anything: hold the reviewer's lists to the last recorded
  * review, write both lists of that review into the pending file, and return `keep`, which leaves
- * every set-aside mutant out of a list of entries, and `answer`, which counts the deferred survivors.
+ * every set-aside mutant out of a list of entries, `entries`, the set-aside mutants themselves, and
+ * `answer`, which counts the deferred survivors.
  */
 function carryAside(tree, rel, intent, items) {
   // Required here: run-intent-review-file loads this module for its schema.
@@ -110,14 +114,14 @@ function carryAside(tree, rel, intent, items) {
   const withdrawn = maps(last.withdrawn);
   const held = [...maps(last.mutants), ...withdrawn, ...owed];
   withdrawnOf(rel, doc).forEach((entry, index) => {
-    if (!held.some((one) => sameMutant(one, entry))) {
+    if (!held.some((one) => sameWherever(one, entry))) {
       throw bad(rel, `withdrawn entry ${index + 1} names no mutant of this intent: copy one as the last intent review or an item review ` +
         'recorded it, then add reason');
     }
-    if (!withdrawn.some((one) => sameMutant(one, entry))) withdrawn.push(entry);
+    if (!withdrawn.some((one) => sameWherever(one, entry))) withdrawn.push(entry);
   });
   mutantsOf(rel, doc).forEach((mutant, index) => {
-    if (withdrawn.some((one) => sameMutant(one, mutant))) throw bad(rel, `mutants entry ${index + 1} is withdrawn: leave it out of mutants`);
+    if (withdrawn.some((one) => sameWherever(one, mutant))) throw bad(rel, `mutants entry ${index + 1} is withdrawn: leave it out of mutants`);
   });
   const lists = { withdrawn: withdrawn.length > 0 ? withdrawn : undefined, deferred: deferred.length > 0 ? deferred : undefined };
   if (JSON.stringify([doc.withdrawn, doc.deferred]) !== JSON.stringify([lists.withdrawn, lists.deferred])) {
@@ -127,7 +131,8 @@ function carryAside(tree, rel, intent, items) {
   // A deferred finding without a mutant has no find, so it matches no entry.
   const aside = [...withdrawn, ...deferred];
   return {
-    keep: (list) => list.filter((entry) => !aside.some((one) => sameMutant(one, entry))),
+    entries: aside,
+    keep: (list) => list.filter((entry) => !aside.some((one) => sameWherever(one, entry))),
     answer: (proofs) => answered(proofs, deferred),
   };
 }
@@ -155,4 +160,24 @@ function asideLines(tree, intentId, { withdrawn = false } = {}) {
   return out;
 }
 
-module.exports = { answered, asideLines, carryAside, deferredOf, toProblem, withdrawnOf };
+/**
+ * The criteria that still owe a proof in the intent review `doc`, judged as the recorder judges a
+ * clean one: a caught mutant, a checked pin or a deferred survivor answers a criterion.
+ */
+function proofGaps(tree, intentId, doc) {
+  // Required here: run-intent-owed loads the intent review schema, which loads this module.
+  const items = require('./run-intent-owed.cjs').intentItems(tree, intentId);
+  return mutantGaps(answered(itemProofs(tree, intentId, items), maps(doc.deferred)), maps(doc.mutants), maps(doc.pins));
+}
+
+/**
+ * What a recorded fix review owes when its every finding is deferred and a criterion still owes a
+ * proof: its reviewer again, for those criteria only. Null for any other review.
+ */
+function proofOwed(tree, intentId, review) {
+  if (review.verdict !== 'fix' || review.findings.length > 0 || review.survivors.length > 0) return null;
+  const gaps = proofGaps(tree, intentId, review);
+  return gaps.length > 0 ? `every open finding is deferred, and ${gaps.join('; ')}; propose a mutant or a pin for each` : null;
+}
+
+module.exports = { answered, asideLines, carryAside, deferredOf, proofGaps, proofOwed, toProblem, withdrawnOf };

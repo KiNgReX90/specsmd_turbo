@@ -340,7 +340,8 @@ function verdictParts(rel, doc, findingKeys, optional = []) {
     throw bad(rel, 'verdict clean with a mutant that reads caught: no; a surviving mutant says fix, and the runner writes caught itself, ' +
       'so a review it records leaves caught out');
   }
-  if (doc.verdict === 'fix' && findings.length === 0 && survivors.length === 0) {
+  // An intent review whose every finding is deferred stays fix while a criterion owes a proof (state-defer-finding.cjs).
+  if (doc.verdict === 'fix' && findings.length === 0 && survivors.length === 0 && listOf(rel, doc, 'deferred').length === 0) {
     throw bad(rel, 'verdict fix with no finding and no surviving mutant; name what to fix or say clean');
   }
   return { findings, mutants, survivors };

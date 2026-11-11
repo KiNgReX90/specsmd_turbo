@@ -4,7 +4,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { git, run, worktree, INTENT_TREE, write } = require("./review-fixture.cjs");
-const { INTENT_REVIEW, REVIEW, mutantRepo, proposal, record, runs, withMutants } = require("./run-review-mutants-fixture.cjs");
+const {
+  A_EDITABLE, A_ONE, INTENT_REVIEW, REVIEW, itemSpec, mutantRepo, proposal, record, runs, withMutants,
+} = require("./run-review-mutants-fixture.cjs");
+const { proofOwed } = require("./run-review-aside.cjs");
 const { commentMarker } = require("./run-review-file.cjs");
 const { parseIntentReview } = require("./run-intent-review-file.cjs");
 const { tempDir } = require("./test-temp.cjs");
@@ -68,6 +71,16 @@ test("a deferred entry is held to its to file and to the mutant it carries", () 
     assert.throws(() => parse(reviewDir(`verdict: clean\ndeferred:\n${entry}${RECORDED}`, files)), pattern);
   }
   assert.equal(parse(reviewDir(`verdict: clean\ndeferred:\n${deferredEntry("", "./later.md")}${RECORDED}`, LATER)).deferred.length, 1);
+});
+
+test("a fix review owes its reviewer for a proof only when every finding is deferred and a criterion still owes one", () => {
+  const tree = reviewDir("", { ".specs-inferno/intents/alpha/work-items/a-one.md": itemSpec("a-one", A_ONE, A_EDITABLE) });
+  const review = { verdict: "fix", findings: [], survivors: [], mutants: [{ criterion: "a-one:1", caught: "yes" }], pins: [], deferred: [] };
+  assert.equal(proofOwed(tree, "alpha", review),
+    'every open finding is deferred, and a-one owes a caught mutant or a checked pin for criteria 2 "a2 reads two"; propose a mutant or a pin for each');
+  for (const other of [{ verdict: "clean" }, { findings: [{}] }, { survivors: [{}] }, { mutants: [...review.mutants, { criterion: "a-one:2", caught: "yes" }] }]) {
+    assert.equal(proofOwed(tree, "alpha", { ...review, ...other }), null);
+  }
 });
 
 test("the comment markers are told by the file's language, after the indent, and only at the start of the line", () => {

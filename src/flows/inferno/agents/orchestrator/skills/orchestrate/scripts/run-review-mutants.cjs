@@ -195,7 +195,8 @@ async function intentMutants(tree, context) {
   const proofs = aside.answer(itemProofs(tree, intent, items));
   const carried = aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes'));
   // Placed before anything is judged: an owed proposal its item's code no longer holds is held by nothing and counts for nothing.
-  const fromItems = aside.keep(placedOwed(tree, intent, items, carried));
+  // A set-aside one is left out before it is placed, as a carried one is.
+  const fromItems = placedOwed(tree, intent, items, [...carried, ...aside.entries]);
   const proposals = proposalsOf(rel, doc, intentCriterion(proofs), (entry) => [...carried, ...fromItems].some((one) => sameMutant(one, entry)));
   refuseSecond(rel, proofs, proposals, [...carried, ...fromItems].filter((entry) => entry.caught !== 'none'));
   const entries = [...carried, ...fromItems, ...proposals];
