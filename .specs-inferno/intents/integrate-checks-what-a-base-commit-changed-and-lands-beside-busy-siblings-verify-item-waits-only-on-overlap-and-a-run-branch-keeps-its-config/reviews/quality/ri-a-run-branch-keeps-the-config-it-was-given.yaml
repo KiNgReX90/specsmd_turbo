@@ -1,0 +1,20 @@
+item: ri-a-run-branch-keeps-the-config-it-was-given
+verdict: fix
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-ship.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs
+findings:
+  - id: Q1
+    check: errors
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.cjs
+    line: 51
+    evidence: "readRecord wraps the read and the parse in a bare catch that returns null for every error, so recall answers null and a bare integrate, gate, green, ship or lane accept falls back to the repo config, the fallback the comment at lines 56-58 says the record exists to close. Ran recall in a temp repo on an inferno-intent branch with the record naming a missing absolute config: an intact record throws BAD_CONFIG, the same record with its closing brace cut returns null, and the intact record with mode 000 returns null. The spec names only a record of another version as no record."
+    fix: "In readRecord return null only when the read fails with code ENOENT; rethrow any other read error as RunError BAD_CONFIG `the run config record <file> for <branch> cannot be read: pass --config <file>`. Throw the same BAD_CONFIG when the JSON does not parse or when version is 1 but config is not a string; keep returning null for a parsed record whose version is not 1."
+    severity: major
+tree: 2e95f424a77e7cfea2ae6ce9d41ce436a408994c0c9615ad4125dbd28068e7fe
+commit: 85048f849824042f63d5f0064ac12f10af924b2e
+reviewer: ae2a642d6996c8f26
