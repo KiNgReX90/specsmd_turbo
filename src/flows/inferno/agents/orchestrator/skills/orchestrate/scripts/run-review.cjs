@@ -385,7 +385,7 @@ function settledResult(tree, context, head) {
  * passed, it was written on a commit after the one the fix review read, and proofAtHead finds it
  * taken over the item's paths as HEAD holds them.
  */
-function proofProblem(tree, intentId, item) {
+function proofProblem(tree, intentId, item, config) {
   // Required here, not at the top: run-item-proof loads run-intents, which loads run-frontier, which loads this file.
   const { proofAtHead, readItemProof } = require('./run-item-proof.cjs');
   const proof = readItemProof(tree, intentId, item.id);
@@ -395,7 +395,7 @@ function proofProblem(tree, intentId, item) {
     lib.git(tree, ['merge-base', '--is-ancestor', item.review_commit, head], { tolerate: true }) !== null;
   if (!after) return 'its verify-item proof predates the fix review';
   if (proof.passed !== true) return 'its verify-item proof failed';
-  if (proofAtHead(tree, intentId, item.id).state === 'stale') return 'the item changed since its verify-item proof';
+  if (proofAtHead(tree, intentId, item.id, config).state === 'stale') return 'the item changed since its verify-item proof';
   return null;
 }
 
@@ -406,7 +406,7 @@ function proofProblem(tree, intentId, item) {
  */
 function settle(tree, context, ledger, current, touched) {
   const { intent, item } = context;
-  const problem = proofProblem(tree, intent.id, item);
+  const problem = proofProblem(tree, intent.id, item, context.config);
   if (problem) {
     return {
       exit: 3,
