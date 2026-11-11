@@ -24,6 +24,8 @@
  * placed before anything is judged, followed into another file when the item moved its line
  * there; one that cannot be placed reads `caught: none` with its why, holds its criterion for
  * nobody and counts as caught for nothing, so the reviewer may propose for it in the same record.
+ * A survivor may take another test: the reviewer writes its entry again with only `test` changed,
+ * and the record runs it with that test and keeps the first one as `was`.
  *
  * An item's record runs its mutants beside both lens files it signs. On a tree that holds a
  * sibling's uncommitted work nothing runs: an item review is recorded with its proposals owed,
@@ -37,7 +39,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const {
-  ITEM_KEYS, isMap, itemCriterion, pinsOf, proposalsOf, readDoc, refuseComments, refuseNew, sameMutant, samePin, bad,
+  ITEM_KEYS, isMap, itemCriterion, mutantsOf, pinsOf, proposalsOf, readDoc, refuseComments, refuseNew, sameMutant, samePin, bad,
 } = require('./run-review-file.cjs');
 const { carryAside } = require('./run-review-aside.cjs');
 const { checkPins, pinProblem, previousPins, testPaths } = require('./run-review-pins.cjs');
@@ -153,9 +155,13 @@ function refuseSecond(rel, proofs, proposals, held) {
   proposals.forEach((proposal) => {
     const { item, index } = namedBy(proofs, proposal);
     const caught = item.mutants.some((mutant) => names(mutant, item, index, true));
-    if (caught || held.some((entry) => names(entry, item, index, false))) {
+    const runs = held.filter((entry) => names(entry, item, index, false));
+    if (caught || runs.length > 0) {
+      // A survivor takes another test only as its own entry with test alone changed (retest below).
+      const survivor = runs.find((entry) => entry.caught === 'no');
       throw bad(rel, `mutants proposes one for ${proposal.criterion}, which has a mutant ${caught ? 'its item review caught' : 'this record runs'}; ` +
-        'propose only for a criterion still without one');
+        'propose only for a criterion still without one' + (survivor ? `. To give its survivor another test, write that entry again ` +
+        `(${survivor.file}:${survivor.line}, find ${JSON.stringify(survivor.find)}, replace ${JSON.stringify(survivor.replace)}) with only test changed` : ''));
     }
   });
 }
@@ -179,6 +185,32 @@ function placedOwed(tree, intent, items, carried) {
     });
 }
 
+/**
+ * A carried survivor the reviewer gave another test: its entry names the survivor's criterion,
+ * file, line, find and replace and a test the survivor never ran with. The survivor takes that
+ * test, keeps its first one as `was`, and runs again in this record; any other entry for its
+ * criterion stays a second mutant.
+ */
+function retest(rel, doc, carried) {
+  const target = (a, b) => ['criterion', 'file', 'line', 'find', 'replace'].every((key) => String(a[key]) === String(b[key]));
+  for (const entry of mutantsOf(rel, doc)) {
+    const survivor = carried.find((one) => one.caught === 'no' && target(one, entry) && !sameMutant(one, entry));
+    // A survivor reads caught no, so it is due and runs again with the test it takes here.
+    if (survivor) Object.assign(survivor, { was: survivor.was || survivor.test, test: entry.test });
+  }
+}
+
+/**
+ * The recorded intent review written back as its reviewer left it, so a record runs its survivors
+ * again: its own findings and pins, its verdict without the survivors, and no mutant, since the
+ * record carries every one from the committed file.
+ */
+function reopenIntentReview(tree, rel) {
+  const doc = readDoc(tree, rel);
+  const own = ownFindings(doc);
+  rewrite(path.join(tree, rel), doc, INTENT_KEYS, { verdict: own.length > 0 ? 'fix' : 'clean', findings: own, mutants: undefined });
+}
+
 /** The intent review's mutants, run and written into its pending file. Returns the lines to print. */
 async function intentMutants(tree, context) {
   // Required here, not at the top: run-intent-owed loads run-intents, which loads run-frontier and run-review.
@@ -194,6 +226,7 @@ async function intentMutants(tree, context) {
   const own = ownFindings(doc);
   const proofs = aside.answer(itemProofs(tree, intent, items));
   const carried = aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes'));
+  retest(rel, doc, carried);
   // Placed before anything is judged: an owed proposal its item's code no longer holds is held by nothing and counts for nothing.
   // A set-aside one is left out before it is placed, as a carried one is.
   const fromItems = placedOwed(tree, intent, items, [...carried, ...aside.entries]);
@@ -232,8 +265,9 @@ async function intentMutants(tree, context) {
     fs.writeFileSync(abs, text);
     throw bad(rel, gapRefusal(after));
   }
-  const owes = (entry) => `propose another for ${entry.criterion} in the next intent review`;
+  const owes = (entry) => (proposals.some((one) => one.criterion === entry.criterion)
+    ? `this record's own proposal for ${entry.criterion} stands in its place` : `propose another for ${entry.criterion} in the next intent review`);
   return ranLines(result, entries, owes);
 }
 
-module.exports = { intentMutants, itemMutants };
+module.exports = { intentMutants, itemMutants, reopenIntentReview };

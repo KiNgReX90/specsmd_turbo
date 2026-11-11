@@ -39,7 +39,7 @@ const SEVERITY_FIX = 'blocker when the change breaks a criterion or other behavi
  */
 const MUTANT_KEYS = ['criterion', 'file', 'line', 'find', 'replace', 'test'];
 const TARGET_KEYS = ['file', 'line', 'find', 'replace'];
-const RUNNER_KEYS = ['caught', 'why'];
+const RUNNER_KEYS = ['caught', 'why', 'was'];
 const CAUGHT = ['yes', 'no', 'none'];
 
 const PROPOSE = `propose {${MUTANT_KEYS.join(', ')}}; the runner runs it and writes caught`;
@@ -237,8 +237,13 @@ function pinsOf(rel, doc, criterionOf = () => null) {
 /** Two pins are one when they name the same criterion, files and text. */
 const samePin = (a, b) => PIN_KEYS.every((key) => (a[key] || '') === (b[key] || ''));
 
-/** Two mutants are one when they break the same text the same way for the same test; a moved line is the same mutant. */
-const sameMutant = (a, b) => ['criterion', 'file', 'find', 'replace', 'test'].every((key) => (a[key] || '') === (b[key] || ''));
+/**
+ * Two mutants are one when they break the same text the same way for the same test; a moved line
+ * is the same mutant, and so is a survivor given another test, which keeps its first as `was`.
+ */
+const testsOf = (mutant) => [mutant.test || '', ...(mutant.was ? [mutant.was] : [])];
+const sameMutant = (a, b) => ['criterion', 'file', 'find', 'replace'].every((key) => (a[key] || '') === (b[key] || '')) &&
+  testsOf(a).some((test) => testsOf(b).includes(test));
 
 /**
  * The proposals of a review as it is recorded: whole mistakes on code, each named by
