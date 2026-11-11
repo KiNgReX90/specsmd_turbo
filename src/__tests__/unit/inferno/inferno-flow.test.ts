@@ -159,12 +159,14 @@ describe('inferno flow', () => {
     expect(nested(blocks[0], 'findings')).toEqual([...item.FINDING_KEYS, 'repeat']);
     expect(nested(blocks[0], 'mutants')).toEqual(item.MUTANT_KEYS);
     expect(nested(blocks[0], 'pins')).toEqual(item.PIN_KEYS);
-    expect(top(blocks[1])).toEqual(intent.INTENT_KEYS);
+    // The reviewer never writes `deferred`: only the orchestrator's defer-finding does.
+    expect(top(blocks[1])).toEqual(intent.INTENT_KEYS.filter((key: string) => key !== 'deferred'));
     expect(nested(blocks[1], 'criteria')).toEqual([...intent.CRITERION_KEYS, 'evidence']);
     expect(nested(blocks[1], 'findings')).toEqual([...item.FINDING_KEYS, 'owner']);
     expect(nested(blocks[1], 'scanner')).toEqual(intent.SCANNER_KEYS);
     expect(nested(blocks[1], 'mutants')).toEqual(item.MUTANT_KEYS);
     expect(nested(blocks[1], 'pins')).toEqual(item.PIN_KEYS);
+    expect(nested(blocks[1], 'withdrawn')).toEqual([...item.MUTANT_KEYS, 'reason']);
   });
 
   // The item review's dispatch names under `proof` what verify-item ran (run-review.cjs). The
