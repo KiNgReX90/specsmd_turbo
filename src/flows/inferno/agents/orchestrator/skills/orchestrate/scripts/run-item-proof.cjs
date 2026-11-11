@@ -25,7 +25,7 @@
  *                    full output stays in `log` and never in the proof
  *   diff             { from, paths, sha256 }: the item's diff is every path changed since the
  *                    baseline `from` (a full sha) that the item owns or its dispatch claimed,
- *                    sorted; sha256 hashes `git diff --full-index --binary --no-renames
+ *                    never one under `.specs-inferno/`, sorted; sha256 hashes `git diff --full-index --binary --no-renames
  *                    --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/
  *                    <from> -- <paths>` as the tree stands, new files included. Once the item
  *                    is committed, the same diff from `from` to HEAD hashes the same: that is
@@ -59,6 +59,13 @@ const DIFF_FLAGS = ['--full-index', '--binary', '--no-renames', '--no-color', '-
 const DIFF = ['diff', '--cached', ...DIFF_FLAGS];
 const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 const literal = (file) => `:(literal)${file}`;
+
+/**
+ * The ledger's paths, under `.specs-inferno/`: never part of an item's proof nor of the code its
+ * review binds, also when the item owns one, as a host config it changes. The proof's writer
+ * leaves them out of its paths and its reader out of what changed since, so both hold one rule.
+ */
+const inLedger = (file) => file.startsWith(`${lib.SPECS_DIR}/`);
 
 // ---------------------------------------------------------------------------
 // The proof file
@@ -100,7 +107,8 @@ function headDiffHash(tree, from, files) {
  * `current` when it was taken over the item's paths as HEAD holds them: its baseline is a
  * commit, no path the proven items own changed since that baseline outside the proof's paths,
  * and the diff from it to HEAD over those paths hashes as the proof's. `stale` for a proof of
- * any other state, and `none` when there is no proof or it holds no diff. `items` are the items
+ * any other state, and `none` when there is no proof or it holds no diff. A path of the ledger
+ * (`inLedger`) is in neither the proof nor this comparison. `items` are the items
  * the proof checked as one unit, and `paths` the proof's, cut to the item's own for a batch.
  */
 function proofAtHead(tree, intent, item) {
@@ -114,7 +122,7 @@ function proofAtHead(tree, intent, item) {
   const editable = (id) => lib.readItemSpec(tree, intent, id).manifest.ownership.editable;
   const owned = items.flatMap(editable);
   const changed = lib.gitLines(tree, ['diff', '--name-only', '--no-renames', from, 'HEAD'], { tolerate: true })
-    .filter((entry) => lib.ownedBy(entry, owned, tree));
+    .filter((entry) => !inLedger(entry) && lib.ownedBy(entry, owned, tree));
   if (changed.some((entry) => !paths.includes(entry))) return stale;
   if (headDiffHash(tree, from, paths) !== proof.diff.sha256) return stale;
   const own = items.length > 1 ? paths.filter((entry) => lib.ownedBy(entry, editable(item), tree)) : paths;
@@ -270,7 +278,7 @@ function readDiff(tree, from, files) {
  */
 function itemFiles(tree, since, editable, claimed) {
   return changedPaths(tree, since)
-    .filter((file) => !file.startsWith(`${lib.SPECS_DIR}/`))
+    .filter((file) => !inLedger(file))
     .filter((file) => claimed.has(file) || lib.ownedBy(file, editable, tree))
     .sort();
 }
@@ -296,7 +304,7 @@ function reviewed(ledger, itemId, options) {
 /** Every path changed since `since` that the union of the reviewed items does not own. */
 function sinceOutside(tree, since, editable) {
   return changedPaths(tree, since).filter(
-    (file) => !file.startsWith(`${lib.SPECS_DIR}/`) && !lib.ownedBy(file, editable, tree)
+    (file) => !inLedger(file) && !lib.ownedBy(file, editable, tree)
   );
 }
 

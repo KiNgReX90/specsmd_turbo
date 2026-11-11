@@ -4,7 +4,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const { git, run, write } = require("./review-fixture.cjs");
+const { INTENT_TREE, git, run, worktree, write } = require("./review-fixture.cjs");
+const QUALITY = ".specs-inferno/intents/alpha/reviews/quality/a-one.yaml";
 const {
   CAUGHT_ONE, CONFIG, REVIEW, SURVIVES_TWO, itemReview, mutantRepo, proposal, read, record, recordedByHand, runs, withMutants,
 } = require("./run-review-mutants-fixture.cjs");
@@ -15,7 +16,8 @@ const { itemProofs, mutantGaps } = require("./run-mutant-coverage.cjs");
 // criterion that a test covers, named by the criterion's number, and runs none: the record step
 // runs them through the batch, writes `caught` and turns each survivor into a major finding. A
 // delta review proposes none; its record reruns only the survivors. A review the released flow
-// recorded, with mutants its reviewer ran itself under a free-text criterion, still reads.
+// recorded, with mutants its reviewer ran itself under a free-text criterion, still reads. An
+// item that owes both lenses records both files in one call, and its mutants run beside them.
 
 const ledger = (fixture) => read(fixture.root, ".specs-inferno/state.yaml");
 const shown = (result) => result.out + result.err;
@@ -194,6 +196,48 @@ test("on a tree a sibling dirtied, the review is recorded without verdicts and i
   const recorded = parseItemReview(fixture.root, REVIEW, "a-one", { recorded: true });
   assert.equal(recorded.verdict, "clean");
   assert.deepEqual(recorded.mutants.map((m) => [m.criterion, m.line, m.caught]), [["1", "1", undefined], ["2", "2", undefined]]);
+});
+
+/** An intent worktree in which a-one changed production code, so its review owes both lenses. */
+function bothLenses() {
+  const fixture = mutantRepo();
+  const tree = worktree(fixture, INTENT_TREE);
+  write(tree, "src/a.ts", "export const a = 1;\nexport const a2 = 2;\nexport const a3 = 3;\n");
+  git(tree, ["commit", "-qam", "a-one built"]);
+  const review = () => run(fixture, ["review", "--item", "a-one", "--tree", tree, "--reviewer", "rev-1", "--quality-reviewer", "rev-q"]);
+  assert.match(review().out, /^dispatch specsmd-inferno-reviewer-quality item a-one$/m, "the item owes both lenses");
+  write(tree, REVIEW, withMutants(CAUGHT_ONE, STRONG_TWO));
+  write(tree, QUALITY, "item: a-one\nverdict: clean\nfiles: [src/a.ts]\n");
+  return { fixture, tree, review };
+}
+
+const STRONG_TWO = proposal(2, { line: 2, find: "a2 = 2", replace: "a2 = 8", expect: "checks/a2.expect" });
+
+test("an item with both lenses pending runs its proposals in the one record, and each lands with caught", () => {
+  const { fixture, tree, review } = bothLenses();
+
+  const result = review();
+
+  assert.equal(result.code, 0, shown(result));
+  assert.match(result.out, /mutants: 2 ran, 2 caught, 0 survived/);
+  assert.deepEqual(runs(fixture), ["checks/one.expect", "checks/a2.expect"]);
+  const recorded = parseItemReview(tree, REVIEW, "a-one", { recorded: true });
+  assert.deepEqual(recorded.mutants.map((m) => [m.criterion, m.caught]), [["1", "yes"], ["2", "yes"]]);
+  assert.match(read(tree, QUALITY), /^reviewer: rev-q$/m, "the quality file is signed in the same record");
+  assert.equal(git(tree, ["status", "--porcelain"]), "");
+});
+
+test("beside both lenses, a sibling's uncommitted file still stops the mutants with the same line", () => {
+  const { fixture, tree, review } = bothLenses();
+  write(tree, "docs/b.md", "a-two is mid-build\n");
+
+  const result = review();
+
+  assert.equal(result.code, 0, shown(result));
+  assert.match(result.out, /no mutant ran: the tree holds uncommitted work in docs\/b\.md, so 2 proposals stay owed to the intent review/);
+  assert.deepEqual(runs(fixture), []);
+  const recorded = parseItemReview(tree, REVIEW, "a-one", { recorded: true });
+  assert.deepEqual(recorded.mutants.map((m) => m.caught), [undefined, undefined]);
 });
 
 test("a batch that could not put every file back stops the record, and nothing is recorded", () => {

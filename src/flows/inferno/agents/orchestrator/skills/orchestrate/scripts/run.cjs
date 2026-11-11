@@ -39,6 +39,7 @@ const { ship, teardown } = require('./run-ship.cjs');
 const { TransitionError } = require('./state-transition.cjs');
 const processes = require('./run-processes.cjs');
 const { caller } = require('./run-call.cjs');
+const { exitAfter } = require('./run-exit.cjs');
 const { slotCommand } = require('./run-slot.cjs');
 const runConfig = require('./run-config-record.cjs');
 
@@ -258,23 +259,18 @@ function finish(command, options, result) {
 }
 
 function fail(error) {
-  if (error instanceof RunError) {
-    process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
-    process.exit(error.exit);
-  }
   // A refusal from the single writer is this run's failure too, not a crash.
-  if (error instanceof TransitionError) {
-    process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
-    process.exit(2);
-  }
-  throw error;
+  const code = error instanceof RunError ? error.exit : error instanceof TransitionError ? 2 : null;
+  if (code === null) throw error;
+  process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
+  exitAfter(process.stderr, code);
 }
 
+// The runner exits once its answer has left the process, so a reader that pipes it reads it whole
+// (run-exit.cjs). A batch mutate yields to the event loop between its runs, so main may return a promise.
 if (require.main === module) {
   try {
-    const exit = main(process.argv.slice(2));
-    if (exit && typeof exit.then === 'function') exit.then((code) => process.exit(code), fail);
-    else process.exit(exit);
+    Promise.resolve(main(process.argv.slice(2))).then((code) => exitAfter(process.stdout, code), fail);
   } catch (error) {
     fail(error);
   }

@@ -20,10 +20,14 @@
  * Intent review. Its record runs, in one batch, every proposal an item review left without
  * `caught`, the survivors of the last intent review, and the intent reviewer's own proposals,
  * named `<item>:<n>` and only for a criterion that has no mutant yet. Each lands in review.yaml
- * under that name, and a survivor is a `major` finding owned by its item.
+ * under that name, and a survivor is a `major` finding owned by its item. Every owed proposal is
+ * placed before anything is judged, followed into another file when the item moved its line
+ * there; one that cannot be placed reads `caught: none` with its why, holds its criterion for
+ * nobody and counts as caught for nothing, so the reviewer may propose for it in the same record.
  *
- * On a tree that holds a sibling's uncommitted work nothing runs: an item review is recorded with
- * its proposals owed, and the intent review, which records on a clean tree only, runs them. What
+ * An item's record runs its mutants beside both lens files it signs. On a tree that holds a
+ * sibling's uncommitted work nothing runs: an item review is recorded with its proposals owed,
+ * and the intent review, which records on a clean tree only, runs them. What
  * the runner writes into a pending file is written again on every record, so a record that was
  * cut off records the same way the next time.
  */
@@ -39,7 +43,9 @@ const { carryAside } = require('./run-review-aside.cjs');
 const { checkPins, pinProblem, previousPins, testPaths } = require('./run-review-pins.cjs');
 const { INTENT_KEYS, parseIntentReview } = require('./run-intent-review-file.cjs');
 const { acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals } = require('./run-mutant-coverage.cjs');
-const { checkTargets, dump, kept, ownFindings, previousEntries, ranLines, runEntries, survivorFinding } = require('./run-mutant-runs.cjs');
+const {
+  changedSince, checkTargets, dump, kept, locate, ownFindings, previousEntries, ranLines, runEntries, survivorFinding,
+} = require('./run-mutant-runs.cjs');
 
 const { RunError } = lib;
 
@@ -78,7 +84,7 @@ function carriedPins(tree, rel, doc, owner, out) {
 
 /** The item review's mutants, run and written into its pending file, and its pins checked. Returns the lines to print. */
 async function itemMutants(tree, context) {
-  const { intent, item, rel, configFile } = context;
+  const { intent, item, rel, configFile, signs } = context;
   const doc = readDoc(tree, rel);
   const own = ownFindings(doc);
   const out = [];
@@ -105,7 +111,8 @@ async function itemMutants(tree, context) {
   const written = Array.isArray(doc.findings) ? doc.findings.length : 0;
   if (entries.length === 0 && pins.length === 0 && own.length === written) return out;
 
-  const result = await runEntries(tree, entries.filter(due), { configFile, rel });
+  const elsewhere = () => changedSince(tree, rel, spec.manifest.ownership.editable);
+  const result = await runEntries(tree, entries.filter(due), { configFile, rel, signs, elsewhere });
   const owes = (entry) => `the intent review owes criterion ${entry.criterion} a caught mutant or a checked pin`;
   const survivors = entries.filter((entry) => entry.caught === 'no');
   rewrite(path.join(tree, rel), doc, ITEM_KEYS, {
@@ -153,6 +160,25 @@ function refuseSecond(rel, proofs, proposals, held) {
   });
 }
 
+/** Two entries are one mutant wherever its line went: a placed entry keeps all but its file. */
+const sameButFile = (a, b) => sameMutant({ ...a, file: b.file }, b);
+
+/**
+ * Every proposal an item review left owed and no earlier intent review took up, named
+ * `<item>:<n>` and placed on the tree as it stands (run-mutant-runs.cjs `locate`): on its line,
+ * or in the file the item moved it to. One that cannot be placed reads `caught: none` with its why.
+ */
+function placedOwed(tree, intent, items, carried) {
+  return owedProposals(tree, intent, items)
+    .map(({ item, entry }) => ({ item, entry, named: { ...kept(entry), criterion: `${item}:${entry.criterion}` } }))
+    .filter(({ named }) => !carried.some((one) => sameButFile(one, named)))
+    .map(({ item, entry, named }) => {
+      const review = path.join(lib.SPECS_DIR, 'intents', intent, 'reviews', `${item}.yaml`);
+      const at = locate(tree, entry, () => changedSince(tree, review, lib.readItemSpec(tree, intent, item).manifest.ownership.editable));
+      return Object.assign(named, at.why ? { caught: 'none', why: at.why, tried: true } : at);
+    });
+}
+
 /** The intent review's mutants, run and written into its pending file. Returns the lines to print. */
 async function intentMutants(tree, context) {
   // Required here, not at the top: run-intent-owed loads run-intents, which loads run-frontier and run-review.
@@ -168,10 +194,10 @@ async function intentMutants(tree, context) {
   const own = ownFindings(doc);
   const proofs = aside.answer(itemProofs(tree, intent, items));
   const carried = aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes'));
-  const fromItems = aside.keep(owedProposals(tree, intent, items).map(({ item, entry }) => ({ ...kept(entry), criterion: `${item}:${entry.criterion}` })))
-    .filter((entry) => !carried.some((one) => sameMutant(one, entry)));
+  // Placed before anything is judged: an owed proposal its item's code no longer holds is held by nothing and counts for nothing.
+  const fromItems = aside.keep(placedOwed(tree, intent, items, carried));
   const proposals = proposalsOf(rel, doc, intentCriterion(proofs), (entry) => [...carried, ...fromItems].some((one) => sameMutant(one, entry)));
-  refuseSecond(rel, proofs, proposals, [...carried.filter((entry) => entry.caught !== 'none'), ...fromItems]);
+  refuseSecond(rel, proofs, proposals, [...carried, ...fromItems].filter((entry) => entry.caught !== 'none'));
   const entries = [...carried, ...fromItems, ...proposals];
   // The intent reviewer's own pins, checked against the item each names; the last intent review's are carried while they stand.
   const ownerOf = (pin) => {

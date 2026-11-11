@@ -5,12 +5,15 @@
  * test}` through the batch on the tree as it stands, and write a review file back with what the
  * runs said.
  *
- * An entry runs only where the batch may run: nothing uncommitted on the tree but the review file
- * being recorded, and no other mutate alive. Otherwise none runs and each stays owed, because a
- * mistake planted beside a sibling's uncommitted work could reach it and a test run there reads
- * that work. Every guard of the batch holds: the journal, the restore on every exit, the signals
- * held until the files are back (run-mutate-batch.cjs). A line that moved since its entry was
- * written is found again by its text when that text marks exactly one line of the file.
+ * An entry runs only where the batch may run: nothing uncommitted on the tree but the review files
+ * the record signs (both lenses of an item, or the one intent review), and no other mutate alive.
+ * Otherwise none runs and each stays owed, because a mistake planted beside a sibling's uncommitted
+ * work could reach it and a test run there reads that work. Every guard of the batch holds: the
+ * journal, the restore on every exit, the signals held until the files are back
+ * (run-mutate-batch.cjs). A line that moved since its entry was written is found again by its
+ * text when that text marks exactly one line of the file; once its file holds the text nowhere, it
+ * is followed into the one line, among the files the item changed since its first review, that
+ * holds it once.
  */
 
 const fs = require('fs');
@@ -40,16 +43,18 @@ function changedFiles(tree) {
 }
 
 /**
- * Whether a mutant may run on the tree now, beside the review file `rel` being recorded: `{ why }`
- * when it may not, else `{ pending }`, the paths the batch is to allow. Git names a new directory
- * instead of the file in it, so that name is allowed once every file under it proved to be `rel`.
+ * Whether a mutant may run on the tree now, beside the review files `signs` this record signs:
+ * `{ why }` when it may not, else `{ pending }`, the paths the batch is to allow. Git names a new
+ * directory instead of the files in it, so that name is allowed once every file under it proved
+ * to be one of `signs`.
  */
-function busy(tree, rel) {
-  const dirty = changedFiles(tree).filter((file) => file !== rel);
+function busy(tree, signs) {
+  const dirty = changedFiles(tree).filter((file) => !signs.includes(file));
   if (dirty.length > 0) return { why: `the tree holds uncommitted work in ${dirty.slice(0, 3).join(', ')}` };
   // Every caller restored a dead run's leftover first, so a journal still there is a live mutate's.
   if (fs.existsSync(journalPath(tree))) return { why: 'another mutate is running on the tree' };
-  return { pending: lib.dirtyPaths(tree).filter((file) => file === rel || (file.endsWith('/') && rel.startsWith(file))) };
+  const under = (dir) => dir.endsWith('/') && signs.some((rel) => rel.startsWith(dir));
+  return { pending: lib.dirtyPaths(tree).filter((file) => signs.includes(file) || under(file)) };
 }
 
 /** The entries as the batch reads them, written beside the batch's own logs, outside the tree. */
@@ -80,21 +85,48 @@ function occurrences(line, find) {
   return count;
 }
 
-/** The line `entry.find` marks now: its own line, else the one line of the file that holds it, once. */
-function locate(tree, entry) {
-  let target;
+/**
+ * The lines of a committed file that hold `find`, under `lines` as `{ file, line, text }`; none,
+ * with `gone` saying why, when the file is no committed one.
+ */
+function holding(tree, file, find) {
   try {
-    target = committedFile(tree, entry.file);
+    const target = committedFile(tree, file);
+    const lines = target.lines.slice(0, target.count).map((text, index) => ({ file: target.rel, line: String(index + 1), text }));
+    return { lines: lines.filter(({ text }) => text.includes(find)) };
   } catch (error) {
-    if (error instanceof RunError) return { why: error.message };
+    if (error instanceof RunError) return { gone: error.message, lines: [] };
     throw error;
   }
-  const lines = target.lines.slice(0, target.count);
-  const n = Number(entry.line);
-  if (n >= 1 && n <= lines.length && occurrences(lines[n - 1], entry.find) === 1) return { line: String(n) };
-  const holding = lines.map((line, index) => (line.includes(entry.find) ? index + 1 : 0)).filter(Boolean);
-  if (holding.length === 1 && occurrences(lines[holding[0] - 1], entry.find) === 1) return { line: String(holding[0]) };
-  return { why: `${entry.file}:${entry.line} changed, and find no longer marks one line of it` };
+}
+
+/**
+ * The files an item changed since its first review, the one review that proposes its mutants:
+ * changed from the commit that first recorded its review file `rel` to HEAD, owned by the item,
+ * never the ledger's. None while `rel` has no committed version.
+ */
+function changedSince(tree, rel, editable) {
+  const [first] = lib.gitLines(tree, ['log', '--format=%H', '--reverse', '--', rel.split(path.sep).join('/')]);
+  if (!first) return [];
+  return lib.gitLines(tree, ['-c', 'core.quotePath=off', 'diff', '--name-only', first, 'HEAD'])
+    .filter((file) => !file.startsWith(`${lib.SPECS_DIR}/`) && lib.ownedBy(file, editable, tree));
+}
+
+/**
+ * Where `entry.find` is now: its own line, else the one line of its file that holds it once. Once
+ * its file holds it nowhere or is gone, the one line among the files `elsewhere()` names that holds
+ * it once, as `{ file, line }`. Two such lines are no place. Otherwise `{ why }`.
+ */
+function locate(tree, entry, elsewhere = () => []) {
+  const own = holding(tree, entry.file, entry.find);
+  const at = own.lines.find((one) => one.line === String(Number(entry.line)));
+  if (at && occurrences(at.text, entry.find) === 1) return { line: at.line };
+  if (own.lines.length === 1 && occurrences(own.lines[0].text, entry.find) === 1) return { line: own.lines[0].line };
+  const why = own.gone || `${entry.file}:${entry.line} changed, and find no longer marks one line of it`;
+  if (own.lines.length > 0) return { why };
+  const found = elsewhere().flatMap((file) => holding(tree, file, entry.find).lines);
+  if (found.length === 1 && occurrences(found[0].text, entry.find) === 1) return { file: found[0].file, line: found[0].line };
+  return { why: found.length > 1 ? `${why}; ${found.length} lines of the files the item changed since hold it, so none is its place` : why };
 }
 
 /** What one batch row says, in the words a review file keeps. */
@@ -102,25 +134,27 @@ const verdictOf = (row) => (row.caught === null ? { caught: 'none', why: row.why
 
 /**
  * Run `toRun` in one batch and write each result onto its entry: `caught`, with `why` for none,
- * and the line it ran on. On a busy tree nothing runs and each entry loses any verdict it had, so
- * it reads owed. Returns `{ busy }` or `{ ran, builds }`. A batch that could not put a file back,
- * or that stopped before every entry had its run, records nothing: it throws.
+ * and the file and line it ran on. `signs` are the review files this record signs, `rel` alone
+ * unless named; `elsewhere` lists the files `locate` may follow a moved line into. On a busy tree
+ * nothing runs and each entry loses any verdict it had, so it reads owed. Returns `{ busy }` or
+ * `{ ran, builds }`. A batch that could not put a file back, or that stopped before every entry
+ * had its run, records nothing: it throws.
  */
-async function runEntries(tree, toRun, { configFile, rel }) {
+async function runEntries(tree, toRun, { configFile, rel, signs = [rel], elsewhere }) {
   const clear = (entry) => {
     delete entry.caught;
     delete entry.why;
   };
-  const state = toRun.length > 0 ? busy(tree, rel.split(path.sep).join('/')) : { pending: [] };
+  const state = toRun.length > 0 ? busy(tree, signs.map((file) => file.split(path.sep).join('/'))) : { pending: [] };
   if (state.why) {
     toRun.forEach(clear);
     return { busy: state.why };
   }
   const runnable = [];
   for (const entry of toRun) {
-    const at = locate(tree, entry);
+    const at = locate(tree, entry, elsewhere);
     if (at.why) Object.assign(entry, { caught: 'none', why: at.why, tried: true });
-    else runnable.push(Object.assign(entry, { line: at.line, tried: true }));
+    else runnable.push(Object.assign(entry, at, { tried: true }));
   }
   if (runnable.length === 0) return { ran: 0, builds: 0 };
   const file = batchFile(tree, runnable);
@@ -229,4 +263,4 @@ const ownFindings = (doc) => (Array.isArray(doc.findings) ? doc.findings.filter(
 /** The entry as a review file keeps it: the proposal, then what the runner wrote, in that order. */
 const kept = (entry) => Object.fromEntries([...MUTANT_KEYS, 'caught', 'why'].map((key) => [key, entry[key]]).filter(([, value]) => value !== undefined));
 
-module.exports = { checkTargets, dump, kept, ownFindings, previousEntries, ranLines, runEntries, survivorFinding };
+module.exports = { changedSince, checkTargets, dump, kept, locate, ownFindings, previousEntries, ranLines, runEntries, survivorFinding };
