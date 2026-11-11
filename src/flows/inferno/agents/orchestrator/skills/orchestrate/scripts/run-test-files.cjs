@@ -22,24 +22,40 @@
  * and cargo's #[ignore] attribute, also under cfg_attr. Each one mutes a red test. The list
  * is fixed here, not configured per host.
  *
+ * A marker is read only in the test files of the languages whose runner knows it, picked by
+ * the file's extension: a helper named fit( in a Rust test is no switch-off. A file of an
+ * extension none of these is read against every marker, and so is a line read with no file.
+ * A bare fit( call in a JS or TS test file stays one: lines are read, not syntax.
+ *
  * Node builtins only: the scripts run inside projects with no node_modules.
  */
 
-const SWITCH_OFF = [
-  /\b(?:it|test|describe|context|suite)\.(?:skip|only|todo)(?:\.each)?\s*\(/,
-  /\b(?:it|test)\.fails(?:\.each)?\s*\(/,
-  /(?<![\w$.])(?:xit|xdescribe|xtest|fit|fdescribe)\s*\(/,
-  /@(?:Disabled|Ignore)\b/,
-  /@pytest\.mark\.(?:skip|xfail)/,
-  /@unittest\.skip/,
-  /\bpytest\.(?:skip|xfail)\s*\(/,
-  /\bt\.Skip(?:f|Now)?\s*\(/,
-  // node --test: test('x', { skip: true }, ...) and the test context's t.skip() and t.todo().
-  /\b(?:it|test|describe|suite)\s*\(\s*(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`[^`]*`|[\w$.]+)\s*,\s*\{[^}]*?\b(?:skip|todo|only)\s*:\s*(?!(?:false|0|null|undefined)\s*[,}])[^\s,}]/,
-  /(?<![\w$.])t\.(?:skip|todo)\s*\(/,
+const SWITCH_OFF_BY_LANGUAGE = {
+  js: [
+    /\b(?:it|test|describe|context|suite)\.(?:skip|only|todo)(?:\.each)?\s*\(/,
+    /\b(?:it|test)\.fails(?:\.each)?\s*\(/,
+    /(?<![\w$.])(?:xit|xdescribe|xtest|fit|fdescribe)\s*\(/,
+    // node --test: test('x', { skip: true }, ...) and the test context's t.skip() and t.todo().
+    /\b(?:it|test|describe|suite)\s*\(\s*(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`[^`]*`|[\w$.]+)\s*,\s*\{[^}]*?\b(?:skip|todo|only)\s*:\s*(?!(?:false|0|null|undefined)\s*[,}])[^\s,}]/,
+    /(?<![\w$.])t\.(?:skip|todo)\s*\(/,
+  ],
+  jvm: [/@(?:Disabled|Ignore)\b/],
+  python: [/@pytest\.mark\.(?:skip|xfail)/, /@unittest\.skip/, /\bpytest\.(?:skip|xfail)\s*\(/],
+  go: [/\bt\.Skip(?:f|Now)?\s*\(/],
   // cargo test: #[ignore], #[ignore = "why"], #[cfg_attr(windows, ignore)].
-  /^\s*#\[\s*(?:ignore\b|cfg_attr\s*\(.*\bignore\b)/,
-];
+  rust: [/^\s*#\[\s*(?:ignore\b|cfg_attr\s*\(.*\bignore\b)/],
+};
+
+/** Every marker, the list a file of an unknown extension is read against. */
+const SWITCH_OFF = Object.values(SWITCH_OFF_BY_LANGUAGE).flat();
+
+const LANGUAGE_BY_EXTENSION = {
+  js: 'js', cjs: 'js', mjs: 'js', jsx: 'js', ts: 'js', cts: 'js', mts: 'js', tsx: 'js',
+  java: 'jvm', kt: 'jvm', kts: 'jvm',
+  py: 'python',
+  go: 'go',
+  rs: 'rust',
+};
 
 /** A path with forward slashes and no leading `./` or trailing `/`. */
 const normPath = (file) => String(file || '').trim().replace(/\\/g, '/').replace(/^(\.\/)+/, '').replace(/\/+$/, '');
@@ -58,10 +74,18 @@ function isTestFile(relPath) {
   return folders.some((folder) => folder === '__tests__' || folder === 'tests' || folder === 'test');
 }
 
-/** True when the line switches a test off. */
-function isSwitchOff(line) {
+/** The markers a test file is read against: its language's by extension, else every marker. */
+function switchOffMarkers(file) {
+  const name = normPath(file).split('/').pop();
+  const dot = name.lastIndexOf('.');
+  const language = dot > 0 ? LANGUAGE_BY_EXTENSION[name.slice(dot + 1).toLowerCase()] : undefined;
+  return language ? SWITCH_OFF_BY_LANGUAGE[language] : SWITCH_OFF;
+}
+
+/** True when the line, added to the test file `file`, switches a test off. */
+function isSwitchOff(line, file) {
   const text = String(line);
-  return SWITCH_OFF.some((pattern) => pattern.test(text));
+  return switchOffMarkers(file).some((pattern) => pattern.test(text));
 }
 
 /** The lines a zero-context unified diff of one file adds: [{ line, text }], 1-based in the new file. */
@@ -94,4 +118,4 @@ function parseAddedLines(diff) {
   return out;
 }
 
-module.exports = { SWITCH_OFF, isSwitchOff, isTestFile, normPath, parseAddedLines };
+module.exports = { SWITCH_OFF, SWITCH_OFF_BY_LANGUAGE, isSwitchOff, switchOffMarkers, isTestFile, normPath, parseAddedLines };
