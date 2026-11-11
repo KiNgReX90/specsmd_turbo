@@ -245,3 +245,31 @@ The named dispatch is that of a later item of the same intent, which owns the sa
 ### How the host got through
 
 No way through inside the flow was found. Each correction's builder ran the item's own narrow check and reported it in its result (commits `ead393607` and `3a4519a86`). The corrections were committed without a `verify-item` proof, and both lenses read each one with every changed file named in their brief.
+
+## 9. A sibling item that writes in the tree during a mutant batch throws the whole batch away
+
+Seen 2026-11-12 on the app repo, intent `a-lane-run-needs-no-hands-and-a-wrong-test-is-fixed-in-one-landing`, on 0.1.83. It comes from the 0.1.83 check that names a test command which leaves the tree changed.
+
+### What happens
+
+- `run.cjs review --item` ran the item's ten mutants in one batch. All ten were caught. The batch took eleven minutes.
+- While it ran, the two reviewers of a sibling item wrote their review files into the same intent worktree.
+- The record was refused with `MUTATE_RESTORE`: "the runner's mutants could not put every file back: ... Nothing is recorded". Every file the batch broke was back. The ten verdicts were lost to the record.
+
+### Why
+
+- `snapshot` reads every path git calls changed or new in the whole tree before the first write, and `leftBehind` names every path whose bytes differ after the last restore (`S/run-mutate-left.cjs:31-40`). It cannot tell who wrote a path. A write by anyone during the batch reads as "the test command left it changed".
+- A batch with one such path records nothing: `if (payload.restored === false) throw ... 'MUTATE_RESTORE'` (`S/run-mutant-runs.cjs:172-174`).
+- One intent worktree holds several items at once by design. The review step says so itself: "another builder may be editing beside it, and another item's reviewer may be running a mutant beside it" (`S/run-review.cjs:309`).
+- The check before the batch has the same reach. `busy` ends the run when the tree holds any uncommitted work but the review files being signed (`S/run-mutant-runs.cjs:51-53`), and the proposals then wait for the intent review. So with two items in flight, an item's mutants run only when no sibling has uncommitted work at the start, and are recorded only when none writes for the whole batch.
+
+### What the flow should do
+
+- A verdict stands when the file the mutant broke and the paths the host's reseal changed are back. That is what the record should require.
+- Any other path that moved during the batch is printed as a warning, with the line that it may be another dispatch's work, and the verdicts are recorded.
+- The lines that tell a host to set `mutate.sealed` stay for the case they were written for: a path the batch's own reseal or test command is known to write. A path that an open dispatch of another item owns or claims, or a review file of another item, is never named as left behind.
+- Tests: a batch during which another path of the tree changes records its verdicts and prints the path as a warning. A batch whose own mutated file is not back still records nothing.
+
+### How the host got through
+
+The batch writes its verdicts to a file beside its logs (`mutate-batch-<stamp>-mutants.yaml` in the tree's cache folder). The host put those ten verdicts into the review file and recorded again.
