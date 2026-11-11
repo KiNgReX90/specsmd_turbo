@@ -11,7 +11,14 @@
  * lines and counts once, each usage field at the largest value its lines carry. A round is one
  * API message, and its context is input plus cache-read plus cache-creation tokens.
  *
+ * The reviewers of both lenses are two agent types: the contract reviewer (`...-reviewer`) and
+ * the quality reviewer (`...-reviewer-quality`). Their sum over a session is the `reviewers` line.
+ * Per item, the review files name the agent id of each lens's reviewer on their `reviewer:` line,
+ * and a subagent's thread is `agent-<that id>.jsonl`: with `--tree` and `--base` the readout sums
+ * the threads of both reviewers of each item, a thread named by both lenses once.
+ *
  *   node evals/review-loop/tokens.cjs --session <transcript dir> [--json]
+ *     [--tree <intent worktree> --base <ref> [--head <ref>] [--intent <id>]]
  *
  * `<transcript dir>` is the folder that holds sessions, one session folder, or a session file.
  */
@@ -19,11 +26,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const USAGE = 'usage: node tokens.cjs --session <transcript dir> [--json]';
-const MAIN = 'orchestrator';
-const FIELDS = { input: 'input_tokens', cacheRead: 'cache_read_input_tokens', cacheCreation: 'cache_creation_input_tokens', output: 'output_tokens' };
+const { UsageError, commitOf } = require('./history.cjs');
+const { roundsByItem } = require('./item-rounds.cjs');
 
-class UsageError extends Error {}
+const USAGE = 'usage: node tokens.cjs --session <transcript dir> [--json] [--tree <intent worktree> --base <ref> [--head <ref>] [--intent <id>]]';
+const MAIN = 'orchestrator';
+/** The agent types of the two reviewer lenses, as the host names them on either platform. */
+const REVIEWER_TYPE = /[-_]reviewer(?:[-_]quality)?$/;
+const FIELDS = { input: 'input_tokens', cacheRead: 'cache_read_input_tokens', cacheCreation: 'cache_creation_input_tokens', output: 'output_tokens' };
 
 /** The sessions a path names: each with its id, its main thread file and its subagents folder. */
 function sessionsAt(target) {
@@ -51,7 +61,7 @@ function threadsOf(session) {
     } catch (error) {
       // No meta or one that does not read: the thread counts under unknown.
     }
-    threads.push({ type, file });
+    threads.push({ type, file, id: name.replace(/^agent-/, '').replace(/\.jsonl$/, '') });
   }
   return threads;
 }
@@ -71,7 +81,7 @@ function messagesOf(file) {
     }
     const message = entry && entry.type === 'assistant' ? entry.message : null;
     if (!message || !message.id || !message.usage) continue;
-    const known = messages.get(message.id) || { model: message.model || null };
+    const known = messages.get(message.id) || { id: message.id, model: message.model || null };
     for (const [key, field] of Object.entries(FIELDS)) known[key] = Math.max(known[key] || 0, Number(message.usage[field]) || 0);
     messages.set(message.id, known);
   }
@@ -85,48 +95,82 @@ function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-/** Per agent type: threads, rounds, the four token fields, their sum, context per round and models. */
+/** One group of threads: threads, rounds, the four token fields, their sum, context per round and models. */
+function tallyOne({ threads, messages }) {
+  const sum = (key) => messages.reduce((total, message) => total + message[key], 0);
+  const contexts = messages.map((message) => message.input + message.cacheRead + message.cacheCreation);
+  const counts = Object.fromEntries(Object.keys(FIELDS).map((key) => [key, sum(key)]));
+  return {
+    threads,
+    rounds: messages.length,
+    ...counts,
+    total: Object.values(counts).reduce((a, b) => a + b, 0),
+    contextMedian: median(contexts),
+    contextMax: Math.max(0, ...contexts),
+    models: [...new Set(messages.map((message) => message.model).filter(Boolean))].sort(),
+  };
+}
+
+/** Per agent type, the orchestrator first. */
 function tally(groups) {
-  const types = {};
   const names = Object.keys(groups).sort((a, b) => (a === MAIN ? -1 : b === MAIN ? 1 : a.localeCompare(b)));
-  for (const type of names) {
-    const { threads, messages } = groups[type];
-    const sum = (key) => messages.reduce((total, message) => total + message[key], 0);
-    const contexts = messages.map((message) => message.input + message.cacheRead + message.cacheCreation);
-    const counts = Object.fromEntries(Object.keys(FIELDS).map((key) => [key, sum(key)]));
-    types[type] = {
-      threads,
-      rounds: messages.length,
-      ...counts,
-      total: Object.values(counts).reduce((a, b) => a + b, 0),
-      contextMedian: median(contexts),
-      contextMax: Math.max(0, ...contexts),
-      models: [...new Set(messages.map((message) => message.model).filter(Boolean))].sort(),
-    };
-  }
-  return types;
+  return Object.fromEntries(names.map((type) => [type, tallyOne(groups[type])]));
+}
+
+/** The reviewer types of both lenses as one group. */
+function reviewersOf(groups) {
+  const types = Object.keys(groups).filter((type) => REVIEWER_TYPE.test(type));
+  return tallyOne({ threads: types.reduce((total, type) => total + groups[type].threads, 0), messages: types.flatMap((type) => groups[type].messages) });
 }
 
 /** Read one session: every message id counts once across all its threads, the main thread first. */
 function readSession(session) {
   const groups = {};
   const seen = new Set();
+  const byThread = new Map();
   let skipped = 0;
   for (const thread of threadsOf(session)) {
     const read = messagesOf(thread.file);
     skipped += read.skipped;
     if (!groups[thread.type]) groups[thread.type] = { threads: 0, messages: [] };
     groups[thread.type].threads += 1;
+    const own = [];
     for (const [id, message] of read.messages) {
       if (seen.has(id)) continue;
       seen.add(id);
       groups[thread.type].messages.push(message);
+      own.push(message);
     }
+    if (thread.id) byThread.set(thread.id, own);
   }
-  return { id: session.id, groups, skipped };
+  return { id: session.id, groups, byThread, skipped };
 }
 
-function readout(target) {
+/**
+ * Each item's reviewer tokens: the threads its review files name, per lens and both together. A
+ * thread named by both lenses, or found in two sessions, counts once; `missing` names the ids no
+ * transcript holds.
+ */
+function itemTokens(read, items) {
+  const threadsOf = (id) => read.filter((session) => session.byThread.has(id)).map((session) => session.byThread.get(id));
+  const group = (ids) => {
+    const found = ids.flatMap(threadsOf);
+    const messages = new Map(found.flat().map((message) => [message.id, message]));
+    return tallyOne({ threads: found.length, messages: [...messages.values()] });
+  };
+  return items.map(({ intent, item, reviewers }) => {
+    const both = [...new Set([...reviewers.contract, ...reviewers.quality])];
+    return {
+      intent, item, reviewers,
+      contract: group(reviewers.contract),
+      quality: group(reviewers.quality),
+      both: group(both),
+      missing: both.filter((id) => threadsOf(id).length === 0),
+    };
+  });
+}
+
+function readout(target, review) {
   const read = sessionsAt(target).map(readSession);
   const all = {};
   for (const session of read) {
@@ -136,10 +180,15 @@ function readout(target) {
       all[type].messages.push(...group.messages);
     }
   }
-  return {
-    sessions: read.map((session) => ({ id: session.id, types: tally(session.groups), skipped: session.skipped })),
-    total: { types: tally(all), skipped: read.reduce((total, session) => total + session.skipped, 0) },
+  const result = {
+    sessions: read.map((session) => ({ id: session.id, types: tally(session.groups), reviewers: reviewersOf(session.groups), skipped: session.skipped })),
+    total: { types: tally(all), reviewers: reviewersOf(all), skipped: read.reduce((total, session) => total + session.skipped, 0) },
   };
+  if (!review) return result;
+  const wanted = (intent) => !review.intent || intent === review.intent;
+  const items = itemTokens(read, [...roundsByItem(review.tree, review.base, review.head, wanted).values()]);
+  const total = items.reduce((sum, entry) => sum + entry.both.total, 0);
+  return { ...result, items, perItem: { items: items.length, total, mean: items.length ? Math.round(total / items.length) : 0 } };
 }
 
 /** A count as section 1 writes it: 513M, 174k, or the number itself below a thousand. */
@@ -149,35 +198,78 @@ function size(value) {
   return `${Math.round(value)}`;
 }
 
-function lines(types) {
+const fields = (t) => [
+  `threads ${t.threads}`, `rounds ${t.rounds}`, `input ${size(t.input)}`, `cache read ${size(t.cacheRead)}`,
+  `cache write ${size(t.cacheCreation)}`, `output ${size(t.output)}`, `total ${size(t.total)}`,
+  `context per round median ${size(t.contextMedian)}, max ${size(t.contextMax)}`, `models ${t.models.join(', ') || 'none'}`,
+].join('  ');
+
+function lines(types, reviewers) {
   const width = Math.max(12, ...Object.keys(types).map((type) => type.length));
-  return Object.entries(types).map(([type, t]) => `  ${type.padEnd(width)}  ${[
-    `threads ${t.threads}`, `rounds ${t.rounds}`, `input ${size(t.input)}`, `cache read ${size(t.cacheRead)}`,
-    `cache write ${size(t.cacheCreation)}`, `output ${size(t.output)}`, `total ${size(t.total)}`,
-    `context per round median ${size(t.contextMedian)}, max ${size(t.contextMax)}`, `models ${t.models.join(', ') || 'none'}`,
-  ].join('  ')}`);
+  const out = Object.entries(types).map(([type, t]) => `  ${type.padEnd(width)}  ${fields(t)}`);
+  return reviewers.threads > 0 ? [...out, `  reviewers, both lenses  ${fields(reviewers)}`] : out;
+}
+
+const rounds = (count) => `${count} round${count === 1 ? '' : 's'}`;
+
+function itemLines(result) {
+  const width = Math.max(4, ...result.items.map((entry) => entry.item.length));
+  const out = ['reviewer tokens per item, both lenses'];
+  for (const entry of result.items) {
+    out.push(`  ${entry.item.padEnd(width)}  contract ${size(entry.contract.total)} in ${rounds(entry.contract.rounds)}  ` +
+      `quality ${size(entry.quality.total)} in ${rounds(entry.quality.rounds)}  both ${size(entry.both.total)}, ` +
+      `context per round median ${size(entry.both.contextMedian)}` +
+      (entry.missing.length ? `  no transcript for ${entry.missing.join(', ')}` : ''));
+  }
+  if (result.items.length === 0) out.push('  no item review was recorded in this range');
+  out.push(`  ${result.perItem.items} items, ${size(result.perItem.total)} in all, so ${size(result.perItem.mean)} per item`, '');
+  return out;
 }
 
 function text(result) {
   const out = [];
   for (const session of result.sessions) {
-    out.push(`session ${session.id}`, ...lines(session.types));
+    out.push(`session ${session.id}`, ...lines(session.types, session.reviewers));
     if (session.skipped) out.push(`  ${session.skipped} line(s) were no JSON and were skipped`);
     out.push('');
   }
-  if (result.sessions.length > 1) out.push('all sessions', ...lines(result.total.types), '');
+  if (result.sessions.length > 1) out.push('all sessions', ...lines(result.total.types, result.total.reviewers), '');
+  if (result.items) out.push(...itemLines(result));
   return `${out.join('\n')}`;
+}
+
+const VALUED = ['--session', '--tree', '--base', '--head', '--intent'];
+
+function parseArgs(argv) {
+  const options = { json: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    if (flag === '--json') options.json = true;
+    else if (VALUED.includes(flag) && argv[index + 1] !== undefined && !argv[index + 1].startsWith('--')) {
+      options[flag.slice(2)] = argv[index + 1];
+      index += 1;
+    } else if (VALUED.includes(flag)) throw new UsageError(`${flag} needs a value`);
+    else throw new UsageError(`${flag} is no option here`);
+  }
+  if (!options.session) throw new UsageError('--session is required');
+  if (Boolean(options.tree) !== Boolean(options.base)) throw new UsageError('--tree and --base go together');
+  if ((options.head || options.intent) && !options.tree) throw new UsageError('--head and --intent read review files, so they need --tree and --base');
+  return options;
+}
+
+/** The review range of --tree, --base, --head and --intent, or null without them. */
+function reviewOf(options) {
+  if (!options.tree) return null;
+  const tree = path.resolve(options.tree);
+  if (!fs.existsSync(tree)) throw new UsageError(`${options.tree} does not exist`);
+  return { tree, base: commitOf(tree, options.base), head: commitOf(tree, options.head || 'HEAD'), intent: options.intent };
 }
 
 function main(argv) {
   try {
-    const at = argv.indexOf('--session');
-    const target = at >= 0 ? argv[at + 1] : undefined;
-    const unknown = argv.filter((arg, index) => arg.startsWith('--') && !['--session', '--json'].includes(arg) && index !== at + 1);
-    if (!target || target.startsWith('--')) throw new UsageError('--session is required');
-    if (unknown.length) throw new UsageError(`${unknown[0]} is no option here`);
-    const result = readout(target);
-    process.stdout.write(argv.includes('--json') ? `${JSON.stringify(result, null, 2)}\n` : text(result));
+    const options = parseArgs(argv);
+    const result = readout(options.session, reviewOf(options));
+    process.stdout.write(options.json ? `${JSON.stringify(result, null, 2)}\n` : text(result));
     return 0;
   } catch (error) {
     if (!(error instanceof UsageError)) throw error;
