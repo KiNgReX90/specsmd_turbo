@@ -44,13 +44,30 @@ function remember(tree, branch, config, step) {
   atomicWrite(recordFile(tree, branch), `${JSON.stringify(record, null, 2)}\n`);
 }
 
-function readRecord(file) {
+/**
+ * The branch's record, or null when none was written or it is of another version. A record that
+ * exists but cannot be read, is cut short, or names no config path is refused: answering null
+ * there would hand the step the repo config, the fallback the record exists to close.
+ */
+function readRecord(file, branch) {
+  const unreadable = () => new lib.RunError(`the run config record ${file} for ${branch} cannot be read: pass --config <file>`, 'BAD_CONFIG');
+  let body;
   try {
-    const record = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return record && record.version === VERSION && typeof record.config === 'string' ? record : null;
-  } catch {
-    return null;
+    body = fs.readFileSync(file, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw unreadable();
   }
+  let record;
+  try {
+    record = JSON.parse(body);
+  } catch {
+    throw unreadable();
+  }
+  if (!record || typeof record !== 'object') throw unreadable();
+  if (record.version !== VERSION) return null;
+  if (typeof record.config !== 'string') throw unreadable();
+  return record;
 }
 
 /**
@@ -59,7 +76,7 @@ function readRecord(file) {
  */
 function recall(tree, branch) {
   if (!intentOf(branch)) return null;
-  const record = readRecord(recordFile(tree, branch));
+  const record = readRecord(recordFile(tree, branch), branch);
   if (!record) return null;
   if (!fs.existsSync(path.resolve(tree, record.config))) {
     throw new lib.RunError(`the run config ${record.config} recorded for ${branch} is gone: pass --config <file>`, 'BAD_CONFIG');

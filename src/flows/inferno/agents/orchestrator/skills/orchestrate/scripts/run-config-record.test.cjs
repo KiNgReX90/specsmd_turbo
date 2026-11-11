@@ -167,6 +167,41 @@ test('a record of another version is no record', (t) => {
   assert.deepEqual(ran(f), ['run-integrate', 'repo-integrate']);
 });
 
+/** A bare integrate after the record was spoiled by `spoil(file)`: refused naming the record, no repo command run. */
+function refusedOnSpoiledRecord(t, spoil) {
+  const f = fixture(t);
+  passed(run(f, 'integrate', '--config', RUN_CONFIG));
+  const file = recordIn(f, BRANCH);
+  spoil(file);
+  edit(f);
+  const result = run(f, 'integrate');
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.match(result.err, /BAD_CONFIG/);
+  assert.ok(result.err.includes(file), result.err);
+  assert.match(result.err, /--config/);
+  assert.deepEqual(ran(f), ['run-integrate']);
+}
+
+test('a record cut short is refused, never replaced by the repo config', (t) => {
+  refusedOnSpoiledRecord(t, (file) => {
+    const body = fs.readFileSync(file, 'utf8');
+    writeFile(file, body.slice(0, body.lastIndexOf('}')));
+  });
+});
+
+test('a record that cannot be read is refused, never replaced by the repo config', (t) => {
+  refusedOnSpoiledRecord(t, (file) => {
+    fs.rmSync(file);
+    fs.mkdirSync(file);
+  });
+});
+
+test('a version 1 record without a config path is refused, never replaced by the repo config', (t) => {
+  refusedOnSpoiledRecord(t, (file) => {
+    writeFile(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), config: 7 }));
+  });
+});
+
 /** The CLI fixture with a run config whose bootstrap and integrate differ from the repo's, committed on main. */
 function withRunConfig(t) {
   const fixture = fixtures.repo();
