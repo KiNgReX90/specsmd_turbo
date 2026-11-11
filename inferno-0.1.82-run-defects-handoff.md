@@ -67,3 +67,14 @@ How to fix. Give a finding the way out an item has, and keep it narrow.
 - The gate and the ship summary print the number of deferred findings and the file that holds them, so the next plan picks them up.
 - A test: an intent review with one blocker and two minor findings, the two deferred under the default rule, stays `fix` until the blocker is closed and then records `clean` with both entries kept.
 
+## 7. A test command that writes into the tree leaves it changed, and the runner says every file is restored
+
+What is wrong. The mutant runner puts back the file it broke and, for a host that names its seal under `mutate.sealed`, the paths its own reseal changed (`S/run-mutate-seal.cjs`). It does not look at what the test command itself wrote. A host that has not set `mutate.sealed` gets reviewers who reseal inside the test command, since nothing else makes their test reach the code. After the record the broken file is back and the seal is not: it holds the digest of the mutant. The runner reports `restored: true` and "every file is restored", and the next step meets a file nobody wrote. An orchestrator that stages everything commits a seal that no longer matches its files.
+
+Evidence. Skoft_CRA, intent `the-article-14-filings-are-due-on-time-and-complete`, intent review record of 2026-11-11, batch `mutate-batch-20261111T015925Z-664741`. A mutant in a definition template carried the test `node scripts/lib/definitions/pack.mjs --write && <test>`. After the record `definitions/pack-manifest.json` was changed in the tree, and the host's pack check named 1 problem. The host has since set `mutate.sealed` (its commit `cb922e68a`). Proof there: the same byte change fails the pack check with no reseal, and with the key set one mutant run reseals, the check passes, and the tree is clean afterwards.
+
+How to fix. Two small things.
+
+- After a batch, and after a single mutant, the runner reads `git status` and compares it with what it read before the first write. A path that changed and is not one it restored makes the result `restored: false`, names the path, and says that a host which seals files names them under `mutate.sealed`. A test: a test command that appends to a tracked file ends with that refusal.
+- The installer, or the config check, tells a host what section 2 of `inferno-improvement.md` only says in prose: a host config with no `mutate` block gets one line at install that names `mutate.sealed` and `mutate.session` and what each is for.
+
