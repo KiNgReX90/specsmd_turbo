@@ -106,3 +106,18 @@ How to fix.
 - The intent review file takes a list `withdrawn`: a mutant as recorded, plus `reason`. The runner stops running a withdrawn mutant and writes no finding for it. A clean verdict still needs another caught mutant or a checked pin for its criterion, so a withdrawal never closes a gap. The gate summary prints the count.
 - A test: a survivor that is withdrawn with a reason no longer makes the record `fix`, and the same record is refused as clean until its criterion has a caught mutant.
 
+## 10. A Rust mutant behind a switch is invisible to a test that reads the source, and its survivor cannot be given another test
+
+What is wrong. Two things that together stop an intent at its review.
+
+- The batch puts every Rust mutant whose `find` is a whole token behind a run-time switch (`planRust`, called from `S/run-mutate-batch.cjs` :42-46, forms in the header of `S/run-mutate-rust.cjs`), whatever its test is. With the switch on, the compiled code takes the mutant. The source text still holds the original in the other branch. A test that reads the source, a script that compares an enum's spellings, a lint or a `grep`, therefore stays green, and a mutant that such a test catches in place is recorded as a survivor.
+- The survivor then has no way out. It is carried with its own test and run again in every record (`intentMutants`, `S/run-review-mutants.cjs` :166, `due` at :49). `refuseSecond` (:143) refuses the intent reviewer's mutant for the same criterion while the survivor is held, and a delta item review may propose none (`refuseNew`). The builder can add a compiled test that catches the mutant, as the finding asks, and nothing can point the carried entry at it. Every record lands `fix` with a finding of major weight.
+
+Evidence. Skoft_CRA, intent `the-article-14-filings-are-due-on-time-and-complete`, carried mutant `a14-the-store-holds-a-vulnerability-the-maker-found:4`: `src-tauri/src/storage/sbom/model.rs:43`, find `"maker"`, replace `"makers"`, test `node scripts/wire-enums.mjs --check`, a script that reads the Rust source and refuses an enum whose two spellings differ. Batch `mutate-batch-20261111T015925Z-664741`: the entry was switched, its test printed "wire enums ok", and it was recorded `caught: no`. The builder added a cargo test that turns red on the mutant. The way through the host was given: change the `test` value of that one mutant by hand, in the item review file and in the committed intent review, and let the runner run it again, with no verdict written by hand.
+
+How to fix.
+
+- A switch is used only for an entry whose test runs compiled code. The simplest rule that holds: the test command starts a cargo run, or goes through the host's wrapper into one. Every other Rust entry takes the classic in-place build, which costs a build only when its test compiles anything.
+- A survivor may take another test. The intent review accepts, for a carried entry that reads `caught: no`, an entry with the same criterion, file, line, find and replace and a different `test`, runs it in that record, and keeps the old test in the entry as `was`. This is what the survivor's own finding asks for: a test that turns red on that change.
+- Two tests: a switched entry whose test is a script that reads the file is run in place and caught, and a carried survivor given a second test in the next intent review is run with it and read `caught: yes`.
+
