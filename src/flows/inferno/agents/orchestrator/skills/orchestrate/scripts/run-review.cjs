@@ -217,8 +217,10 @@ async function record(tree, context, ledger) {
       throw bad(file, 'repeat: true marks a kind an earlier round of this item reported, and this is its first review, so drop repeat: true');
     }
   }
-  // The runner runs the review's mutants and writes what they said into the file (run-review-mutants.cjs).
-  const ran = await itemMutants(tree, context);
+  // The runner runs the review's mutants and writes what they said into the file (run-review-mutants.cjs),
+  // beside every file this record signs.
+  const signed = [[rel, reviewer], ...(both ? [[qualityRel, qualityReviewer]] : [])];
+  const ran = await itemMutants(tree, { ...context, signs: signed.map(([file]) => file) });
   const review = lens.mergeReviews(parseItemReview(tree, rel, item.id, { recorded: false }),
     quality || lens.readQuality(tree, qualityRel, item.id, { recorded: true }));
   const commit = lib.git(tree, ['rev-parse', 'HEAD']);
@@ -227,7 +229,6 @@ async function record(tree, context, ledger) {
     file: ledger.file, intent: intent.id, item: item.id, verdict: review.verdict,
     files_hash: hash, tier: builtBy(item), commit,
   });
-  const signed = [[rel, reviewer], ...(both ? [[qualityRel, qualityReviewer]] : [])];
   for (const [file, id] of signed) {
     const abs = path.join(tree, file);
     const text = fs.readFileSync(abs, 'utf8');
