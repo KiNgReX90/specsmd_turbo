@@ -193,6 +193,7 @@ Seen 2026-11-11 on the app repo, intent `every-machine-removes-what-finished-wor
 - Round 1 of the item was recorded with findings. The correction needed three new files outside the item's `ownership.editable`: `scripts/machines/reaper-guard.mjs`, `scripts/machines/reaper-lock.mjs` and `scripts/machines/reaper-guard.test.mjs`. The orchestrator added them to the correction's dispatch with `run.cjs grant` (dispatch `263b3707`), as the flow asks.
 - `run.cjs review --item` then printed both reviewer dispatches for range `23ebd3dbd..6b8be0350` with a `paths` list that holds none of the three files.
 - A reviewer that follows its dispatch reads the fix without the code the fix moved into the new files.
+- Two more hits the same day, on two other intents of the app repo. In each, a fix for a red integrate landed on granted files after the item's review was recorded, and nothing asked for a new review: item `td-item-2a-asks-the-system-architecture`, commit `c72816ef6` (three Rust files), and item `sf-a-manifest-saved-with-a-byte-order-mark-or-as-utf-16-is-read`, commit `a902a96f5` (a lint script and its test). Both were re-reviewed by hand once the hole was known.
 
 ### Why
 
