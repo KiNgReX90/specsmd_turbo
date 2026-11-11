@@ -73,3 +73,28 @@ switched off: src-tauri/src/dossier/graphics/image_tests.rs:335: assert!(fit(0, 
 ### How the host got through
 
 It renamed the helper in the test file, so no added line calls a bare `fit(`.
+
+## 3. A ship says nothing when the host set no ship cleanup, so a host runs for days without one
+
+Seen 2026-11-11 on the app repo, on 0.1.83. The code is the same on every version that has `verification.ship_cleanup`.
+
+### What happens
+
+- `removeWorktree` (`S/run-ship.cjs:153`) removes the tree and the branch and then runs the host's cleanup only when the config sets one. With no `verification.ship_cleanup` it returns null at `:164` and prints nothing.
+- The flow's own folder for the branch, `<cacheDir>/<branch>/` (`cacheDir`, `S/run-lib.cjs:363`), holds the gate, lane, verify and mutate logs of the run. The flow never removes it. The comment above `shipCleanup` (`S/run-ship.cjs:172`) leaves that folder to the host.
+- So a host without the key keeps one folder per shipped intent for ever, and every ship prints a clean result.
+
+### Evidence
+
+- The host wrote its cleanup on 2026-11-06 (`scripts/ship-cleanup.mjs`, built to run as `verification.ship_cleanup`) and never set the key: `git log -S ship_cleanup -- .specs-inferno/config.yaml` is empty on the host.
+- On the host's main machine `~/.cache/specsmd-inferno/Skoft_CRA/inferno-intent/` holds 136 branch folders, 4.6 GB. 123 of them belong to intents that are archived on `origin/main`.
+- Nobody noticed for five days, because nothing the flow printed differed from a host that cleans up.
+
+### What the flow should do
+
+- When `ship` or `teardown` ends with no `verification.ship_cleanup` set and the branch's cache folder is still there, it prints one line that names the folder it leaves and the key that would remove it. It refuses nothing: the ship stands.
+- Test: a ship on a fixture host without the key prints that line and exits 0. With the key it prints the cleanup's last line, as today.
+
+### How the host got through
+
+It sets the key, and a timer on each machine removes the folders of intents that are already archived.
