@@ -40,3 +40,36 @@ A file that left the tree since a review was recorded is a file that changed sin
 ### How the host got through
 
 It dispatched both lenses by hand, with the brief the dispatch would have printed. A fresh review file lists only files that exist, and with a pending file in the tree `review --item` reads the pending files (`pendingFiles`, `S/run-review.cjs:270-273`) and not the recorded one (`:307`), so the record goes through. Seen on the host on 2026-11-11, with 0.1.82 still in that tree: `review --item <id> --reviewer <id> --quality-reviewer <id>` exited 0 and printed "review `<item>` clean, recorded at `d7fb1afba`". These lines are the same on 0.1.83.
+
+## 2. A helper named `fit` in a Rust test file reads as a switched-off test
+
+Seen 2026-11-11 on the app repo, intent `the-declaration-of-conformity-is-complete-for-every-stated-law`, item `doc-a-toy-declaration-carries-its-image`, on 0.1.83. The rule came with `verify-item`'s proof in 0.1.82 (`df9f5119`).
+
+### What happens
+
+`run.cjs verify-item` fails the item on four added lines of a Rust test file, none of which switches a test off:
+
+```text
+switched off: src-tauri/src/dossier/graphics/image_tests.rs:332: assert_eq!(fit(400, 300), (4_800_000, MAX_HEIGHT_EMU));
+switched off: src-tauri/src/dossier/graphics/image_tests.rs:335: assert!(fit(0, 300).0 > 0 && fit(400, 0).1 > 0, "never a box of zero");
+```
+
+`fit` is the function under test: it fits an image into a box.
+
+### Why
+
+- `SWITCH_OFF` (`S/run-test-files.cjs:28-42`) is one list for every language, and `isSwitchOff(line)` (`:62-65`) reads the line alone. Its third pattern, `/(?<![\w$.])(?:xit|xdescribe|xtest|fit|fdescribe)\s*\(/` (`:31`), is Jasmine's and Jest's focused and excluded tests. It matches any bare call of a function named `fit`, in any test file.
+- The caller knows the file: `if (isSwitchOff(added.text)) changed.switched_off.push({ file, ... })` (`S/run-item-proof.cjs:268`). It does not pass it on.
+- The suite pins `model.fit(data)` and `outfit(x)` as no marker (`S/run-test-files.test.cjs:84-85`). It has no bare `fit(` outside a JS or TS file.
+- The same holds for every marker: each is read in every language. `@Ignore` in a comment of a TS test file and `t.skip(` in a Go test file are refused the same way. Only the `fit` case was met.
+- The list is fixed and has no host setting, so a host cannot answer a false refusal.
+
+### What the flow should do
+
+- A marker is read only in the languages whose runner knows it. `isSwitchOff(line, file)` picks the markers by the test file's extension: the JS and TS markers for `.js`, `.cjs`, `.mjs`, `.jsx`, `.ts`, `.tsx` and the like, `@Disabled` and `@Ignore` for Java and Kotlin, the pytest and unittest markers for `.py`, `t.Skip` for `.go`, `#[ignore]` for `.rs`. A file of another extension is read against all of them, as today.
+- Tests: `assert_eq!(fit(400, 300), ...)` in `image_tests.rs` is no marker. `fit('focused', () => {` in `a.test.ts` is one. `#[ignore]` in a `.rs` file is one and in a `.ts` file is not.
+- A bare `fit(` call of a helper in a JS or TS test file stays refused. That is the price of reading lines and not syntax, and the refusal line already names the file and the line.
+
+### How the host got through
+
+It renamed the helper in the test file, so no added line calls a bare `fit(`.
