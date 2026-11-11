@@ -98,11 +98,15 @@ function batchTree(t, files) {
   fs.mkdirSync(state, { recursive: true });
   const fake = path.join(dir, 'fake-rust.cjs');
   writeFile(fake, FAKE);
-  return { root, dir, state, fake, cache: path.join(dir, 'cache') };
+  // The fake answers as `cargo test`, since only a test that starts a cargo run reads a switch.
+  const cargo = path.join(dir, 'toolchain', 'cargo');
+  fs.mkdirSync(path.dirname(cargo), { recursive: true });
+  writeFile(cargo, `#!/bin/sh\nshift\nexec node ${JSON.stringify(fake)} "$@"\n`, { mode: 0o755 });
+  return { root, dir, state, fake, cargo, cache: path.join(dir, 'cache') };
 }
 
 /** The test command the fake answers: green while the line of `fn name(` holds `expected`. */
-const fakeTest = (f, name, expected) => `node ${JSON.stringify(f.fake)} ${name} ${JSON.stringify(expected)}`;
+const fakeTest = (f, name, expected) => `${JSON.stringify(f.cargo)} test ${name} ${JSON.stringify(expected)}`;
 
 // CLAUDE_BUILD_WRAPPED is claude-build's nested-call marker: a fake command runs as is and never queues on the machine-wide build lock.
 const env = (f) => ({ ...process.env, CLAUDE_BUILD_WRAPPED: '1', XDG_CACHE_HOME: f.cache, FAKE_RUST_STATE: f.state });

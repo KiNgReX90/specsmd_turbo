@@ -336,3 +336,46 @@ test("a deferred item is never linted, and the criteria it delivers stay deliver
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /^clean gift-cards: 1 open items, 2 criteria$/m);
 });
+
+// A criterion no mutant can reach carries the command or lane that proves it at the gate. The
+// lint holds the name to the verification block of the config the step runs with.
+const MARK = "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance)";
+const marked = (name) => withItem("card-store", MARK, `- [ ] Compiles on the Windows lane (gate: ${name})`);
+const GATE_CONFIG = "verification:\n  finalize:\n    - npm run check\n  windows:\n    command: npm run test:windows\n    scope: [\"src/**\"]\n";
+
+test("a gate mark names a finalize command or a lane of the selected config, at plan-lint and at frontier", () => {
+  for (const name of ["npm run check", "verification.windows", "`npm run check`"]) {
+    const tree = plan({ items: marked(name) });
+    write(tree.root, ".specs-inferno/config.yaml", GATE_CONFIG);
+    const result = lint(tree);
+    assert.equal(result.code, 0, `${name}: ${result.out}${result.err}`);
+  }
+  const tree = plan({ items: marked("npm run windows-only") });
+  write(tree.root, ".specs-inferno/config.yaml", GATE_CONFIG);
+  write(tree.root, ".specs-inferno/config.lane.yaml", "verification:\n  finalize:\n    - npm run windows-only\n");
+  const expected = /^FINDING card-store: acceptance criterion 1 is marked \(gate: npm run windows-only\), which the config's verification block does not hold/m;
+  assertOneFinding(tree, expected);
+  assert.equal(run(tree, ["plan-lint", "gift-cards", "--config", ".specs-inferno/config.lane.yaml"]).code, 0);
+  const stopped = run(tree, ["frontier", "gift-cards"]);
+  assert.equal(stopped.code, 2, stopped.out + stopped.err);
+  assert.match(stopped.out, expected);
+  const ready = run(tree, ["frontier", "gift-cards", "--config", ".specs-inferno/config.lane.yaml"]);
+  assert.equal(ready.code, 0, ready.out + ready.err);
+  assert.match(ready.out, /^ready card-store /m);
+});
+
+test("a lane the config does not set, or a command the gate never runs, is no gate name", () => {
+  for (const name of ["verification.smoke", "verification.integrate", "npm run quick", "windows"]) {
+    const tree = plan({ items: marked(name) });
+    write(tree.root, ".specs-inferno/config.yaml", `${GATE_CONFIG}  integrate:\n    - npm run quick\n`);
+    assertOneFinding(tree, new RegExp(`^FINDING card-store: acceptance criterion 1 is marked \\(gate: ${name.replace(/\./g, "\\.")}\\), which`));
+  }
+});
+
+test("a plan without a mark lints as before and never reads the config", () => {
+  const tree = plan();
+  write(tree.root, ".specs-inferno/config.yaml", "verification: [npm run check]\n");
+  const result = lint(tree);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /^clean gift-cards: 2 open items, 2 criteria$/m);
+});
