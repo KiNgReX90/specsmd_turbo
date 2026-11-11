@@ -16,6 +16,7 @@
  *
  * Both end with the host's `verification.ship_cleanup`, when set: one command run from the primary
  * checkout once the tree and branch are gone. Its failure prints a line and never undoes the ship.
+ * Without it, the branch's cache folder outlives the ship, and one line names it and the key.
  *
  * A lane red accepted as intermittent goes into the ship commit as one `exception:` line per lane,
  * written here so nobody writes it by hand; those lines on the base are the ledger a later accept
@@ -148,7 +149,8 @@ function ship(intentId, options) {
  * Stop the processes the run registered in the worktree, remove it, delete its branch, then run
  * the host's ship cleanup when one is set. A process that merely sits in the tree is never
  * signalled; see run-processes.cjs. `left` names what a failure leaves owed. Returns the
- * cleanup's `{ code, log }`, or null without one.
+ * cleanup's `{ code, log }`, or null without one; then a branch cache folder that still stands is
+ * named, since nothing else would ever remove it.
  */
 function removeWorktree(primary, tree, branch, out, left, options, command) {
   // The base holds the branch's work, so its merge slot ticket goes first: a failed removal never holds the slot.
@@ -161,7 +163,11 @@ function removeWorktree(primary, tree, branch, out, left, options, command) {
   left.shift();
   lib.git(primary, ['branch', '-d', branch]);
   left.shift();
-  if (!command) return null;
+  if (!command) {
+    const folder = path.join(lib.cacheDir(primary), branch);
+    if (fs.existsSync(folder)) out.push(`left ${folder}: set verification.ship_cleanup to remove it`);
+    return null;
+  }
   const cleanup = shipCleanup(primary, tree, branch, command, out);
   left.shift();
   return cleanup;
