@@ -115,15 +115,16 @@ function lintCommands(config, label) {
 }
 
 /**
- * The lines under the quality dispatch line: its range and paths, the spec and the brief, one
- * `standards` line per rule file that applies to those paths, one `lint` line per host command,
- * and the file to write. No proof and no real-app line: those are the contract lens's.
+ * The lines under the quality dispatch line: its range and paths (`ranged`, as run-review.cjs
+ * prints them for both lenses), the spec and the brief, one `standards` line per rule file that
+ * applies to those paths, one `lint` line per host command, and the file to write. No proof and
+ * no real-app line: those are the contract lens's.
  */
-function qualityBody(tree, context, { range, read, spec, brief }) {
+function qualityBody(tree, context, { ranged, read, spec, brief }) {
   const standards = standardsFor(tree, read, { config: context.configFile });
   const lint = lintCommands(context.config, context.configFile || path.join(lib.SPECS_DIR, 'config.yaml'));
   const lines = [
-    `  range ${range} paths ${read.join(' ') || '(the whole range)'}`,
+    ...ranged,
     `  spec ${spec}`,
     `  brief ${brief}`,
     ...standards.map((file) => `  standards ${file}`),
