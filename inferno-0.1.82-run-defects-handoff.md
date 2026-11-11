@@ -54,3 +54,16 @@ How to fix. Three changes, the first one enough to end the lock.
 - Let `locate` look further than the entry's own file: when that file no longer holds the find, search the files the item changed since the review that proposed it, and take the one line that holds it once.
 - A test: an item review records a proposal that never ran, a later commit moves its line to another file, and the intent review that proposes one mutant for that criterion at the new place records clean.
 
+## 6. A finding the user has put after the release cannot be recorded as such
+
+What is wrong. This is a gap, not a fault. An item the user drops leaves through `state-transition.cjs defer-item`, with its reason on record. A finding has no such way out. `verdictParts` in `S/run-review-file.cjs` (:287-309) refuses `clean` with any finding and with any surviving mutant, whatever its severity. A host whose user has set a release bar, where only a named class of finding blocks and the rest is built in the first update, can therefore never record an intent review that says so. The orchestrator moves those findings out of the review by hand into a file of its own making and has the reviewer write the review again with only the blocking ones. The recorded review then no longer holds what the reviewer found, and the full first round survives only as a side file nobody reads by rule.
+
+Evidence. Skoft_CRA, intent `the-confirmed-launch-findings-are-fixed-before-the-freeze`, intent review of 2026-11-11: 20 findings and 3 survivors in the first round, of which the user's bar keeps a few. On its intent branch, `.specs-inferno/intents/<id>/review-2026-11-11-round1.yaml` is the first round kept by hand and `first-update.md` (:10-29) is where the rest went. The same was done by hand on 0.1.81 for an intent of 4 items with 5 minor findings.
+
+How to fix. Give a finding the way out an item has, and keep it narrow.
+
+- The intent review file takes a list `deferred`: each entry is a finding as written, plus `to`, a file in the intent folder, and `reason`. The recorder checks that the `to` file exists and names the finding's file and line. The verdict rule leaves `deferred` entries out, so a review whose every open finding is deferred records `clean`.
+- The reviewer never defers. The orchestrator moves an entry with one command, `state-transition.cjs defer-finding --intent <id> --entry <n> --to <file> --reason <text>`, on a rule the user gave. Which severities may leave is the host's, in a rule file under `.specs-inferno/standards/`. Without such a file only `minor` may, and a surviving mutant never without it.
+- The gate and the ship summary print the number of deferred findings and the file that holds them, so the next plan picks them up.
+- A test: an intent review with one blocker and two minor findings, the two deferred under the default rule, stays `fix` until the blocker is closed and then records `clean` with both entries kept.
+
