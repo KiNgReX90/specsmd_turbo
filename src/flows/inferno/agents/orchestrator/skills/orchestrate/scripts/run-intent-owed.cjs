@@ -19,6 +19,7 @@ const lib = require('./run-lib.cjs');
 const proofs = require('./run-proofs.cjs');
 const { intentOf } = require('./run-worktrees.cjs');
 const { parseIntentReview } = require('./run-intent-review-file.cjs');
+const { proofOwed } = require('./run-review-aside.cjs');
 const { itemProofs } = require('./run-mutant-coverage.cjs');
 const { intentReviewCall, scanCall } = require('./run-call.cjs');
 const { resolveBase } = require('./run-intents.cjs');
@@ -152,7 +153,7 @@ function intentReviewState(tree, config, intentId) {
   if (!reviewCurrent(tree, config, review)) {
     owed.push(`the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`);
   } else if (review.verdict !== 'clean') {
-    owed.push('the review says fix and its findings are not fixed');
+    owed.push(proofOwed(tree, intentId, review) || 'the review says fix and its findings are not fixed');
   }
   return { rel, review, owed };
 }

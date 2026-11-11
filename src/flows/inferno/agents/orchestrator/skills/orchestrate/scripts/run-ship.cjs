@@ -33,6 +33,7 @@ const { intermittentHeld } = require('./run-lanes.cjs');
 const { shipExceptions } = require('./run-lanes-intermittent.cjs');
 const { linkedTree, loadOwnership, stopOwnedProcesses } = require('./run-processes.cjs');
 const gates = require('./run-config-gates.cjs');
+const { asideLines } = require('./run-review-aside.cjs');
 
 const { mergeSlot } = gates;
 const slot = require('./run-slot.cjs');
@@ -105,6 +106,9 @@ function ship(intentId, options) {
     return { exit: 3, payload: { ok: false, step: 'green', hash: proof.payload.hash, owed: proof.payload.owed }, out };
   }
 
+  // The findings the user put after the release, read before the teardown removes the tree.
+  const deferred = asideLines(tree, intentId);
+
   // The lane reds accepted as intermittent, refused before anything merges once the base holds two accepts of a test.
   const exceptions = shipExceptions(primary, base, intermittentHeld(tree, lib.readConfig(tree, options.config), options.config));
 
@@ -136,7 +140,7 @@ function ship(intentId, options) {
     return { exit: 2, payload: { ok: false, step: 'after-merge', sha, left }, out };
   }
 
-  out.push('shipped');
+  out.push(...deferred, 'shipped');
   return { exit: 0, payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup, exceptions }, out };
 }
 
