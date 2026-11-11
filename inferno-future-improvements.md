@@ -45,3 +45,16 @@ Claude Code reads `.claude/agents/*.md` when a session starts. A subagent spawne
 Canonical and the app repo share one module split of the orchestrator scripts, ported on 2026-09-14: `run-integrate`, `run-probes`, `run-proofs`, `run-owner`, `run-e2e-impact`, `run-error`, `state-block` and `state-lists`. the docs repo split the same scripts its own way on 2026-09-10 and 11: `run-dispatch`, `run-processes`, `run-proof` and `state-store`, each with its own tests. Until they converge, every flow change is ported twice by hand.
 
 Port what the the docs repo modules do that canonical lacks, reinstall the docs repo from canonical, and run its flow suites. Its Codex install needs the same pass: the planner Codex loads there is an untracked `.codex/agents/specsmd-inferno-planner.toml`, beside an older tracked copy under `.codex/skills/`.
+
+## 7. The config step proposes the tools that fit the host's stack, per role
+
+AI-DLC Turbo analyses a host's tooling at the start (`src/flows/aidlc-turbo/skills/master/tooling.md`). INFERNO's config step asks for model tiers, delivery and verification and never asks which tools the roles should have. On the app repo that left four kinds of file with no check at all, measured on 2026-11-11: 83 shell scripts, 7 workflows, 177 Python files and 1584 `.mjs` files, among them the lane and the tester that cost the host most of its red gates that week. Every role searched with grep and then read whole files.
+
+The config step reads the stack (file kinds by count, the manifests, what is already installed) and proposes, for the owner to accept per line:
+
+- **Search for the reading roles** (planner, scanner, the reviewers): a structural search for the host's languages, and the host's own reference tool where it has one. One line in `dispatch.constraints`.
+- **A lint per kind of file, chosen by scope.** Each accepted lint becomes a scoped check in `verification.integrate`, so an item that touches such a file meets the check and no agent has to remember it. Findings a file already has become a count that may fall and never rise.
+- **What it deliberately does not propose**, with the measured reason, so the owner sees the trade: on the app repo a language server per agent was refused because the main machine had 3 GB of memory free.
+- **One list of tools and versions** the host installs from on every machine it runs on, and a line when a machine lacks one.
+
+The app repo's accepted set is the worked example: ast-grep for search and for its own rules, shellcheck, actionlint, ruff, `tsc --checkJs` over its scripts, and cargo-nextest after one measured run. Its owner accepted all of them on 2026-11-11.
