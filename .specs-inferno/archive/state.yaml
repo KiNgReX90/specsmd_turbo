@@ -267,3 +267,106 @@ intents:
         complexity: low
         mode: autopilot
         depends_on: [decompose-fanout, config-wizard-ux, delivery-mode-impl]
+  - id: integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblings-verify-item-waits-only-on-overlap-and-a-run-branch-keeps-its-config
+    title: "Integrate checks what a base commit changed and lands beside busy siblings, verify-item waits only on overlap, and a run branch keeps its config"
+    status: completed
+    completed_at: 2026-11-11T10:48:01Z
+    created: 2026-11-09
+    base_branch: main
+    depends_on_intents: []
+    tester_cases: []
+    comment: |
+      SOURCE. Items 7 to 11 of Skoft_CRA docs/clean-code/tooling.md (lines 16-21), decided by the clean-code lead on 2026-11-09 as one flow intent, reinstalled later on the lead's go.
+      INTENT. (a) five runner defects across integrate's diff anchor, its dirty refusal and its ledger commit, verify-item's attribution and the run config record; (d) the attribution and the config record own disjoint files and build beside the integrate chain.
+      MEASURED at 2205834 by evidence/runner-defects.sh. A commit on main prints SKIP for its scoped check and exits 0, and with doubles exits 2 BAD_CONFIG; a pending review file outside every scope exits 2 DIRTY; ownedBy of a collapsed untracked dir is false; a bare integrate after a --config one runs the repo config. Three attribution cases assert the wait on a disjoint dispatch. completeItem also rewrites the work-item file, so the ledger commit stages it beside state.yaml.
+      DECISIONS. Integrate inherits the lanes-only since rule of 97e34e7 and runs every scoped check when nothing gives a diff; it refuses only dirt inside the scopes of the checks it runs, the items' own files and the ledger files; the gate keeps its whole-tree refusal; an unexplained change beside a disjoint open dispatch waits for it; the run config lives in cacheDir/<branch>/run-config.json for intent run branches only, read by worktree, integrate, gate, green, ship and the lane accepts; no flow-side reservation refusal.
+      CHAIN. The dirt item follows the anchor item and the ledger item; attribution and the config record start at once; run-integrate.cjs and run.cjs overlaps serialize in the orchestrator. Every edit sits in the orchestrate scripts dir, no agent or skill text.
+      INSTALLED COPY. None in this repo; the drift test installs into a sandbox. TESTER. None. LOOK. None.
+      STOPPED. The run was stopped on the owner's order on 2026-11-10, and its claim was released with unclaim-intent. The three open items were finished by hand on the inferno-improvement branch, outside the runner: the base item's correction in d135d299 and ca64da08, the config item's correction in 4446e8b2, and the fifth item in 182cbc12 with its tests in 4e2ad0e7. Each was checked with its tests and with line breaks that turned a test red, and the two corrections were re-read cold, but none of those reviews went through the runner. The item states below are the runner's last record: two items completed, the base item and the config item pending with review fix, and the fifth item pending with no review. The human step that remains: on a machine that can integrate this intent, record a review of each open item with run.cjs review --item, land each with run.cjs integrate --item, then run close-intent and archive-intent.
+      FINISHED. On 2026-11-11 the runner reviewed the three open items on this branch, each on both lenses. The base item took one correction of two minor findings and settled. The config item went to a fresh escalate builder, for a record that could not be read, and came back clean. The fifth item took two corrections, the second decided by the oracle, and came back clean with both its mutants caught. Each landed with integrate, so every item below reads completed. The intent was then closed and archived with no intent scan, no intent review and no gate run, because its gate command belongs to another machine. In their place the whole flow script suite and the other tests of the package ran on this branch: all green except twelve Codex wait tests, which fail on the Codex version of the machine that ran them.
+    work_items:
+      - id: ri-integrate-on-the-base-diffs-from-since-or-origin
+        title: "Integrate on the base branch diffs from --since or origin, so a commit there selects its scoped checks"
+        kind: behavior
+        complexity: medium
+        mode: autopilot
+        status: completed
+        completed_at: 2026-11-11T10:02:48Z
+        integrated_at: 2026-11-11T10:02:48Z
+        integrated_sha: a3c3c3ba
+        review_misses: 1
+        review: settled
+        review_hash: 787d9d1b1f3ee91df61f6e0e04b2b140bda7fb731dbc56dd328014f65763fc68
+        review_commit: ee9abca62881fa6f732c84aa75acc837a2ee99ab
+        review_tier: strong
+        review_weight: minor
+        reviewed_at: 2026-11-11T10:02:28Z
+        depends_on: []
+      - id: ri-the-ledger-commit-stages-only-what-completion-wrote
+        title: "The ledger commit stages only the files the completion wrote, so a review file written beside an integrate stays its reviewer's"
+        kind: behavior
+        complexity: low
+        mode: autopilot
+        status: completed
+        completed_at: 2026-11-10T05:21:40Z
+        integrated_at: 2026-11-10T05:21:40Z
+        integrated_sha: 5fcdaa05
+        review: clean
+        review_hash: 2cafa9b6fe3819f317c90578df2f1acf847abff4510f3a2a40502b317bad4bdf
+        review_commit: 7ec3d298cc7916b1984cbbe21999762497dc5055
+        review_tier: strong
+        review_rejections: 0
+        review_weight: none
+        reviewed_at: 2026-11-10T05:21:17Z
+        depends_on: []
+      - id: ri-integrate-refuses-only-the-dirt-it-reads-or-commits
+        title: "Integrate refuses only the uncommitted files it would read or commit, so a reviewed item lands beside a busy sibling"
+        kind: behavior
+        complexity: high
+        mode: autopilot
+        status: completed
+        completed_at: 2026-11-11T10:34:58Z
+        integrated_at: 2026-11-11T10:34:58Z
+        integrated_sha: 2ac404f9
+        review: clean
+        review_hash: 49b0512c56186d9caa896ac37404c96b19c20260d81d042f76d3c9bfe73b224b
+        review_commit: 6196a5e6f1ab22b661ea999a1f0886f5ef182aaf
+        review_tier: strong
+        review_misses: 2
+        review_weight: none
+        reviewed_at: 2026-11-11T10:34:58Z
+        depends_on: [ri-integrate-on-the-base-diffs-from-since-or-origin, ri-the-ledger-commit-stages-only-what-completion-wrote]
+      - id: ri-verify-item-waits-only-on-an-overlapping-open-dispatch
+        title: "Verify-item waits only on an open dispatch whose frozen ownership overlaps the item's"
+        kind: behavior
+        complexity: high
+        mode: autopilot
+        status: completed
+        completed_at: 2026-11-10T06:04:03Z
+        integrated_at: 2026-11-10T06:04:03Z
+        integrated_sha: 350cf394
+        review: clean
+        review_hash: cfa1360e38424959c21bb92d345003c91ea8fc6c29c43ad6488a180ee37ea29b
+        review_commit: d7ffe547889a0f55791be6faa6625b99d1b3d923
+        review_tier: strong
+        review_rejections: 1
+        review_weight: none
+        reviewed_at: 2026-11-10T06:03:50Z
+        depends_on: []
+      - id: ri-a-run-branch-keeps-the-config-it-was-given
+        title: "A run branch keeps the config it was given, and its later integrate and gate read it from there"
+        kind: behavior
+        complexity: high
+        mode: autopilot
+        status: completed
+        completed_at: 2026-11-11T10:06:20Z
+        integrated_at: 2026-11-11T10:06:20Z
+        integrated_sha: 6b46feed
+        review_misses: 2
+        review: clean
+        review_hash: 9ce86b8d074f3f4f47a07bf15bbe08449892891a477789c76f6e3761691c7bb3
+        review_commit: 5b35acd693bc40fe4b8ab27d5753f7bcf4d184c1
+        review_tier: escalate
+        review_weight: none
+        reviewed_at: 2026-11-11T10:06:14Z
+        depends_on: []
