@@ -10,6 +10,7 @@ const analytics = require('./analytics');
 const { stageFlow } = require('./install/stage');
 const { applyInstall, InstallError } = require('./install/transaction');
 const { sourceCommit } = require('./install/lock');
+const { mutateLine } = require('./install/host-config');
 
 // Use theme from CLIUtils for consistent styling
 const { theme } = CLIUtils;
@@ -230,6 +231,8 @@ async function installFlow(flowKey, toolKeys, options = {}) {
   });
   CLIUtils.displayStatus('', `Installed ${count} files and wrote .specsmd/${flowKey}/flow.lock`, 'success');
   writeFlowConfig(root, flowKey, options.config);
+  const mutate = mutateLine(root, flowKey);
+  if (mutate) console.log(theme.warning(`  ${mutate}`));
   return count;
 }
 

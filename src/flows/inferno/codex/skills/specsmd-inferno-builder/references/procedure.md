@@ -20,7 +20,7 @@ For a batch, the assignment supplies those fields per item in dependency order p
 
 Read applicable `AGENTS.md` files before touching a scoped path. Do not edit `.specs-inferno/state.yaml`, commit, select more work, or spawn another agent.
 
-- **Batch:** every round carries every independent call you can already name; a round with a single shell call is the shape to avoid unless the next call needs that call's result.
+- **Batch:** plan the round before you issue it: every round carries every independent call you can already name; a round with a single shell call is the shape to avoid unless the next call needs that call's result.
 - Return once, when ready or blocked, with the result envelope. Send no progress message and answer no message that is not a correction, a granted path or an oracle decision.
 - Write nothing outside the worktree: no memo, checkpoint, failure map, run-state file or diagnostic log under `/tmp`.
 - Request elevated permissions only for the one command the sandbox has refused, with the refusal line as the evidence, never for the commands after it.
