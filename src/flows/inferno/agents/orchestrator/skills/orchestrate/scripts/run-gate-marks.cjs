@@ -19,6 +19,7 @@ const { configuredLanes } = require('./run-lane-config.cjs');
 const { intentFor, intentItems } = require('./run-intent-owed.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
 const { gateMark } = require('./run-criterion-marks.cjs');
+const { gateStartCall } = require('./run-call.cjs');
 
 const MAX_LINES = 30;
 const WORDS = {
@@ -38,10 +39,10 @@ function markedCriteria(tree, intent) {
 }
 
 /** The verdict the gate's payload gives one name. */
-function verdictOf(name, config, payload) {
+function verdictOf(name, tree, config, payload) {
   const lane = configuredLanes(config).find((entry) => `verification.${entry.name}` === name);
   if (lane) {
-    if (!Array.isArray(payload.lanes)) return 'not run by this gate, gate --detach starts the lanes';
+    if (!Array.isArray(payload.lanes)) return `not run by this gate, ${gateStartCall(tree)} starts the lanes`;
     const state = payload.lanes.find((entry) => entry.lane === lane.name);
     if (!state) return 'not started, no path in its scope changed';
     return state.state === 'green' ? 'GREEN' : state.state;
@@ -60,7 +61,7 @@ function withMarks(options, result) {
   const marks = markedCriteria(tree, intentFor(tree, options));
   if (marks.length === 0) return result;
   const config = lib.readConfig(tree, options.config);
-  for (const mark of marks) mark.verdict = verdictOf(mark.gate, config, payload);
+  for (const mark of marks) mark.verdict = verdictOf(mark.gate, tree, config, payload);
   const lines = marks.map((mark) => `MARKED ${mark.item}:${mark.criterion} (gate: ${mark.gate}): ${mark.verdict}`);
   const room = MAX_LINES - result.out.length;
   const shown = room > 0 ? lib.capLines(lines, room) : [];

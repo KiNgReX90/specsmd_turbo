@@ -25,6 +25,8 @@ const path = require('path');
 const { TransitionError } = require('./state-ledger.cjs');
 const { atomicWrite } = require('./state-store.cjs');
 const { parseYaml } = require('./run-yaml.cjs');
+// A leaf, so the writer prints its calls through it with the caller's tree, intent and host config.
+const { intentReviewCall } = require('./run-call.cjs');
 
 /** Beside the host's other rule files (run-standards.cjs), which this writer does not load: run-lib loads the writer. */
 const RULE = '.specs-inferno/standards/defer-findings.yaml';
@@ -78,13 +80,14 @@ function deferFinding(options) {
   const specs = path.dirname(path.resolve(options.file));
   const dir = path.join(specs, 'intents', options.intent);
   const abs = path.join(dir, 'review.yaml');
-  const rel = path.relative(path.dirname(specs), abs);
+  const root = path.dirname(specs);
+  const rel = path.relative(root, abs);
   if (!fs.existsSync(abs)) {
     throw new TransitionError(`no intent review of ${options.intent} at ${rel}: defer-finding moves a finding of a recorded intent review`, 'NO_REVIEW');
   }
   const doc = parseYaml(fs.readFileSync(abs, 'utf8'));
   if (typeof doc.tree !== 'string') {
-    throw new TransitionError(`${rel} is not recorded: record it with run.cjs review first, then defer from what it found`, 'NOT_RECORDED');
+    throw new TransitionError(`${rel} is not recorded: run ${intentReviewCall(root)} first, then defer from what it found`, 'NOT_RECORDED');
   }
   const findings = Array.isArray(doc.findings) ? doc.findings : [];
   const n = Number(options.entry);
@@ -110,7 +113,6 @@ function deferFinding(options) {
     deferred: [...(Array.isArray(doc.deferred) ? doc.deferred : []), entry],
   };
   // With no finding open the review says clean, unless a criterion still owes a proof: then it stays fix, and its reviewer proposes one.
-  const root = path.dirname(specs);
   const gaps = proofGaps(root, options.intent, next);
   next.verdict = open.length > 0 || gaps.length > 0 ? 'fix' : 'clean';
   const order = [...INTENT_KEYS, ...RECORDED_ORDER];
