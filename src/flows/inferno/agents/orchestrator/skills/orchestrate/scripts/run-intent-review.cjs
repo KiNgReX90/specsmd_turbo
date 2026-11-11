@@ -8,7 +8,9 @@
  * validates it, records the tree it read and commits that one file. A fix review sends each
  * finding to the item that owns it; the next intent review reads only what changed since. The
  * dispatch names each item that settled a minor-only fix with no second item review, with the
- * range of that correction.
+ * range of that correction. A current fix review with a surviving mutant names `--rerun
+ * survivors`, which records the same review again and runs its survivors, for a survivor that
+ * would now be caught with no change to the code under review.
  */
 
 const fs = require('fs');
@@ -23,7 +25,7 @@ const { reviewerId } = require('./run-review-file.cjs');
 const owed = require('./run-intent-owed.cjs');
 const { gateStartCall, intentRecordCall, intentReviewCall, itemReviewCall, scanCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
-const { intentMutants } = require('./run-review-mutants.cjs');
+const { intentMutants, reopenIntentReview } = require('./run-review-mutants.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const slot = require('./run-slot.cjs');
 const { deferredItems } = require('./state-defer.cjs');
@@ -145,7 +147,36 @@ async function record(tree, context, commit, restored) {
   return { ...result, out: [...restored, ...ran, ...result.out] };
 }
 
+/** The call that runs the survivors of a current fix review again. */
+const rerunCall = (tree) => `${intentReviewCall(tree)} --rerun survivors`;
+
+/** Refuse `--rerun survivors` for a review that has no survivor to run again, saying why. */
+const noRerun = (why) => new RunError(`--rerun survivors runs the surviving mutants of a current fix intent review, and this one ${why}`,
+  'BAD_ARGS', 1);
+
+/**
+ * The current fix review's survivors run again in a new record of the same review, for a survivor
+ * that would now be caught with no change to the code under review. The reviewer's file goes back
+ * as it wrote it, and on any refusal the recorded file stays as it was.
+ */
+async function rerun(tree, context, review, restored) {
+  if (review.verdict !== 'fix') throw noRerun('says clean');
+  if (!review.survivors.some((mutant) => mutant.find !== undefined)) throw noRerun('holds no surviving mutant with a line to break');
+  const abs = path.join(tree, context.rel);
+  const recorded = fs.readFileSync(abs, 'utf8');
+  reopenIntentReview(tree, context.rel);
+  try {
+    return await record(tree, { ...context, reviewer: context.reviewer || review.reviewer }, lib.git(tree, ['rev-parse', 'HEAD']), restored);
+  } catch (error) {
+    fs.writeFileSync(abs, recorded);
+    throw error;
+  }
+}
+
 function reviewIntent(options) {
+  if (options.rerun !== undefined && options.rerun !== 'survivors') {
+    throw new RunError(`--rerun takes survivors, not ${options.rerun}`, 'BAD_ARGS', 1);
+  }
   const tree = options.tree || lib.repoRoot(options.cwd);
   const intent = owed.intentFor(tree, options);
   const config = lib.readConfig(tree, options.config);
@@ -186,9 +217,15 @@ function reviewIntent(options) {
   // A fix review whose every finding is deferred owes its reviewer for the criteria still without a proof (run-review-aside.cjs).
   const current = state.review && owed.reviewCurrent(tree, config, state.review) && !proofOwed(tree, intent, state.review);
   if (current) {
+    if (options.rerun) return rerun(tree, context, state.review, folded);
     const head = `intent review ${state.review.verdict} for the current tree (read at ${state.review.commit.slice(0, 7)})`;
-    return verdict(tree, context, state.review, `${folded.length ? `${folded[0]}; ` : ''}${head}`);
+    const result = verdict(tree, context, state.review, `${folded.length ? `${folded[0]}; ` : ''}${head}`);
+    if (!state.review.survivors.some((mutant) => mutant.find !== undefined)) return result;
+    const call = rerunCall(tree);
+    const line = `a survivor whose builder answered without a change to the code under review: run ${call} to run the surviving mutants again`;
+    return { ...result, payload: { ...result.payload, rerun: call }, out: [...result.out, line] };
   }
+  if (options.rerun) throw noRerun(`is owed: ${state.owed.join('; ')}`);
   const from = state.review && state.review.commit ? state.review.commit : gate.mergeBase(tree, base);
   return dispatch(tree, context, state.owed, from, folded, state.review ? rel : null);
 }

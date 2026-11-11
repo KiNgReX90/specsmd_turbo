@@ -18,8 +18,9 @@ This repo is self-contained: the flow's source of truth lives here under `src/fl
 2. `cd src && npm run validate:all`.
 3. `npm pack` to build a tarball.
 4. Drop the tarball in this repo's `evals/dist/`.
-5. Run `evals/install-eval.sh <tarball>` (deterministic install eval).
-6. Run the e2e smoke harness under `evals/e2e/`.
+5. Run `evals/install-eval.sh <tarball>` (deterministic install eval: the scripted install for Claude Code and Codex, every surface and pin, every installed suite). Without registry access run it from the checkout: `evals/install-eval.sh --source src`.
+6. Run `evals/budget-eval.sh <tarball> --consumer evals/fixtures/acme-shop` (or `--source src`): the flow installed beside a consumer's charter files, held to that consumer's own word ceilings.
+7. Run the e2e smoke harness under `evals/e2e/`.
 
 The installed builder agent is kept in sync with its canonical source by a drift **test** (no codegen/sync script).
 

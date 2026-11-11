@@ -113,6 +113,14 @@ CI runs automatically on push.
 
 ### 3. Deploy
 
+Before the merge, run the two install evals from the repository root on the tarball that
+`npm pack` builds in `src/`, or with `--source src` in its place when the registry is out of reach:
+
+```bash
+evals/install-eval.sh <tarball>
+evals/budget-eval.sh <tarball> --consumer evals/fixtures/acme-shop
+```
+
 ```bash
 git checkout main
 git merge dev
