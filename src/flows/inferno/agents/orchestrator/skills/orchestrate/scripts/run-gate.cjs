@@ -19,6 +19,7 @@ const { mergeSlot } = require('./run-config-gates.cjs');
 const { lanesSince, startLanesOnly, startOneLane } = require('./run-lanes-only.cjs');
 const supersede = require('./run-supersede.cjs');
 const { foldBlockers, refuseDirt } = require('./run-dirt.cjs');
+const { withMarks } = require('./run-gate-marks.cjs');
 
 const { RunError } = lib;
 
@@ -300,7 +301,12 @@ function laneDetach(options) {
   return startOneLane(tree, options, lib.readConfig(tree, options.config), restored);
 }
 
+/** Route a gate call; a verdict carries the marked criteria beside it (run-gate-marks.cjs). */
 function gate(options) {
+  return withMarks(options, gateCall(options));
+}
+
+function gateCall(options) {
   if (options.detach && options.wait) throw new RunError('gate takes --detach or --wait, not both', 'BAD_ARGS', 1);
   if (options.lane && options.detach && (options.lanes_only || options.supersede)) {
     throw new RunError('gate takes --lane with --detach alone, not with --lanes-only or --supersede', 'BAD_ARGS', 1);

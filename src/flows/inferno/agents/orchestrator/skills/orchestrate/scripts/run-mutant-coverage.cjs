@@ -12,6 +12,10 @@
  * recorded without `caught` never ran: the intent review's record runs it (run-review-mutants.cjs).
  * A pin counts from either review too (run-review-pins.cjs): the intent review's once its record
  * checked it, an item review's while it still stands in the tree as it is.
+ *
+ * A criterion whose line ends in a gate mark, `(gate: <name>)`, owes neither: the gate proves it
+ * (run-criterion-marks.cjs). It keeps its number, so every recorded mutant names what it named,
+ * unless its mark came after the item's first review outside a commit of its spec alone.
  */
 
 const fs = require('fs');
@@ -19,6 +23,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { pinProblem, testPaths } = require('./run-review-pins.cjs');
+const { gateMark, lateMarks } = require('./run-criterion-marks.cjs');
 
 /** The criteria under `## Acceptance Criteria`, one per list line, checkbox or not. */
 function acceptanceCriteria(content) {
@@ -58,15 +63,17 @@ const owedProposals = (tree, intentId, ids) => ids.flatMap((id) => recordedMutan
 
 /**
  * What each item of the intent needs: its criteria, how its tests prove them, its manifest's test
- * paths, its own caught mutants and its own pins that still stand.
+ * paths, its own caught mutants, its own pins that still stand, and its marks that count for nothing.
  */
 function itemProofs(tree, intentId, ids) {
   return ids.map((id) => {
     const spec = lib.readItemSpec(tree, intentId, id);
     const tests = testPaths(spec);
+    const criteria = acceptanceCriteria(fs.readFileSync(spec.file, 'utf8'));
     return {
       id,
-      criteria: acceptanceCriteria(fs.readFileSync(spec.file, 'utf8')),
+      criteria,
+      late: lateMarks(tree, intentId, id, spec.file, criteria),
       tested: tests.length > 0,
       tests,
       mutants: itemMutants(tree, intentId, id),
@@ -89,9 +96,12 @@ function names(mutant, item, index, own) {
   return Boolean(number) && Number(number[1]) === index + 1;
 }
 
+const LATE = " (its gate mark came after the item's first review, outside a commit of its spec alone)";
+
 /**
  * One line per item that still owes a caught mutant or a checked pin, naming the criteria it owes.
- * `intentPins` are the intent review's pins, which its record checked.
+ * `intentPins` are the intent review's pins, which its record checked. A criterion with a gate
+ * mark owes none, unless the item lists its index under `late`.
  */
 function mutantGaps(items, intentMutants, intentPins = []) {
   const lines = [];
@@ -100,8 +110,11 @@ function mutantGaps(items, intentMutants, intentPins = []) {
     const own = [...item.mutants, ...item.pins];
     const named = (index) => own.some((entry) => names(entry, item, index, true)) ||
       [...caught, ...intentPins].some((entry) => names(entry, item, index, false));
+    const late = (index) => (item.late || []).includes(index);
+    const gated = (index) => gateMark(item.criteria[index]) !== null && !late(index);
     if (!item.tested) continue;
-    const owed = item.criteria.map((text, index) => (named(index) ? null : `${index + 1} "${text}"`)).filter(Boolean);
+    const owed = item.criteria.map((text, index) => (gated(index) || named(index) ? null : `${index + 1} "${text}"${late(index) ? LATE : ''}`))
+      .filter(Boolean);
     if (owed.length > 0) lines.push(`${item.id} owes a caught mutant or a checked pin for criteria ${owed.join(', ')}`);
   }
   return lines;
