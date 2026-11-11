@@ -217,7 +217,7 @@ function parseQualityReview(tree, rel, itemId, { recorded }) {
   }
   if (doc.item !== itemId) throw bad(rel, `item reads ${doc.item || 'nothing'}, and this is the review of ${itemId}`);
   if (doc.verdict !== 'clean' && doc.verdict !== 'fix') throw bad(rel, 'verdict must be clean or fix');
-  const files = boundFiles(tree, rel, doc);
+  const files = boundFiles(tree, rel, doc, { recorded });
   const { findings } = verdictParts(rel, doc, QUALITY_FINDING_KEYS, QUALITY_OPTIONAL);
   const ids = new Set();
   for (const [index, finding] of findings.entries()) {
