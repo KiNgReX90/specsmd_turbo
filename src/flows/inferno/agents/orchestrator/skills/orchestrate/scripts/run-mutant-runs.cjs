@@ -261,6 +261,6 @@ function previousEntries(tree, rel) {
 const ownFindings = (doc) => (Array.isArray(doc.findings) ? doc.findings.filter((finding) => !isMap(finding) || finding.mutant === undefined) : []);
 
 /** The entry as a review file keeps it: the proposal, then what the runner wrote, in that order. */
-const kept = (entry) => Object.fromEntries([...MUTANT_KEYS, 'caught', 'why'].map((key) => [key, entry[key]]).filter(([, value]) => value !== undefined));
+const kept = (entry) => Object.fromEntries([...MUTANT_KEYS, 'was', 'caught', 'why'].map((key) => [key, entry[key]]).filter(([, value]) => value !== undefined));
 
 module.exports = { changedSince, checkTargets, dump, kept, locate, ownFindings, previousEntries, ranLines, runEntries, survivorFinding };

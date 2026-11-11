@@ -5,7 +5,7 @@ const test = require("node:test");
 // whole statement in a place a value can stand. Anything else takes the classic in-place build.
 // These cases pin which mistakes share the build and which go on their own.
 
-const { blame, planRust, switchText } = require("./run-mutate-rust.cjs");
+const { blame, planRust, runsCompiled, switchText } = require("./run-mutate-rust.cjs");
 
 /** Plan one entry: `find` on the last line of `lines`, at its `nth` occurrence there. */
 function plan(lines, find, replace = "X", nth = 0) {
@@ -122,4 +122,37 @@ test("blame takes the short message format too, and an error on no entry's line 
   assert.deepEqual(blame("src/lib.rs:7:9: error[E0308]: mismatched types\nerror: could not compile `x`\n", switched), [2]);
   assert.deepEqual(blame("error[E0425]: cannot find value `y`\n --> src/lib.rs:5:9\n  |\n5 |     y\n", switched).sort(), [1, 2]);
   assert.deepEqual(blame("error[E0425]: oops\n --> src/elsewhere.rs:5:9\n", switched).sort(), [1, 2, 3]);
+});
+
+// A switch is read by compiled code only: a test that reads the source sees the original in the
+// other branch and stays green. So an entry is switched only when its test starts a cargo run, by
+// itself or through the host's wrapper (`mutate.session.match` at the command's start).
+const WRAPPER = /^tools\/remote-test\.sh \S+ /;
+
+test("a test that starts a cargo run reads compiled code, and one that only reads the source does not", () => {
+  for (const command of [
+    "cargo test -p app",
+    "cargo",
+    "cd crates/app && cargo nextest run",
+    "RUST_LOG=debug cargo test",
+    "\"/home/dev/.cargo/bin/cargo\" test",
+    "node scripts/check.mjs; cargo test",
+    "(cargo test --lib)",
+    "make fmt || cargo test",
+  ]) assert.equal(runsCompiled(command, null), true, command);
+  for (const command of [
+    "node scripts/wire-enums.mjs --check",
+    "grep -q cargo Cargo.toml",
+    "cargo-watch -x test",
+    "./run-tests.sh cargo",
+    "tools/remote-test.sh box cargo test",
+  ]) assert.equal(runsCompiled(command, null), false, command);
+});
+
+test("a test that goes through the host's wrapper into a cargo run reads compiled code too", () => {
+  assert.equal(runsCompiled("tools/remote-test.sh box cargo test", WRAPPER), true);
+  assert.equal(runsCompiled("tools/remote-test.sh box node scripts/check.mjs", WRAPPER), false);
+  const anywhere = /tools\/remote-test\.sh \S+ /;
+  assert.equal(runsCompiled("echo tools/remote-test.sh box cargo test", anywhere), false, "the wrapper counts at the command's start only");
+  assert.equal(runsCompiled("box cargo test", /ox /), false, "a wrapper found past the start leaves the command whole");
 });

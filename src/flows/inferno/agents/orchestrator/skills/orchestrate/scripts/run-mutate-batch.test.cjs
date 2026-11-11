@@ -138,6 +138,26 @@ test("an entry on an attribute line takes its own build in place, beside the sha
   assert.match(human.out, /^caught yes \| src\/lib\.rs:6 \| AC2 \| own build: on an attribute line$/m);
 });
 
+// A script that reads the source: behind a switch it would still read the original and stay green.
+const READS_SOURCE = "'use strict';\nconst ok = require('fs').readFileSync('src/lib.rs', 'utf8').includes(process.argv[2]);\n" +
+  "console.log(ok ? '# pass 1' : '# fail 1');\nprocess.exit(ok ? 0 : 1);\n";
+
+test("a Rust entry whose test reads the source is built in place and caught, beside a switched one whose test starts cargo", (t) => {
+  const f = batchTree(t, { "src/lib.rs": LIB, "checks/reads.cjs": READS_SOURCE, "src/m.js": "module.exports = 1;\n" });
+  const result = runBatch(f, [
+    entry(f, "AC1", 3, "3", "9", "gamma", "{ 3 }"),
+    { criterion: "AC2", file: "src/lib.rs", line: 2, find: "2", replace: "8", test: "node checks/reads.cjs '{ 2 }'" },
+    // Only a Rust entry is switched, whatever its test runs.
+    { criterion: "AC3", file: "src/m.js", line: 1, find: "1", replace: "2", test: fakeTest(f, "gamma", "{ 3 }") },
+  ], { json: true });
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.form, e.caught]), [["switch", true], ["classic", true], ["classic", false]]);
+  assert.equal(result.payload.entries[1].own, "its test starts no cargo run, so it reads the source in place");
+  assert.equal(result.payload.switched, 1);
+  assert.equal(read(f), LIB);
+  assert.equal(git(f.root, "status", "--porcelain"), "");
+});
+
 test("a test red with every switch off stops the batch with no verdict at all, and every file is restored", (t) => {
   const f = batchTree(t, { "src/lib.rs": LIB, "src/m.js": "module.exports = 1;\n" });
   const result = runBatch(f, [
@@ -276,7 +296,9 @@ for (const [shape, files, entries, first] of [
   test(`a SIGTERM to the batch during entry 1 of ${shape} stops it before entry 2, and every file is restored`, async (t) => {
     const f = batchTree(t, files);
     const marks = path.join(f.dir, "marks");
-    const sleeper = `echo "\${INFERNO_MUTANT:-off}" >> ${JSON.stringify(marks)}; sleep 1`;
+    // A switched entry's test starts a cargo run; the fake's answer is thrown away, since the sleep decides.
+    const cargo = first === "switch" ? `${JSON.stringify(f.cargo)} test none none > /dev/null; ` : "";
+    const sleeper = `${cargo}echo "\${INFERNO_MUTANT:-off}" >> ${JSON.stringify(marks)}; sleep 1`;
     const file = path.join(f.dir, "batch.json");
     writeFile(file, JSON.stringify(entries.map((e) => ({ ...e, test: sleeper }))));
     const child = spawn(process.execPath, [RUN, "mutate", "--tree", f.root, "--batch", file], { cwd: f.root, env: env(f), stdio: ["ignore", "pipe", "pipe"] });
