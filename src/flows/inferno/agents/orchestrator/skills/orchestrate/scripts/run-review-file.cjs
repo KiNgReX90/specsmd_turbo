@@ -121,8 +121,13 @@ function relativePath(rel, file, what) {
   return normal;
 }
 
-/** The files a review binds: paths inside the tree, outside the ledger, present on disk. */
-function boundFiles(tree, rel, doc) {
+/**
+ * The files a review binds: paths inside the tree and outside the ledger, and for a fresh file,
+ * one being recorded, present on disk. A recorded review keeps a path that left the tree since:
+ * a file deleted or renamed after its review is a file that changed, so the review's hash no
+ * longer holds and the review reads as stale (itemReviewCurrent), never as a malformed file.
+ */
+function boundFiles(tree, rel, doc, { recorded = false } = {}) {
   const files = listOf(rel, doc, 'files');
   if (files.length === 0) throw bad(rel, 'files must list every file the review read for this item');
   for (const file of files) {
@@ -131,7 +136,9 @@ function boundFiles(tree, rel, doc) {
     if (normal === lib.SPECS_DIR || normal.startsWith(`${lib.SPECS_DIR}/`)) {
       throw bad(rel, `files lists ${file}; the ledger is never part of the code a review binds`);
     }
-    if (!fs.existsSync(path.join(tree, normal))) throw bad(rel, `files lists ${file}, which is not in the tree`);
+    if (!recorded && !fs.existsSync(path.join(tree, normal))) {
+      throw bad(rel, `files lists ${file}, which is not in the tree; list only files the tree holds, never one the change deleted`);
+    }
   }
   return [...new Set(files.map((file) => path.posix.normalize(file)))];
 }
@@ -161,7 +168,7 @@ function parseItemReview(tree, rel, itemId, { recorded }) {
   if (doc.item !== itemId) throw bad(rel, `item reads ${doc.item || 'nothing'}, and this is the review of ${itemId}`);
   if (doc.verdict !== 'clean' && doc.verdict !== 'fix') throw bad(rel, 'verdict must be clean or fix');
 
-  const files = boundFiles(tree, rel, doc);
+  const files = boundFiles(tree, rel, doc, { recorded });
   const { findings, mutants, survivors } = verdictParts(rel, doc, FINDING_KEYS, ['repeat']);
   for (const [index, finding] of findings.entries()) {
     if (finding.repeat !== undefined && finding.repeat !== 'true') {
