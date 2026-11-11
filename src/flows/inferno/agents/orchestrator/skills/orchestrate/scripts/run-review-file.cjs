@@ -269,6 +269,43 @@ function proposalsOf(rel, doc, criterionOf, held = () => false) {
   return proposals;
 }
 
+/**
+ * The marker that opens a comment line, by the file's extension or its whole name, for the languages
+ * a name tells. A file of any other language is not judged.
+ */
+const COMMENT_MARKERS = new Map([
+  ['#', 'py pyi sh bash zsh rb pl pm r yaml yml toml tf ps1 nix ex exs jl coffee cmake mk makefile dockerfile'],
+  ['//', 'js cjs mjs jsx ts tsx mts cts java kt kts scala groovy gradle c h cc cpp cxx hpp hh cs go rs swift dart php proto zig sol scss less jsonc'],
+  ['--', 'sql lua hs elm ada adb ads vhd vhdl'],
+].flatMap(([marker, names]) => names.split(' ').map((name) => [name, marker])));
+
+/** The comment marker `text`, a line of `file`, opens with after its indent, or null. */
+function commentMarker(file, text) {
+  const name = path.posix.basename(file).toLowerCase();
+  const marker = COMMENT_MARKERS.get(name.slice(name.lastIndexOf('.') + 1));
+  return marker && text.trimStart().startsWith(marker) ? marker : null;
+}
+
+/**
+ * Refuse a proposal on a comment line: no test can tell it from the original, so it survives and
+ * proves nothing. A file or line the tree does not hold is left to the batch's own refusal.
+ */
+function refuseComments(tree, rel, proposals) {
+  proposals.forEach((proposal, index) => {
+    let lines;
+    try {
+      lines = fs.readFileSync(path.join(tree, proposal.file), 'utf8').split('\n');
+    } catch (error) {
+      return;
+    }
+    const marker = commentMarker(proposal.file, lines[Number(proposal.line) - 1] || '');
+    if (marker) {
+      throw bad(rel, `mutants entry ${index + 1} breaks ${proposal.file}:${proposal.line}, a line that opens with the comment marker ${marker}, ` +
+        'so no test can tell; propose a mutant on a line that runs');
+    }
+  });
+}
+
 /** How a first item review names a criterion: its number alone, among the item's `count`. */
 const itemCriterion = (itemId, count) => (text) => {
   if (!/^\d+$/.test(text)) return `criterion reads ${text}; name the acceptance criterion by its number alone, 1 for the first`;
@@ -308,13 +345,15 @@ function verdictParts(rel, doc, findingKeys, optional = []) {
     throw bad(rel, 'verdict clean with a mutant that reads caught: no; a surviving mutant says fix, and the runner writes caught itself, ' +
       'so a review it records leaves caught out');
   }
-  if (doc.verdict === 'fix' && findings.length === 0 && survivors.length === 0) {
+  // An intent review whose every finding is deferred stays fix while a criterion owes a proof (state-defer-finding.cjs).
+  if (doc.verdict === 'fix' && findings.length === 0 && survivors.length === 0 && listOf(rel, doc, 'deferred').length === 0) {
     throw bad(rel, 'verdict fix with no finding and no surviving mutant; name what to fix or say clean');
   }
   return { findings, mutants, survivors };
 }
 
 module.exports = {
-  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, entries, isMap, itemCriterion, mutantsOf, parseItemReview,
-  pinsOf, proposalsOf, readDoc, recordedReviewer, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, samePin, verdictParts, weightOf,
+  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, commentMarker, entries, isMap, itemCriterion, mutantsOf,
+  parseItemReview, pinsOf, proposalsOf, readDoc, recordedReviewer, refuseComments, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, samePin,
+  verdictParts, weightOf,
 };

@@ -39,8 +39,9 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const {
-  ITEM_KEYS, isMap, itemCriterion, mutantsOf, pinsOf, proposalsOf, readDoc, refuseNew, sameMutant, samePin, bad,
+  ITEM_KEYS, isMap, itemCriterion, mutantsOf, pinsOf, proposalsOf, readDoc, refuseComments, refuseNew, sameMutant, samePin, bad,
 } = require('./run-review-file.cjs');
+const { carryAside } = require('./run-review-aside.cjs');
 const { checkPins, pinProblem, previousPins, testPaths } = require('./run-review-pins.cjs');
 const { INTENT_KEYS, parseIntentReview } = require('./run-intent-review-file.cjs');
 const { acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals } = require('./run-mutant-coverage.cjs');
@@ -104,6 +105,7 @@ async function itemMutants(tree, context) {
   } else {
     const named = itemCriterion(item.id, acceptanceCriteria(fs.readFileSync(spec.file, 'utf8')).length);
     entries = proposalsOf(rel, doc, named);
+    refuseComments(tree, rel, entries);
     checkTargets(tree, rel, entries);
     pins = pinsOf(rel, doc, named);
     checkPins(tree, rel, pins, () => owner);
@@ -217,14 +219,17 @@ async function intentMutants(tree, context) {
   const items = owed.intentItems(tree, intent);
   parseIntentReview(tree, rel, { recorded: false, items, scanIds: scanIds(tree, intent, owed) });
   const abs = path.join(tree, rel);
+  // The withdrawn mutants and the deferred findings, carried over and left out of what runs (run-review-aside.cjs).
+  const aside = carryAside(tree, rel, intent, items);
   const text = fs.readFileSync(abs, 'utf8');
   const doc = readDoc(tree, rel);
   const own = ownFindings(doc);
-  const proofs = itemProofs(tree, intent, items);
-  const carried = previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes');
+  const proofs = aside.answer(itemProofs(tree, intent, items));
+  const carried = aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes'));
   retest(rel, doc, carried);
   // Placed before anything is judged: an owed proposal its item's code no longer holds is held by nothing and counts for nothing.
-  const fromItems = placedOwed(tree, intent, items, carried);
+  // A set-aside one is left out before it is placed, as a carried one is.
+  const fromItems = placedOwed(tree, intent, items, [...carried, ...aside.entries]);
   const proposals = proposalsOf(rel, doc, intentCriterion(proofs), (entry) => [...carried, ...fromItems].some((one) => sameMutant(one, entry)));
   refuseSecond(rel, proofs, proposals, [...carried, ...fromItems].filter((entry) => entry.caught !== 'none'));
   const entries = [...carried, ...fromItems, ...proposals];
@@ -240,6 +245,7 @@ async function intentMutants(tree, context) {
   const gaps = (counted) => (doc.verdict === 'clean' ? mutantGaps(proofs, counted, pins) : []);
   const before = gaps(entries.filter((entry) => entry.caught === 'yes' || due(entry)).map((entry) => ({ ...entry, caught: 'yes' })));
   if (before.length > 0) throw bad(rel, gapRefusal(before));
+  refuseComments(tree, rel, proposals);
   checkTargets(tree, rel, proposals);
   if (entries.length === 0 && pins.length === 0 && own.length === (Array.isArray(doc.findings) ? doc.findings.length : 0)) return [];
 

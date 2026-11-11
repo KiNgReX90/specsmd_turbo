@@ -29,6 +29,7 @@ const { intentMutants, reopenIntentReview } = require('./run-review-mutants.cjs'
 const { mergeSlot } = require('./run-config-gates.cjs');
 const slot = require('./run-slot.cjs');
 const { deferredItems } = require('./state-defer.cjs');
+const { proofOwed } = require('./run-review-aside.cjs');
 
 const { RunError } = lib;
 
@@ -213,7 +214,8 @@ function reviewIntent(options) {
   const folded = [...restored, ...gate.foldBase(tree, base)];
   if (owed.scanOwed(tree, intent)) return scanRefusal(tree, context, folded);
   const state = owed.intentReviewState(tree, config, intent);
-  const current = state.review && owed.reviewCurrent(tree, config, state.review);
+  // A fix review whose every finding is deferred owes its reviewer for the criteria still without a proof (run-review-aside.cjs).
+  const current = state.review && owed.reviewCurrent(tree, config, state.review) && !proofOwed(tree, intent, state.review);
   if (current) {
     if (options.rerun) return rerun(tree, context, state.review, folded);
     const head = `intent review ${state.review.verdict} for the current tree (read at ${state.review.commit.slice(0, 7)})`;

@@ -28,6 +28,8 @@
  *                                             (state-review.cjs)
  *   defer-item     --intent <id> --item <id>  take one item out of its intent for a later plan
  *                  --reason <why> [--rewire <item>=<new-dep>]... (state-defer.cjs)
+ *   defer-finding  --intent <id> --entry <n>  move one finding of the recorded intent review into
+ *                  --to <file> --reason <why> its deferred list, on the host's rule (state-defer-finding.cjs)
  *   check [--intent <id>]                     report ledger drift; exit 1 if any found
  *
  * `check` itself lives in state-check.cjs, the reader beside this writer, and is re-exported
@@ -47,6 +49,7 @@ const { check } = require('./state-check.cjs');
 const block = require('./state-block.cjs');
 const review = require('./state-review.cjs');
 const { deferItem } = require('./state-defer.cjs');
+const { deferFinding } = require('./state-defer-finding.cjs');
 const { blockIntentCall, integrateCall, unclaimIntentCall } = require('./run-call.cjs');
 const { withStateLock, atomicWrite } = require('./state-store.cjs');
 const { main: runCli } = require('./state-cli.cjs');
@@ -347,6 +350,7 @@ const unblockIntent = locked(block.unblockIntent);
 const lockedCommands = {
   completeItem: locked(completeItem),
   deferItem: locked(deferItem),
+  deferFinding: locked(deferFinding),
   closeIntent: locked(closeIntent),
   claimIntent: locked(claimIntent),
   unclaimIntent: locked(unclaimIntent),

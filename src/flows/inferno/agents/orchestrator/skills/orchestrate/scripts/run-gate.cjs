@@ -10,6 +10,7 @@ const { resolveBase } = require('./run-intents.cjs');
 const jobs = require('./run-jobs.cjs');
 const lanes = require('./run-lanes.cjs');
 const intentReview = require('./run-intent-owed.cjs');
+const { asideLines } = require('./run-review-aside.cjs');
 const { gateStartCall, gateWaitCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const cases = require('./run-cases.cjs');
@@ -137,6 +138,7 @@ function gateNow(options) {
   }
   const unreviewed = intentReview.gateRefusal(tree, config, intent, before, shown);
   if (unreviewed) return unreviewed;
+  shown.push(...asideLines(tree, intent, { withdrawn: true }));
   // Reject a verdict if the inputs change while the gate runs.
   const codeHash = lib.codeTreeHash(tree);
   const started = proofs.scopeHash(tree);
@@ -218,6 +220,7 @@ function gateDetach(options) {
   // Refused here too, or the child dies refusing and --wait reports a gate with no result.
   const unreviewed = intentReview.gateRefusal(tree, current, intent, before, folded);
   if (unreviewed) return unreviewed;
+  folded.push(...asideLines(tree, intent, { withdrawn: true }));
   const laneStart = lanes.startLanes(tree, options, current, changedPaths(tree, mergeBase(tree, base)));
   const args = ['gate', '--tree', tree, '--json'];
   if (options.base) args.push('--base', options.base);
