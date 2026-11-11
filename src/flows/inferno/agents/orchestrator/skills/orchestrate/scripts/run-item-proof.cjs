@@ -36,8 +36,12 @@
  *                    and every line the diff adds to a test file, new ones included, that
  *                    switches a test off, as { file, line, text }, `line` 1-based in the new
  *                    file. A switch-off fails verify-item. Null when `diff` is.
+ *   real_app         only on a host that sets `real_app.prove`: { command, journeys, exit,
+ *                    seconds, counts, tail, log } of its run over the journeys the diff changed,
+ *                    whose red fails verify-item, or null when the diff changed none
+ *                    (run-real-app-prove.cjs)
  *
- * `proofAtHead(tree, intent, item)` tells whether the proof is of the state a review reads.
+ * `proofAtHead(tree, intent, item, config)` tells whether the proof is of the state a review reads.
  */
 
 const fs = require('fs');
@@ -50,6 +54,7 @@ const { attribute } = require('./run-attribute.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { changedPaths, treeOf } = require('./run-gate.cjs');
 const { isSwitchOff, isTestFile, parseAddedLines } = require('./run-test-files.cjs');
+const { owedProof, proveItem } = require('./run-real-app-prove.cjs');
 
 const { RunError } = lib;
 
@@ -110,21 +115,32 @@ function headDiffHash(tree, from, files) {
  * any other state, and `none` when there is no proof or it holds no diff. A path of the ledger
  * (`inLedger`) is in neither the proof nor this comparison. `items` are the items
  * the proof checked as one unit, and `paths` the proof's, cut to the item's own for a batch.
+ * On a host with `real_app.prove` in `config` (the tree's own config when none is given), a
+ * proof without the run of the journeys its diff changed is `stale` too, and so is no proof of an
+ * item owning a journey; `why` then says so (run-real-app-prove.cjs).
  */
-function proofAtHead(tree, intent, item) {
+function proofAtHead(tree, intent, item, config = null) {
   const file = proofPath(tree, intent, item);
   const proof = readItemProof(tree, intent, item);
-  if (!proof || !proof.diff) return { state: 'none', file, items: [item] };
+  const host = config || lib.readConfig(tree);
+  // A dispatched item always has its editable list: the frontier refuses one without it.
+  const editable = (id) => lib.readItemSpec(tree, intent, id).manifest.ownership.editable;
+  if (!proof) {
+    const owned = () => ((lib.readItemSpec(tree, intent, item).manifest || {}).ownership || {}).editable || [];
+    const why = owedProof(tree, host, null, file, owned);
+    return why ? { state: 'stale', file, items: [item], why } : { state: 'none', file, items: [item] };
+  }
+  if (!proof.diff) return { state: 'none', file, items: [item] };
   const { items, diff: { from, paths } } = proof;
   const stale = { state: 'stale', file, items };
   if (!lib.git(tree, ['rev-parse', '--verify', '--quiet', `${from}^{commit}`], { tolerate: true })) return stale;
-  // A dispatched item always has its editable list: the frontier refuses one without it.
-  const editable = (id) => lib.readItemSpec(tree, intent, id).manifest.ownership.editable;
   const owned = items.flatMap(editable);
   const changed = lib.gitLines(tree, ['diff', '--name-only', '--no-renames', from, 'HEAD'], { tolerate: true })
     .filter((entry) => !inLedger(entry) && lib.ownedBy(entry, owned, tree));
   if (changed.some((entry) => !paths.includes(entry))) return stale;
   if (headDiffHash(tree, from, paths) !== proof.diff.sha256) return stale;
+  const why = owedProof(tree, host, proof, file, () => []);
+  if (why) return { ...stale, why };
   const own = items.length > 1 ? paths.filter((entry) => lib.ownedBy(entry, editable(item), tree)) : paths;
   return { state: 'current', file, items, from, paths: own };
 }
@@ -329,8 +345,9 @@ function verifyItem(itemId, options) {
   // `--since` names the baseline by hand; without it each item answers to its own dispatch,
   // and an item the runner before signed records dispatched is checked the old way.
   const out = [];
+  const config = lib.readConfig(tree, options.config);
   let attribution = options.since ? null
-    : attribute(tree, items, { ...options, base: options.base || resolveBase(lib.readConfig(tree, options.config), null, tree) });
+    : attribute(tree, items, { ...options, base: options.base || resolveBase(config, null, tree) });
   if (attribution && attribution.legacy) {
     out.push(`no signed dispatch for ${attribution.legacy.join(', ')}: checked since HEAD as the runner before signed records did`);
     attribution = null;
@@ -381,9 +398,15 @@ function verifyItem(itemId, options) {
   const switchedOff = read.tests_changed ? read.tests_changed.switched_off : [];
   if (switchedOff.length > 0) failed = true;
   for (const entry of switchedOff) out.push(`switched off: ${entry.file}:${entry.line}: ${entry.text}`);
+  // On a host with real_app.prove the journeys the diff changed run here, and a red fails the item.
+  const realApp = proveItem(tree, config, options.config || path.join(lib.SPECS_DIR, 'config.yaml'),
+    read.diff ? read.diff.paths : [], items[0].id, (output) => ({ counts: parseCounts(output), tail: tailLines(output) }));
+  if (realApp) out.push(...realApp.out);
+  if (realApp && realApp.record && realApp.record.exit !== 0) failed = true;
   const proof = {
     items: items.map((entry) => entry.id), passed: !failed, finished_at: new Date().toISOString(),
     head: lib.git(tree, ['rev-parse', 'HEAD']), since, outside, unreported, commands, ...read,
+    ...(realApp ? { real_app: realApp.record } : {}),
   };
   const files = items.map((entry) => proofPath(tree, entry.intent, entry.id));
   items.forEach((entry, index) => writeProof(files[index], { item: entry.id, intent: entry.intent, ...proof }));

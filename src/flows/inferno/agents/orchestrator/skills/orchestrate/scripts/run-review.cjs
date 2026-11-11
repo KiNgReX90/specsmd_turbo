@@ -100,8 +100,8 @@ function owed(tree, context, reason, from, paths) {
       exit: 3,
       payload: { ok: false, item: item.id, owed: 'verify-item', proof: null, stale: proof.file, verify },
       out: [
-        `verify-item owed for ${item.id} before its review: its proof ${proof.file} was taken over an older state of its paths, ` +
-          'so no reviewer may read it',
+        `verify-item owed for ${item.id} before its review: ${proof.why || `its proof ${proof.file} was taken over an older state of its paths, ` +
+          'so no reviewer may read it'}`,
         `then ${verify}, then ${itemReviewCall(tree, item.id)}`,
       ],
     };
@@ -127,7 +127,7 @@ function owed(tree, context, reason, from, paths) {
 function itemProof(tree, context) {
   // Required here, not at the top: run-item-proof loads run-intents, which loads this file.
   const { proofAtHead } = require('./run-item-proof.cjs');
-  return proofAtHead(tree, context.intent.id, context.item.id);
+  return proofAtHead(tree, context.intent.id, context.item.id, context.config);
 }
 
 /** The most paths a range line lists itself. */

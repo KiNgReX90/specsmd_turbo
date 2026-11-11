@@ -90,6 +90,7 @@ wiring:                           # optional: per kind (command, table or event)
 
 # real_app:                       # optional: globs of the helpers and case texts that drive the real app binary; probes tells each builder to update them, and the reviewer dispatch carries the check that lists every line there still naming a test id, label or route the diff removed and every file there that drives a screen the diff changed; a --config file inherits it
 #   paths: ["integration/lib/**", "integration/*.test.mjs"]
+#   prove: "node integration/prove-journeys.mjs"   # optional: the command that runs, on the real app binary, the journeys an item changed; verify-item runs it in the tree, with INFERNO_TREE and INFERNO_JOURNEYS (a file listing the item's changed paths under paths that the tree still holds, one per line), whenever there is one, records the run in the item's proof, fails on a red, and the item's review waits for that run; without it no item runs a journey and the gate's lanes run a new case first
 
 # cases:                          # optional: the tester case texts every landing answers for; integrate, the gate and `run.cjs cases --range` refuse a range that leaves a case naming a removed label, reaches a case it neither edits nor names on a "Cases: TC-1, TC-2" commit line, or changes a test with no case edited and no Cases line ("Cases: none" answers that rule only); a --config file inherits it
 #   files:

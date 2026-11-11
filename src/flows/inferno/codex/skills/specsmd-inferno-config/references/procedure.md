@@ -71,6 +71,7 @@ knowledge:
 
 real_app:
   paths: ["<glob of a helper or case text that drives the real app>"]
+  prove: <optional command>
 ```
 
 Allowed values:
@@ -86,6 +87,7 @@ Allowed values:
 - `delivery.base_branch`: a real branch confirmed by the user.
 - halt paths and knowledge index: project-relative paths when present.
 - `real_app.paths`: globs of the helpers and case texts that drive the real app binary, which builders update and the reviewer checks. This file inherits the key from `.specs-inferno/config.yaml` when it sets none.
+- `real_app.prove`: one command that runs the journeys an item changed on the real app binary. `verify-item` runs it with `INFERNO_JOURNEYS`, a file listing those paths, records the run in the item's proof and fails on a red, and the item's review waits for that run. It needs `real_app.paths` and is inherited with it.
 - `mutate.session`: for tests that run through a wrapper on another machine, the regex that marks such a test command and the wrapper's `open`, `send`, `run` and `close` commands, so the runner's mutants that share a test command share one session of it. `config.example.yaml` documents each. This file inherits the whole `mutate` block from `.specs-inferno/config.yaml` when it sets none.
 
 Role and agent names above are fixed. An existing `<pin>` stays unless the user changes it; a created one copies `model` and `model_reasoning_effort` from `.codex/agents/<agent>.toml`. There is no writer role: the planner writes its own work items, so a `roles.writer` block from an older config is dropped.

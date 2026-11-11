@@ -11,7 +11,7 @@ const os = require('os');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
-const { realAppPaths } = require('./run-real-app.cjs');
+const { realAppPaths, realAppProve } = require('./run-real-app.cjs');
 
 const { RunError } = lib;
 
@@ -213,11 +213,15 @@ function probes(itemId, options) {
   }
   if (out.length === 0) out.push(`no probes ${itemId}`);
 
-  // No run starts the real app, so the builder edits its helpers by reading them.
-  const realApp = realAppPaths(lib.readConfig(tree, options.config), options.config || path.join(lib.SPECS_DIR, 'config.yaml'));
+  // The builder edits the real app's helpers by reading them; only real_app.prove, in verify-item, runs them.
+  const config = lib.readConfig(tree, options.config);
+  const label = options.config || path.join(lib.SPECS_DIR, 'config.yaml');
+  const realApp = realAppPaths(config, label);
   if (realApp.length > 0) {
     out.push(`real-app ${itemId}: when this piece changes a screen, update the helpers and case texts under ` +
-      `${realApp.join(', ')} that drive the real app; write them and never run them`);
+      `${realApp.join(', ')} that drive the real app; ${realAppProve(config, label)
+        ? 'never run them yourself: verify-item runs the ones you change with real_app.prove, and they must be green there'
+        : 'write them and never run them'}`);
   }
 
   const ok = results.every((entry) => entry.ok) && (!replay || replay.ok);
