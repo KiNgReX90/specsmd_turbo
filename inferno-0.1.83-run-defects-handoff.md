@@ -212,3 +212,36 @@ Seen 2026-11-11 on the app repo, intent `every-machine-removes-what-finished-wor
 ### How the host got through
 
 The orchestrator named the three granted files in the brief of both reviewers. Until the fix, an orchestrator does that for every correction round whose dispatch carries a grant.
+
+## 8. A late correction of a completed item cannot be verified once a later item changed a file both own
+
+Seen 2026-11-11 on the app repo, intent `the-declaration-of-conformity-is-complete-for-every-stated-law`, items `doc-each-stated-law-prints-its-notified-body-in-point-7` and `doc-a-toy-declaration-carries-its-image`, on 0.1.83. Both were `completed`. Both got a correction after the re-reviews that section 7 made necessary.
+
+### What happens
+
+`run.cjs verify-item` refuses the correction's dispatch:
+
+```text
+ERROR [DISPATCH_PROOF] dispatch ownership overlaps at definitions/intake/product-facts.json with dispatch 6f987e43-d7af-4a26-b192-55b6dce66603: a serial chain one builder builds takes one dispatch-log for all its items, with --items a,b
+ERROR [DISPATCH_PROOF] dispatch ownership overlaps at definitions/notes/single-declaration.md with dispatch 603f8a98-84f5-47fa-9423-68efd080a948: a serial chain one builder builds takes one dispatch-log for all its items, with --items a,b
+```
+
+The named dispatch is that of a later item of the same intent, which owns the same file and was built, accepted and integrated after the first item. The advice cannot be followed: one `dispatch-log` for both items is a choice made before the first of them is built.
+
+### Why
+
+- `unexplainedChanges` reads the tree's timeline from the item's first baseline, `const root = seqOf(dispatch.checkSnapshot(own.before))`, and takes every other dispatch that ended after it: `.filter((run) => run.end > root)` (`S/run-peers.cjs:100`, `:105`).
+- A change of such a dispatch to a file this item owns or claimed is refused as an overlap (`checkPeerChange`, `S/run-peers.cjs:82-92`, called at `:129`).
+- In the planned order that never fires. The earlier item is verified and integrated before the later item is dispatched, so the later dispatch is not on the timeline yet.
+- A correction of the earlier item after the later one ran puts the later dispatch between the item's first baseline and now. Its change to the shared file is then read as two dispatches racing on one file, though they ran one after the other.
+- So an intent whose items share a file in sequence, which the plan lint allows along a dependency path, cannot verify a late correction of any item but the last that touched the file.
+
+### What the flow should do
+
+- The overlap refusal is for dispatches that ran beside each other. A dispatch whose whole window lies between two of the item's own dispatches, after one was accepted and before the next began, ran after the item and not beside it. Its change to a shared file is that dispatch's own, with no refusal.
+- The refusal keeps its present text for a real overlap, and for the late correction case it has nothing to say.
+- Tests: item A accepted, item B (same file, depends on A) accepted, then a correction dispatch of A that changes the shared file: `verify-item` passes and attributes B's change to B. The same with B still open is refused as today.
+
+### How the host got through
+
+No way through inside the flow was found. The host ran each item's own check by hand, committed the correction without a `verify-item` proof, and had both lenses read it.
