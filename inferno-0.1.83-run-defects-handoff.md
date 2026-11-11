@@ -183,3 +183,31 @@ Seen 2026-11-11 on the app repo, intent `a-lane-run-needs-no-hands-and-a-wrong-t
 ### How the host got through
 
 The reviewer rewrote the file without the config. Until the fix, an orchestrator adds one sentence to the reviewer dispatch of an item that owns a file under `.specs-inferno/`: leave paths under `.specs-inferno/` out of `files`.
+
+## 7. A file granted to a correction is left out of the review dispatch, so new code can pass unread
+
+Seen 2026-11-11 on the app repo, intent `every-machine-removes-what-finished-work-left-behind`, item `rpr-the-reaper-removes-dead-scratchpads-and-old-tmp-entries`, on 0.1.83. This one is not a lost round. It is a hole in what a review covers.
+
+### What happens
+
+- Round 1 of the item was recorded with findings. The correction needed three new files outside the item's `ownership.editable`: `scripts/machines/reaper-guard.mjs`, `scripts/machines/reaper-lock.mjs` and `scripts/machines/reaper-guard.test.mjs`. The orchestrator added them to the correction's dispatch with `run.cjs grant` (dispatch `263b3707`), as the flow asks.
+- `run.cjs review --item` then printed both reviewer dispatches for range `23ebd3dbd..6b8be0350` with a `paths` list that holds none of the three files.
+- A reviewer that follows its dispatch reads the fix without the code the fix moved into the new files.
+
+### Why
+
+- In a correction round a lens reads `span.paths`, not the proof's paths: `const read = own ? proof.paths : whole ? context.editable : span.paths`, and `own` is false once a review is on record (`S/run-review.cjs:162-166`).
+- The span keeps a changed file only when the item spec owns it or the last review listed it: `.filter((file) => lib.ownedBy(file, editable) || current.files.includes(file))` (`S/run-review.cjs:337-338`), and the same filter in `lensesWaiting` (`S/run-review-quality.cjs:177-180`). `editable` is the spec's list (`S/run-review.cjs:294`).
+- A grant is not in the spec. It is on the dispatch record, under `assignment.ownership.granted` (`S/run-grant.cjs:28-34`). So a file that is new in the correction and came by grant passes neither test.
+- The first round does not have the hole: it reads the proof's paths, and the proof takes every file a dispatch claimed (`itemFiles`, `S/run-item-proof.cjs:279-284`).
+- The same filter decides whether a fix review is owed again (`since`, `S/run-review.cjs:337`). A later commit that touches only granted files therefore does not make the review owed again either.
+
+### What the flow should do
+
+- The paths of a correction round are the files changed since the review on record that the item spec owns, the last review listed, or any dispatch of the item claimed, grants included. The proof already holds that set when it is current, so the span can take the proof's paths that changed since the recorded commit.
+- The same set decides whether a fix review is owed again.
+- Tests: a correction that adds a granted file prints it under `paths` for both lenses, in `step` and in `lensesWaiting`. A commit on a granted file after a fix review makes the review owed again. A granted file that did not change since the recorded commit is not listed.
+
+### How the host got through
+
+The orchestrator named the three granted files in the brief of both reviewers. Until the fix, an orchestrator does that for every correction round whose dispatch carries a grant.
