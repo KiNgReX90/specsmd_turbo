@@ -250,7 +250,46 @@ for (const [name, dirt, said] of [
   });
 }
 
-test("a fold the sibling's file blocks names that file", () => {
+// A refusal raised while integrate reads its config or the landing's work-item files comes
+// before it knows what the landing reads, and still puts a dead mutant back first.
+for (const [name, unread, said] of [
+  ["a --config it cannot read", (fixture) => ["--config", path.join(fixture.root, "missing.yaml")], /ERROR \[BAD_CONFIG\]/],
+  ["a work-item file it cannot find", (fixture) => {
+    fs.rmSync(path.join(fixture.root, ".specs-inferno/intents/alpha/work-items/a-one.md"));
+    return [];
+  }, /ERROR \[SPEC_MISSING\]/],
+]) {
+  test(`a refusal over ${name} still puts a killed mutate's leftover back first and says so`, async () => {
+    const fixture = landed();
+    await killedMutate(fixture, fixture.root, "src/a.ts", "export const a = 99;");
+
+    const result = integrate(fixture, "--item", "a-one", ...unread(fixture));
+
+    assert.equal(result.code, 2, result.out + result.err);
+    assert.match(result.err, said);
+    assert.match(result.err, /^restored src\/a\.ts from an interrupted mutate$/m);
+    assert.equal(read(fixture, "src/a.ts"), "export const a = 4;\n");
+  });
+}
+
+// The browser step selects from committed paths only: a sibling's uncommitted file its map
+// covers never selects it, so that file is never refused for a step that does not run.
+test("a sibling's uncommitted file never selects the browser step", () => {
+  const MAPPED = SCOPED.replace("  finalize_scopes:\n",
+    '  integrate_e2e:\n    command: echo ran\n    map:\n      "docs/**": [e2e/docs.spec.ts]\n  finalize_scopes:\n');
+  const fixture = landed(MAPPED);
+  write(fixture.root, "docs/sibling.md", "a sibling's draft\n");
+
+  const result = land(fixture);
+
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /SKIP e2e \(/);
+  assert.doesNotMatch(result.out, /echo ran/);
+  assert.deepEqual(uncommitted(fixture), ["docs/sibling.md"]);
+});
+
+/** A clone with a local commit its bare origin lacks, after origin's main moved docs/b.md and added docs/new.md. */
+function originMoved() {
   const fixture = origin.repo();
   const other = path.join(fixture.dir, "other");
   origin.git(fixture.dir, ["clone", "-q", "-b", "main", fixture.remote, other]);
@@ -261,11 +300,16 @@ test("a fold the sibling's file blocks names that file", () => {
   origin.git(other, ["add", "-A"]);
   origin.git(other, ["commit", "-qm", "origin moved the docs"]);
   origin.git(other, ["push", "-q", "origin", "main"]);
-  // Only HEAD's side changed docs/local.md since the merge base, and no side changed src/b.ts:
-  // both are uncommitted, and neither stops the merge, so neither is named.
   origin.write(fixture.root, "docs/local.md", "committed here, never pushed\n");
   origin.git(fixture.root, ["add", "-A"]);
   origin.git(fixture.root, ["commit", "-qm", "a local commit origin lacks"]);
+  return fixture;
+}
+
+test("a fold the sibling's file blocks names that file", () => {
+  const fixture = originMoved();
+  // Only HEAD's side changed docs/local.md since the merge base, and no side changed src/b.ts:
+  // both are uncommitted and unstaged, and neither stops the merge, so neither is named.
   origin.write(fixture.root, "docs/local.md", "a sibling's edit on top\n");
   origin.write(fixture.root, "src/b.ts", "export const b = 7;\n");
   origin.write(fixture.root, "docs/b.md", "a sibling's edit\n");
@@ -276,6 +320,20 @@ test("a fold the sibling's file blocks names that file", () => {
   assert.equal(result.code, 2, result.out + result.err);
   assert.match(result.err, /ERROR \[DIRTY\] refusing to fold origin\/main into main over .*: docs\/b\.md, docs\/new\.md\. /);
   assert.doesNotMatch(result.err, /docs\/local\.md|src\/b\.ts/);
+  assert.doesNotMatch(result.out + result.err, /conflict folding/);
+});
+
+// Git refuses a real merge over any staged change, whether the incoming commits touch it or not:
+// a sibling caught between its git add and its git commit.
+test("a fold a sibling's staged file blocks names that file, though the incoming commits never touch it", () => {
+  const fixture = originMoved();
+  origin.write(fixture.root, "src/b.ts", "export const b = 7;\n");
+  origin.git(fixture.root, ["add", "src/b.ts"]);
+
+  const result = origin.run(fixture, ["integrate", "--tree", fixture.root]);
+
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.match(result.err, /ERROR \[DIRTY\] refusing to fold origin\/main into main over .*: src\/b\.ts\. /);
   assert.doesNotMatch(result.out + result.err, /conflict folding/);
 });
 

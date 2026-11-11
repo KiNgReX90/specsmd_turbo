@@ -56,7 +56,8 @@ function mergeBase(tree, base) {
  * gates: one here, one after ship folded the base in and found the marker stale (2026-09-03).
  * Commits that reached origin but not the local base are folded too. A conflict stops here with
  * the files named and the merge left in the worktree to resolve. A merge git refuses before it
- * starts, over an uncommitted file the incoming commits change, names that file instead.
+ * starts, over an uncommitted file the incoming commits change or a staged file, names that file
+ * instead, and one that failed with neither never claims a conflict.
  */
 function foldBase(tree, base) {
   const branch = lib.currentBranch(tree);
@@ -70,8 +71,10 @@ function foldBase(tree, base) {
     if (lib.git(tree, ['merge', '--no-edit', ref], { tolerate: true }) === null) {
       const conflicts = lib.gitLines(tree, ['diff', '--name-only', '--diff-filter=U'], { tolerate: true });
       if (conflicts.length === 0) {
-        refuseDirt(foldBlockers(tree, ref), `refusing to fold ${ref} into ${branch} over uncommitted files its commits change`,
+        refuseDirt(foldBlockers(tree, ref), `refusing to fold ${ref} into ${branch} over uncommitted files git will not merge across (one its commits change, or a staged one)`,
           'Commit or discard them, or wait until the work that writes them is committed, then run the step again.');
+        throw new RunError(`merging ${ref} into ${branch} failed with no conflicted file; run git merge ${ref} in ${tree} to see why, ` +
+          'fix that, then run the step again.', 'FOLD_FAILED');
       }
       throw new RunError(
         `conflict folding ${ref} into ${branch}: ${conflicts.slice(0, 10).join(', ')}. ` +

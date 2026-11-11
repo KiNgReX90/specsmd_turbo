@@ -103,7 +103,7 @@ function ledgerOf(tree) {
  * changed sources map to, and the whole suite when a changed source no entry covers leaves the
  * question open. Returns null when the project configures no e2e at integrate.
  */
-function e2eSelection(tree, config, ids, options, anchor) {
+function e2eSelection(tree, config, ids, options, anchor, from) {
   if (!impact.section(config)) return null;
   const ledger = ledgerOf(tree);
   const manifests = [];
@@ -116,7 +116,11 @@ function e2eSelection(tree, config, ids, options, anchor) {
     }
   }
   const since = impact.sinceRef(tree, ledger, { items: ids, anchor });
-  const changed = since ? impact.changedSince(tree, since) : [];
+  // changedSince adds the working tree. Integrate selects from committed paths only, so a
+  // sibling's uncommitted file never selects the step and is then refused as what it reads.
+  const dirty = new Set(dirt.dirtyFiles(tree));
+  const committed = new Set(lib.gitLines(tree, ['diff', '--name-only', '--no-renames', from, 'HEAD'], { tolerate: true }));
+  const changed = (since ? impact.changedSince(tree, since) : []).filter((file) => !dirty.has(file) || committed.has(file));
   return impact.select({ changed, manifests, config });
 }
 
@@ -165,8 +169,7 @@ function checksRead(config, runs = () => true, e2e = Boolean(impact.section(conf
  */
 function integrate(options) {
   const tree = gate.treeOf(options);
-  const initial = lib.readConfig(tree, options.config);
-  const landing = landingFiles(tree, itemIds(options), options);
+  const { initial, landing } = readLanding(tree, options);
   const configured = checksRead(initial);
   const restored = recoverInterrupted(tree, { keepLive: (file) => !landing(file) && !dirt.reads(configured, file) });
   try {
@@ -176,6 +179,21 @@ function integrate(options) {
     return { ...result, out: [...restored, ...result.out] };
   } catch (error) {
     if (error instanceof RunError) error.message = afterRecovery(restored, error.message);
+    throw error;
+  }
+}
+
+/**
+ * The config and what the landing owns or commits, read before integrate knows what to keep a
+ * live mutant for. A refusal here still puts a dead mutant back first and says so; a live one is
+ * left to its run, since this call reads nothing more.
+ */
+function readLanding(tree, options) {
+  try {
+    const initial = lib.readConfig(tree, options.config);
+    return { initial, landing: landingFiles(tree, itemIds(options), options) };
+  } catch (error) {
+    if (error instanceof RunError) error.message = afterRecovery(recoverInterrupted(tree, { keepLive: () => true }), error.message);
     throw error;
   }
 }
@@ -217,7 +235,7 @@ function checkAndLand(tree, options, initial) {
   const scopes = (config.verification && config.verification.finalize_scopes) || {};
   const changed = landing && landing.all ? null : lib.gitLines(tree, ['diff', '--name-only', '--no-renames', since, 'HEAD'], { tolerate: true });
   const runs = (command) => !scopes[command] || !changed || changed.some((file) => lib.matchesAny(file, scopes[command]));
-  const selection = e2eSelection(tree, config, ids, options, anchor);
+  const selection = e2eSelection(tree, config, ids, options, anchor, since || gate.mergeBase(tree, base));
   // A check reads the tree it runs in, a sibling's uncommitted bytes included, and a remote run
   // mirrors them, so such a file is refused before any check runs. The same scopes are what the
   // landing must not move under: a sibling writing outside them leaves the landing standing.

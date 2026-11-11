@@ -58,13 +58,15 @@ function reads(scope, file) {
 }
 
 /**
- * The uncommitted files a merge of `ref` would overwrite, which is why git refuses it before it
- * starts: the dirty files the incoming commits change since the merge base. A file only HEAD's
- * side changed never stops a merge, so the diff is three-dot.
+ * The uncommitted files git refuses to merge `ref` over before it starts: the dirty files the
+ * incoming commits change since the merge base, and every staged file, since a merge that is not
+ * a fast forward refuses any staged change, touched or not. A file only HEAD's side changed and
+ * left unstaged never stops a merge, so the diff is three-dot.
  */
 function foldBlockers(tree, ref) {
   const incoming = new Set(gitFiles(tree, ['diff', '--name-only', '--no-renames', '-z', `HEAD...${ref}`], { tolerate: true }) || []);
-  return dirtyFiles(tree).filter((file) => incoming.has(file));
+  const staged = gitFiles(tree, ['diff', '--cached', '--name-only', '--no-renames', '-z', 'HEAD'], { tolerate: true }) || [];
+  return [...new Set([...dirtyFiles(tree).filter((file) => incoming.has(file)), ...staged])];
 }
 
 /** Refuse with DIRTY when there is any file: up to five named, `lead` says whose they are and `advice` what to do. */
