@@ -63,7 +63,10 @@ intents:
         kind: behavior
         complexity: high
         mode: autopilot
-        status: pending
+        status: completed
+        completed_at: 2026-11-11T10:34:58Z
+        integrated_at: 2026-11-11T10:34:58Z
+        integrated_sha: 2ac404f9
         review: clean
         review_hash: 49b0512c56186d9caa896ac37404c96b19c20260d81d042f76d3c9bfe73b224b
         review_commit: 6196a5e6f1ab22b661ea999a1f0886f5ef182aaf

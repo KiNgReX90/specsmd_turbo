@@ -5,7 +5,8 @@ intent: integrate-checks-what-a-base-commit-changed-and-lands-beside-busy-siblin
 kind: behavior
 complexity: high
 mode: autopilot
-status: pending
+status: completed
+completed_at: 2026-11-11T10:34:58Z
 depends_on: [ri-integrate-on-the-base-diffs-from-since-or-origin, ri-the-ledger-commit-stages-only-what-completion-wrote]
 created: 2026-11-09
 ---
