@@ -112,8 +112,8 @@ function committedPaths(tree, start, end, excluded, firstParent = false) {
     .filter((file) => own.has(file));
 }
 
-/** The intent's net changes against its base, plus staged, unstaged and new files. */
-function changedSince(tree, since) {
+/** The paths the intent committed against its base, sorted; never a work-tree path. */
+function committedSince(tree, since) {
   const anchor = typeof since === 'object' && since !== null
     ? since : { ...anchorFor(tree, resolveBase(lib.readConfig(tree), null, tree)), since };
   let committed;
@@ -128,6 +128,12 @@ function changedSince(tree, since) {
     const fork = lib.git(tree, ['merge-base', anchor.base, 'HEAD']);
     committed = committedPaths(tree, fork, 'HEAD', bases);
   }
+  return [...new Set(committed)].sort();
+}
+
+/** The intent's net changes against its base, plus staged, unstaged and new files. */
+function changedSince(tree, since) {
+  const committed = committedSince(tree, since);
   const working = lib.gitLines(tree, ['diff', '--name-only', '--no-renames', 'HEAD', '--']);
   const untracked = lib.gitLines(tree, ['ls-files', '--others', '--exclude-standard']);
   return [...new Set([...committed, ...working, ...untracked])].sort();
@@ -162,4 +168,4 @@ function anchorFor(tree, base) {
   return { base: selectedBase, head, since, direct };
 }
 
-module.exports = { anchorFor, changedSince, mapped, section, select, sinceRef, specTargets };
+module.exports = { anchorFor, changedSince, committedSince, mapped, section, select, sinceRef, specTargets };

@@ -274,9 +274,10 @@ for (const [name, unread, said] of [
 
 // The browser step selects from committed paths only: a sibling's uncommitted file its map
 // covers never selects it, so that file is never refused for a step that does not run.
+const MAPPED = SCOPED.replace("  finalize_scopes:\n",
+  '  integrate_e2e:\n    command: echo ran\n    map:\n      "docs/**": [e2e/docs.spec.ts]\n  finalize_scopes:\n');
+
 test("a sibling's uncommitted file never selects the browser step", () => {
-  const MAPPED = SCOPED.replace("  finalize_scopes:\n",
-    '  integrate_e2e:\n    command: echo ran\n    map:\n      "docs/**": [e2e/docs.spec.ts]\n  finalize_scopes:\n');
   const fixture = landed(MAPPED);
   write(fixture.root, "docs/sibling.md", "a sibling's draft\n");
 
@@ -286,6 +287,28 @@ test("a sibling's uncommitted file never selects the browser step", () => {
   assert.match(result.out, /SKIP e2e \(/);
   assert.doesNotMatch(result.out, /echo ran/);
   assert.deepEqual(uncommitted(fixture), ["docs/sibling.md"]);
+});
+
+// The selection reads the intent's committed paths of its own range, which reaches back past the
+// landing's --since: a path a-two committed there selects the step, and a sibling's edit on top
+// of it is then refused as what the step reads, never dropped to a SKIP.
+test("a committed path a sibling has dirty again is refused, never skipped", () => {
+  const fixture = repo({ state: SIBLINGS, config: MAPPED });
+  git(fixture.root, ["checkout", "-qb", "feature"]);
+  write(fixture.root, "docs/b.md", "a-two's committed edit\n");
+  git(fixture.root, ["commit", "-qam", "a-two committed docs"]);
+  fixture.since = git(fixture.root, ["rev-parse", "HEAD"]);
+  write(fixture.root, "src/a.ts", "export const a = 4;\n");
+  git(fixture.root, ["commit", "-qam", "a-one landed"]);
+  reviewed(run, fixture, fixture.root, ["a-one"]);
+  write(fixture.root, "docs/b.md", "a sibling's edit on top\n");
+
+  const result = land(fixture);
+
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.match(result.err, /ERROR \[DIRTY\] .*a check this landing runs reads: docs\/b\.md\./);
+  assert.doesNotMatch(result.out + result.err, /SKIP e2e/);
+  assert.ok(!proved(fixture));
 });
 
 /** A clone with a local commit its bare origin lacks, after origin's main moved docs/b.md and added docs/new.md. */

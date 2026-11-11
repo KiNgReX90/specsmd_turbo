@@ -103,7 +103,7 @@ function ledgerOf(tree) {
  * changed sources map to, and the whole suite when a changed source no entry covers leaves the
  * question open. Returns null when the project configures no e2e at integrate.
  */
-function e2eSelection(tree, config, ids, options, anchor, from) {
+function e2eSelection(tree, config, ids, options, anchor) {
   if (!impact.section(config)) return null;
   const ledger = ledgerOf(tree);
   const manifests = [];
@@ -116,11 +116,10 @@ function e2eSelection(tree, config, ids, options, anchor, from) {
     }
   }
   const since = impact.sinceRef(tree, ledger, { items: ids, anchor });
-  // changedSince adds the working tree. Integrate selects from committed paths only, so a
-  // sibling's uncommitted file never selects the step and is then refused as what it reads.
-  const dirty = new Set(dirt.dirtyFiles(tree));
-  const committed = new Set(lib.gitLines(tree, ['diff', '--name-only', '--no-renames', from, 'HEAD'], { tolerate: true }));
-  const changed = (since ? impact.changedSince(tree, since) : []).filter((file) => !dirty.has(file) || committed.has(file));
+  // Integrate selects from the paths the intent committed inside the selection's own range; the
+  // work tree never enters the selection. A committed path a sibling has dirty again selects the
+  // step, and the step then refuses that file as what it reads.
+  const changed = since ? impact.committedSince(tree, since) : [];
   return impact.select({ changed, manifests, config });
 }
 
@@ -235,7 +234,7 @@ function checkAndLand(tree, options, initial) {
   const scopes = (config.verification && config.verification.finalize_scopes) || {};
   const changed = landing && landing.all ? null : lib.gitLines(tree, ['diff', '--name-only', '--no-renames', since, 'HEAD'], { tolerate: true });
   const runs = (command) => !scopes[command] || !changed || changed.some((file) => lib.matchesAny(file, scopes[command]));
-  const selection = e2eSelection(tree, config, ids, options, anchor, since || gate.mergeBase(tree, base));
+  const selection = e2eSelection(tree, config, ids, options, anchor);
   // A check reads the tree it runs in, a sibling's uncommitted bytes included, and a remote run
   // mirrors them, so such a file is refused before any check runs. The same scopes are what the
   // landing must not move under: a sibling writing outside them leaves the landing standing.
