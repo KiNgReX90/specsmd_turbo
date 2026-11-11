@@ -130,3 +130,29 @@ All on the host's intent `the-confirmed-launch-findings-are-fixed-before-the-fre
 ### How the host got through
 
 It plans a scoped check in `verification.integrate` that walks only the journey files an item changed (host statement of 2026-11-11, not built yet). Until then its lanes stay the first to run a new case.
+
+## 5. A review file that folds a value with `>-` is refused, and the refusal names the wrong line
+
+Seen 2026-11-11 on the app repo, intent `every-machine-removes-what-finished-work-left-behind`, item `rpr-the-reaper-removes-dead-scratchpads-and-old-tmp-entries`, on 0.1.83.
+
+### What happens
+
+The quality reviewer wrote a finding's text as a folded block scalar with the strip marker, `>-`, which is plain YAML. `run.cjs review --item` refused the file as `BAD_REVIEW` and sent it back to the reviewer. That cost one more round of the quality lens for a file whose content was right.
+
+### Why
+
+- The reader takes three block scalar markers and no other: `if (value === '|' || value === '>' || value === '|-')` (`S/run-yaml.cjs:196`). Measured on this branch with `parseYaml`: `|`, `|-` and `>` are read. `>-`, `>+`, `|+` and a marker with an indentation digit such as `|2` throw.
+- The refusal points away from the cause. For `what: >-` over two body lines it prints "cannot parse line 3: one. This YAML subset reads maps, block and inline lists, quoted scalars and block scalars; nothing was read past that line." It names the first body line, not the marker, and it says block scalars are read.
+- `>` is read as `|`: the line breaks of the body are kept, where YAML folds them into spaces. No reader of a review depends on that today.
+- Neither reviewer text says which markers the reader takes (`src/flows/inferno/agents/reviewer/agent.md`, `src/flows/inferno/agents/reviewer-quality/agent.md`). Both show a template and leave the scalar style to the model.
+
+### What the flow should do
+
+- `parseYaml` reads every block scalar header YAML allows: `|` or `>`, with an optional chomping marker `-` or `+` and an optional indentation digit, in either order. Folding `>` into spaces is the correct reading and may come with it.
+- When a marker is still refused, the error names the line of the marker and the marker itself.
+- No sentence is added to the reviewer texts: they are near the host's word ceiling, and a reader that takes plain YAML needs none.
+- Tests: `>-`, `>+`, `|+`, `|2` and `>2-` each parse to their text in a map value and in a list item. A review file with a `>-` finding is recorded.
+
+### How the host got through
+
+The orchestrator sent the file back and the reviewer rewrote the value with `|`. Until the fix, an orchestrator can add one sentence to each reviewer dispatch: write a multi-line value with `|` or `|-`, never `>-`.
