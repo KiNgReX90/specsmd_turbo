@@ -27,7 +27,8 @@ const GLOB = /[*?[]/;
 
 /** The entry as a normalized path relative to the tree, its symlinked prefix resolved. */
 function canonical(entry, tree) {
-  if (typeof entry !== 'string' || !entry.trim()) throw refuse('Ownership requires a path');
+  // A spec's entry is refused earlier, with its item and line (run-item-spec.cjs); this names the value.
+  if (typeof entry !== 'string' || !entry.trim()) throw refuse(`Ownership requires a path, not ${JSON.stringify(entry)}`);
   const root = tree && fs.realpathSync(tree);
   let value = entry.replace(/\\/g, '/').replace(/\/+$/, '');
   if (root && path.isAbsolute(value)) value = path.relative(root, value).replace(/\\/g, '/');

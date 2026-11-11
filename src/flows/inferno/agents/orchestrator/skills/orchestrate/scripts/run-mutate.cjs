@@ -25,6 +25,7 @@ const { batch } = require('./run-mutate-batch.cjs');
 const { committedFile } = require('./run-mutate-entries.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
 const seals = require('./run-mutate-seal.cjs');
+const { leftBehind, settle, snapshot } = require('./run-mutate-left.cjs');
 
 const { RunError } = lib;
 const { afterRecovery, recoverInterrupted, sha } = journals;
@@ -54,6 +55,8 @@ function single(options) {
       `refusing to mutate a dirty tree: ${dirty.slice(0, 5).join(', ')} is uncommitted. Mutate once the tree is clean.`), 'DIRTY');
   }
   const { rel, abs, n, was, original, mutant } = target(tree, options);
+  // What git calls changed before the first write, so a path the test command wrote is named after.
+  const before = snapshot(tree);
   const journal = journals.journalPath(tree);
   fs.mkdirSync(path.dirname(journal), { recursive: true });
   const line = { line: n, original: was, replace: options.replace, before: sha(original) };
@@ -83,8 +86,13 @@ function single(options) {
     if (failed.length === 0) fs.rmSync(journal, { force: true });
     release();
   }
-  const at = `${rel}:${n}`;
   if (failed.length > 0) return { exit: 2, payload: { restored: false, file: rel, line: n, failed }, out: [...out, ...failed] };
+  return settle(outcome(out, options, { rel, abs, n }, unsealed, run), leftBehind(tree, before));
+}
+
+/** The verdict of a mutant whose files are all back: no verdict, or caught yes or no. */
+function outcome(out, options, { rel, abs, n }, unsealed, run) {
+  const at = `${rel}:${n}`;
   if (unsealed) {
     return {
       // A reseal a signal or the timeout ended is this machine's failure; one that refused the mutant is the mutant's.
@@ -95,7 +103,7 @@ function single(options) {
   }
   if (!run || run.signal) {
     const how = run ? `ended on ${run.signal}` : 'never ran';
-    return { exit: 2, payload: { restored: true, file: rel, line: n, signal: run && run.signal }, out: [...out, `the test ${how}, so there is no verdict; ${at} is restored`] };
+    return { exit: 2, payload: { file: rel, line: n, signal: run && run.signal }, out: [...out, `the test ${how}, so there is no verdict; ${at} is restored`] };
   }
   const verdict = verdictOf(run, readLog(run.log), abs);
   const said = verdict.caught === null ? `no verdict: ${verdict.why}` : `caught ${verdict.caught ? 'yes' : 'no'}`;

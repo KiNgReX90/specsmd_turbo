@@ -2,10 +2,11 @@
 'use strict';
 
 /**
- * The review-loop readout, read-only. It walks the git history of each item review file
- * (`.specs-inferno/intents/<intent>/reviews/*.yaml`) between base and head and prints one line
- * per item and the rows of the plan's section 1 that come from review files, plus the oracle
- * dispatches by route from the dispatch log. Tokens per agent type come from tokens.cjs.
+ * The review-loop readout, read-only. It walks the git history of each item review file, both
+ * lenses (`.specs-inferno/intents/<intent>/reviews/<item>.yaml` and `reviews/quality/<item>.yaml`),
+ * between base and head and prints one line per item and the rows of the plan's section 3 that
+ * come from review files, plus the oracle dispatches by route from the dispatch log. Tokens per
+ * agent type, and per item for its reviewers of both lenses, come from tokens.cjs.
  *
  *   node evals/review-loop/stats.cjs --tree <intent worktree> --base <ref> [--head <ref>]
  *     [--intent <id>] [--dispatch-log <file>] [--json]
@@ -38,6 +39,8 @@ function parseArgs(argv) {
 const short = (sha) => sha.slice(0, 9);
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 const one = (value) => value.toFixed(1);
+const weights = (counts) => `${counts.blocker} blocker, ${counts.major} major, ${counts.minor} minor${counts.unrated ? `, ${counts.unrated} unrated` : ''}`;
+const lensSegment = (name, lens) => `${name} rounds ${lens.rounds}, fix ${lens.fix}, findings ${weights(lens.findings)}`;
 
 function itemLine(item, width) {
   const later = item.laterFindings;
@@ -52,6 +55,8 @@ function itemLine(item, width) {
     `largest ${item.largest}`,
     `files ${item.filesFirst} to ${item.filesLast}`,
     `grants ${item.grants}`,
+    `mutants run ${item.mutantsRun}`,
+    ...['contract', 'quality'].filter((name) => item.lenses[name]).map((name) => lensSegment(name, item.lenses[name])),
   ].join('  ');
 }
 
@@ -59,6 +64,13 @@ function oracleRow(oracle) {
   if (!oracle.present) return `no dispatch log at ${oracle.logs.join(', ') || 'any path: no intent was measured'}`;
   const routes = Object.entries(oracle.byRoute).map(([route, count]) => `${route} ${count}`);
   return `${oracle.total}${routes.length ? `: ${routes.join(', ')}` : ''}`;
+}
+
+function lensRow(lens) {
+  if (lens.items === 0) return 'none';
+  return `${plural(lens.rounds, 'round')} over ${plural(lens.items, 'item')}, fix ${lens.fixRounds}; ` +
+    `findings ${lens.findings.total}, so ${one(lens.findingsPerItem)} per item: ${weights(lens.findings)}; ` +
+    `in its first round ${weights(lens.firstFindings)}`;
 }
 
 function rows(totals, oracle) {
@@ -75,7 +87,9 @@ function rows(totals, oracle) {
       `${later.total}: ${later.blocker} blocker, ${later.major} major, ${later.minor} minor${later.unrated ? `, ${later.unrated} unrated` : ''}`],
     [`Acceptance criteria of the ${plural(totals.items, 'item')}`,
       `${totals.criteria}${totals.criteriaMissing.length ? ` (no spec at head for ${totals.criteriaMissing.join(', ')})` : ''}`],
-    ['Mutants run', `${totals.mutants} in ${plural(totals.mutantRounds, 'round')}, so ${one(totals.mutantsPerCriterion)} per acceptance criterion`],
+    ['Mutants, each counted once',
+      `${totals.mutants} in ${plural(totals.mutantRounds, 'round')}, so ${one(totals.mutantsPerCriterion)} per acceptance criterion`],
+    ['Mutants counted as run', `${totals.mutantsRun}: a carried mutant counts again only when its verdict changed`],
     ['Mutants in a first round', `${totals.firstRound.mutants}, of which ${totals.firstRound.numbered} name a numbered criterion`],
     ['Mutants in round 2 and later', `${totals.laterRounds.mutants}, of which ${totals.laterRounds.freeText} name a criterion in free text`],
     ['Surviving mutants',
@@ -85,6 +99,8 @@ function rows(totals, oracle) {
       : 'none'],
     ['Commits that grant an item more ownership', `${totals.grantCommits}`],
     ["Files an item's review lists, first round to last", totals.filesGrowth.map((entry) => `${entry.first} to ${entry.last}`).join(', ') || 'no list grew'],
+    ['Contract lens', lensRow(totals.lenses.contract)],
+    ['Quality lens', lensRow(totals.lenses.quality)],
     ['Oracle dispatches', oracleRow(oracle)],
   ];
 }
@@ -99,7 +115,8 @@ function text(result) {
   out.push('');
   for (const [name, value] of table) out.push(`${name.padEnd(label)}  ${value}`);
   if (result.totals.unreadable > 0) out.push(`${plural(result.totals.unreadable, 'round')} did not read as YAML and count as rounds without a verdict`);
-  out.push('', 'Reviewer, builder and orchestrator tokens: node evals/review-loop/tokens.cjs --session <transcript dir>');
+  out.push('', 'Reviewer, builder and orchestrator tokens: node evals/review-loop/tokens.cjs --session <transcript dir>',
+    'Reviewer tokens per item, both lenses: add --tree, --base and --intent as here');
   return `${out.join('\n')}\n`;
 }
 
