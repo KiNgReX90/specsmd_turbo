@@ -291,4 +291,4 @@ function putBackSeal(tree, seal) {
 /** The paths a seal record names, for the check that a live run owns them. */
 const sealPaths = (seal) => (seal && Array.isArray(seal.paths) ? seal.paths.map((record) => String(record && record.file)) : []);
 
-module.exports = { committed, putBackSeal, reseal, sealOf, sealPaths, unseal, validateSealed };
+module.exports = { changedPaths, committed, putBackSeal, reseal, sealOf, sealPaths, unseal, validateSealed };

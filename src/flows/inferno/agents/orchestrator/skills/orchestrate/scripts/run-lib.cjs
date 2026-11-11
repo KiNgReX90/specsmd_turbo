@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Shared plumbing for `run.cjs`: git, the ledger, the config, work-item specs, globs,
- * shell runs and the cache.
+ * Shared plumbing for `run.cjs`: git, the ledger, the config, globs, shell runs and the cache.
+ * The YAML reader (run-yaml.cjs), the work-item spec (run-item-spec.cjs) and ownership
+ * (run-owned.cjs) live in modules of their own, re-exported here.
  *
  * Two constraints, the same ones state-transition.cjs carries: ZERO dependencies, because
  * these scripts run inside consumer projects that have no node_modules; and the ledger is
@@ -23,6 +24,7 @@ const owned = require('./run-owned.cjs');
 const lanes = require('./run-lane-config.cjs');
 const gates = require('./run-config-gates.cjs');
 const { parseYaml, stripQuotes } = require('./run-yaml.cjs');
+const { readItemSpec } = require('./run-item-spec.cjs');
 const { validateWiring } = require('./run-wiring.cjs');
 
 // ---------------------------------------------------------------------------
@@ -269,36 +271,6 @@ function findIntent(ledger, id) {
     );
   }
   return intent;
-}
-
-/**
- * A work item's spec: the frontmatter plus the execution manifest.
- *
- * The manifest is plain YAML under the `## Execution Manifest` heading, fenced or not,
- * which is how the planner's template renders it.
- */
-function readItemSpec(root, intentId, itemId) {
-  const candidates = [
-    path.join(root, SPECS_DIR, 'intents', intentId, 'work-items', `${itemId}.md`),
-    path.join(root, SPECS_DIR, 'archive', 'intents', intentId, 'work-items', `${itemId}.md`),
-  ];
-  const file = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!file) {
-    throw new RunError(`work-item spec not found: ${candidates[0]}`, 'SPEC_MISSING');
-  }
-  const content = fs.readFileSync(file, 'utf8');
-  const frontmatter = /^---\n([\s\S]*?)\n---/.exec(content);
-  const section = /\n## Execution Manifest\s*\n([\s\S]*?)(?=\n## |\n?$)/.exec(content);
-  const body = section ? section[1].replace(/^\s*```(?:yaml)?\s*$/gm, '') : '';
-  // What the item says it is for, which is where a corrective item announces itself.
-  const described = /\n## Description\s*\n([\s\S]*?)(?=\n## |\n?$)/.exec(content);
-  const opening = /^# Work Item:[^\n]*\n([\s\S]*?)(?=\n## |\n?$)/m.exec(content);
-  return {
-    file,
-    frontmatter: frontmatter ? parseYaml(frontmatter[1]) : {},
-    description: ((described && described[1]) || (opening && opening[1]) || '').trim(),
-    manifest: parseYaml(body),
-  };
 }
 
 // ---------------------------------------------------------------------------
