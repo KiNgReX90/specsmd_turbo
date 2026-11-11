@@ -162,8 +162,11 @@ function parseList(rows, index, indent, label) {
   const out = [];
   let i = index;
   while (i < rows.length && rows[i].indent === indent && rows[i].text.startsWith('- ')) {
-    const rest = rows[i].text.slice(2);
-    if (/^(?:"[^"]*"|'[^']*'|[^:]+):(?: |$)/.test(rest)) {
+    // The comment goes before the item is read as `key: value`, as YAML cuts it: else
+    // `- path  # note: text` reads as the map {"path  # note": "text"}. A plain key never opens
+    // with a quote, so a quoted scalar holding `: ` stays one scalar.
+    const rest = stripComment(rows[i].text.slice(2)).trim();
+    if (/^(?:"[^"]*"|'[^']*'|[^:"'][^:]*):(?: |$)/.test(rest)) {
       rows[i] = { indent: indent + 2, text: rest, raw: rest, line: rows[i].line };
       const [value, next] = parseMap(rows, i, indent + 2);
       out.push(value);
@@ -187,10 +190,10 @@ function parseMap(rows, index, indent) {
     // A header written `verification: # the cheap checks` carries a comment, not a value. Read
     // it as the empty value it is, or the block under it and every key after it fall out of
     // the document with no error at all (2026-09-09).
-    const marker = rest.trim();
+    // A block scalar's marker may carry a comment of its own too: `notes: |  # as written`.
     const value = stripComment(rest).trim();
     i += 1;
-    if (marker === '|' || marker === '>' || marker === '|-') {
+    if (value === '|' || value === '>' || value === '|-') {
       const [body, next] = parseBlockScalar(rows, i, indent);
       out[key] = body;
       i = next;

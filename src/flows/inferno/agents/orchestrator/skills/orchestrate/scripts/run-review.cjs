@@ -130,6 +130,23 @@ function itemProof(tree, context) {
   return proofAtHead(tree, context.intent.id, context.item.id);
 }
 
+/** The most paths a range line lists itself. */
+const LISTED_PATHS = 40;
+
+/**
+ * The range line of one lens's dispatch, and the file that lists its paths when the line does not.
+ * Up to LISTED_PATHS paths stay on the line, as always. A longer list would make the reviewer's
+ * brief hundreds of paths long, so it goes one per line into the run's cache, outside the tree,
+ * and the line gives the count, with a `paths-file` line under it naming that file.
+ */
+function rangeLines(tree, context, which, range, read) {
+  if (read.length <= LISTED_PATHS) return { file: null, lines: [`  range ${range} paths ${read.join(' ') || '(the whole range)'}`] };
+  const file = path.join(lib.cacheDir(tree), 'review-paths', context.intent.id, context.item.id, `${which}.txt`);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${read.join('\n')}\n`);
+  return { file, lines: [`  range ${range} paths ${read.length}, one per line in the paths-file below`, `  paths-file ${file}`] };
+}
+
 /**
  * The dispatch of one lens and its payload. A lens with a file on record reads `span`, the fix,
  * and names that file as its previous one. A first review reads the proof's own diff when one is
@@ -150,15 +167,16 @@ function lensDispatch(tree, context, which, span, proof) {
   const range = `${short(tree, start)}..${short(tree, 'HEAD')}`;
   const spec = path.relative(tree, lib.readItemSpec(tree, intent.id, item.id).file);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
-  const payload = { agent, model, range, previous, paths: read, spec, brief, write: rel };
+  const ranged = rangeLines(tree, context, which, range, read);
+  const payload = { agent, model, range, previous, paths: read, paths_file: ranged.file, spec, brief, write: rel };
   if (quality) {
-    const body = lens.qualityBody(tree, context, { range, read, spec, brief });
+    const body = lens.qualityBody(tree, context, { ranged: ranged.lines, read, spec, brief });
     return { payload: { ...payload, standards: body.standards, lint: body.lint }, lines: reviewerLines(config, `item ${item.id}`, previous, body.lines, 'quality') };
   }
   return {
     payload: { ...payload, proof: named },
     lines: reviewerLines(config, `item ${item.id}`, previous, [
-      `  range ${range} paths ${read.join(' ') || '(the whole range)'}`,
+      ...ranged.lines,
       ...(named ? [`  proof ${named}`] : []),
       ...realAppLine(tree, config, range, item.id),
       `  spec ${spec}`,

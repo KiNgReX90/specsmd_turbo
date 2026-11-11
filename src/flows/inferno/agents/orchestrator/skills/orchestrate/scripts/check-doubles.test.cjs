@@ -5,6 +5,7 @@ const path = require("node:path");
 const { execFileSync, spawnSync } = require("node:child_process");
 const { tempDir } = require("./test-temp.cjs");
 const { writeFile } = require("./test-write.cjs");
+const { PIPE, piped } = require("./test-pipe.cjs");
 
 const RUN = path.join(__dirname, "run.cjs");
 const CHECK = path.join(__dirname, "check-doubles.cjs");
@@ -255,4 +256,22 @@ test("on the base branch the check alone counts against --since and names that c
   const result = run(fixture, CHECK, ["--tree", fixture.root, "--since", "HEAD~1"]);
   assert.equal(result.code, 2, result.out);
   assert.match(result.out, /FAIL doubles 0 -> 1 against [0-9a-f]{7,}:/);
+});
+
+test("the check alone, piped, prints an answer over 64 KiB whole with its exit code", () => {
+  const fixture = repo(BRIDGE, {});
+  const folder = `e2e/${"d".repeat(200)}`;
+  const files = {};
+  for (let i = 0; i < 200; i += 1) files[`${folder}/${"n".repeat(200)}-${String(i).padStart(3, "0")}.spec.ts`] = BRIDGED;
+  land(fixture, files);
+  const env = { ...process.env, CLAUDE_BUILD_WRAPPED: "1", XDG_CACHE_HOME: fixture.cache };
+  const result = piped(fixture.root, env, CHECK, ["--tree", fixture.root, "--json"]);
+  assert.equal(result.code, 2, result.stderr);
+  assert.ok(Buffer.byteLength(result.stdout) > PIPE);
+  assert.deepEqual(JSON.parse(result.stdout).added, Object.keys(files));
+
+  const config = path.join(fixture.root, "o".repeat(PIPE + 1024));
+  const refused = piped(fixture.root, env, CHECK, ["--tree", fixture.root, "--config", config]);
+  assert.equal(refused.code, 2);
+  assert.equal(refused.stderr, `ERROR [BAD_CONFIG] config file not found: ${config}\n`);
 });

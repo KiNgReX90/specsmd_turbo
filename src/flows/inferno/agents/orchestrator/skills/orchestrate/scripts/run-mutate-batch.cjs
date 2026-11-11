@@ -34,6 +34,7 @@ const { applySwitches, blame, planRust, runsCompiled } = require('./run-mutate-r
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
 const { reseal, sealOf } = require('./run-mutate-seal.cjs');
 const { runGroup, sessionGroups, sessionOf, unsealedVerdict } = require('./run-mutate-session.cjs');
+const { leftBehind, settle, snapshot } = require('./run-mutate-left.cjs');
 
 const { RunError } = lib;
 const OFF = 'unset INFERNO_MUTANT; ';
@@ -216,6 +217,8 @@ async function batch(options) {
   const hosted = sessionOf(config);
   const plans = planAll(tree, entries, hosted);
   const groups = { hosted, list: sessionGroups(hosted, entries, plans) };
+  // What git calls changed before the first write: the batch file and the review being recorded.
+  const before = snapshot(tree);
   const session = openSession(tree);
   let result = null;
   let failed = [];
@@ -227,7 +230,7 @@ async function batch(options) {
   // A batch that stopped says why, before the paths it could not put back.
   const stopped = result && result.stopped ? [result.stopped] : [];
   if (failed.length > 0) return { exit: 2, payload: { restored: false, failed, stopped: stopped[0] }, out: [...recovered, ...stopped, ...failed] };
-  return report(session, recovered, entries, plans, result);
+  return settle(report(session, recovered, entries, plans, result), leftBehind(tree, before));
 }
 
 module.exports = { batch };
