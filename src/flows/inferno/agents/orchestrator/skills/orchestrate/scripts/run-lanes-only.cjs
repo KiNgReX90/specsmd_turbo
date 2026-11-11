@@ -27,7 +27,7 @@ const { pendingPath } = require('./run-supersede.cjs');
 const { atomicWrite } = require('./state-store.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const { gateSupersedeCall, gateWaitCall } = require('./run-call.cjs');
-const { sinceCommit } = require('./run-since.cjs');
+const { sinceCommit, unpushedFrom } = require('./run-since.cjs');
 
 const { RunError } = lib;
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
@@ -43,8 +43,8 @@ const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(valu
 function lanesSince(tree, since, base) {
   if (since) return sinceCommit(tree, since);
   if (lib.currentBranch(tree) !== base) return null;
-  const origin = lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}^{commit}`], { tolerate: true });
-  if (!origin || origin === lib.git(tree, ['rev-parse', 'HEAD'])) {
+  const origin = unpushedFrom(tree, base);
+  if (!origin) {
     throw new RunError(
       `on ${base} with no unpushed commit to diff (origin/${base} is missing or at HEAD): pass --since <the commit before your edit>`,
       'BAD_ARGS', 1

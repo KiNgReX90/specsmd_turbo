@@ -230,8 +230,11 @@ function checkAndLand(tree, options, initial) {
   const red = (out) => ({ exit: 2, payload: { ok: false, tree, branch, items: ids, folded: folded.length > 0, results }, out });
 
   // The double ratchet runs first: a branch that fakes more of the app is refused before any
-  // command spends time proving it.
-  const doubles = config.doubles === undefined ? null : checkDoubles({ ...options, tree, base, since: landing ? landing.ref : undefined }, config);
+  // command spends time proving it. On the base with no landing there is nothing to count, so
+  // it skips and says why, never a PASS that held HEAD to itself.
+  const doubles = config.doubles === undefined ? null
+    : landing && landing.all ? { exit: 0, out: [`SKIP doubles (on ${base} with no unpushed commit and no --since: no landing to count)`] }
+      : checkDoubles({ ...options, tree, base, since: landing ? landing.ref : undefined }, config);
   if (doubles && doubles.exit !== 0) return red([...lead, ...doubles.out]);
   // The tester cases the branch changes the truth of are edited or answered before any command runs.
   const stale = cases.refusal(tree, config, `${since || gate.mergeBase(tree, base)}..HEAD`);

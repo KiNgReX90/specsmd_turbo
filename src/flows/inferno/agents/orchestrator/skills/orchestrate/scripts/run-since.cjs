@@ -21,21 +21,27 @@ function sinceCommit(tree, since) {
 }
 
 /**
+ * The base-branch step both callers share: the `origin/<base>` commit when it resolves and
+ * differs from HEAD, so the diff from it is exactly the unpushed commits; else null, and each
+ * caller gives its own answer to having no diff.
+ */
+function unpushedFrom(tree, base) {
+  const origin = lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}^{commit}`], { tolerate: true });
+  return origin && origin !== lib.git(tree, ['rev-parse', 'HEAD']) ? origin : null;
+}
+
+/**
  * Where integrate's landing starts. `--since` on any branch; null off the base, whose caller
  * keeps the merge base; on the base `origin/<base>` when it lacks commits HEAD has. With
  * neither there is no diff, and integrate runs every scoped check rather than skip its proof:
- * `all` is true and `out` says why.
+ * `ref` is null, `all` is true and `out` says why.
  */
 function landingSince(tree, base, since) {
   if (since) return { ref: sinceCommit(tree, since), all: false, out: [] };
   if (lib.currentBranch(tree) !== base) return null;
-  const origin = lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}^{commit}`], { tolerate: true });
-  if (origin && origin !== lib.git(tree, ['rev-parse', 'HEAD'])) return { ref: origin, all: false, out: [] };
-  return {
-    ref: origin || null,
-    all: true,
-    out: [`on ${base} with no unpushed commit and no --since: every scoped check runs`],
-  };
+  const origin = unpushedFrom(tree, base);
+  if (origin) return { ref: origin, all: false, out: [] };
+  return { ref: null, all: true, out: [`on ${base} with no unpushed commit and no --since: every scoped check runs`] };
 }
 
-module.exports = { landingSince, sinceCommit };
+module.exports = { landingSince, sinceCommit, unpushedFrom };

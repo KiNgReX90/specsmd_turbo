@@ -90,6 +90,20 @@ test("doubles on the base counts HEAD against the landing", () => {
   assert.match(named.out, /FAIL doubles 0 -> 1 against [0-9a-f]{7,}:/);
 });
 
+test("a bare integrate after a push skips the doubles ratchet and says why", () => {
+  // origin/main is at HEAD and no --since names a landing: there is nothing to count, and a
+  // PASS that held HEAD to itself would prove nothing.
+  const fixture = repo({ config: DOUBLES });
+  commit(fixture, "src/fake.ts", "export const fake = 'FAKE';\n");
+  git(fixture.root, ["push", "-q", "origin", "main"]);
+  const bare = integrate(fixture);
+  assert.equal(bare.code, 0, bare.out + bare.err);
+  assert.match(bare.out, /^SKIP doubles \(on main with no unpushed commit and no --since: no landing to count\)$/m);
+  assert.doesNotMatch(bare.out, /PASS doubles/);
+  assert.doesNotMatch(bare.err, /BAD_CONFIG/);
+  assert.match(bare.out, /^(PASS|GREEN) \d+s echo scoped/m);
+});
+
 test("run.cjs doubles on the base counts against --since and refuses without a landing to count from", () => {
   const fixture = repo({ config: DOUBLES });
   commit(fixture, "src/fake.ts", "export const fake = 'FAKE';\n");
