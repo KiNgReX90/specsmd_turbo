@@ -36,11 +36,11 @@ const path = require('node:path');
 const S = path.join(__dirname, '..', '..', 'src', 'flows', 'inferno', 'agents', 'orchestrator', 'skills', 'orchestrate', 'scripts');
 const { git, repo, write } = require(path.join(S, 'review-fixture.cjs'));
 
-function spec(id, criteria, editable) {
+function spec(id, criteria, editable, intent = 'alpha') {
   return `---
 id: ${id}
 title: "${id}"
-intent: alpha
+intent: ${intent}
 status: pending
 depends_on: []
 ---
@@ -168,4 +168,4 @@ function archive(root) {
   return commitAll(root, 'archive c-three');
 }
 
-module.exports = { S, build, git, write };
+module.exports = { S, build, commitAll, finding, git, review, spec, write };

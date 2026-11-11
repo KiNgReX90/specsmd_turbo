@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * The git side of the readout, read-only: every version of the item review files and the item
- * specs between two refs, in commit order, keyed by intent and item so a move into the archive
- * stays the same file.
+ * The git side of the readout, read-only: every version of the item review files (both lenses)
+ * and the item specs between two refs, in commit order, keyed by intent and item so a move into
+ * the archive stays the same file.
  */
 
 const { spawnSync } = require('node:child_process');
@@ -23,16 +23,26 @@ function commitOf(tree, ref) {
   return result.stdout.trim();
 }
 
-/** Where a kind of file lives: an intent's own folder, or the archive once the intent is done. */
+/**
+ * Where a kind of file lives: an intent's own folder, or the archive once the intent is done.
+ * `reviews` holds two lenses: the contract file `reviews/<item>.yaml` and the quality file
+ * `reviews/quality/<item>.yaml`, which the quality reviewer writes for an item with production code.
+ */
+const lensOf = (dir, ext, lens) => ({
+  lens, dir, ext,
+  key: new RegExp(`^\\.specs-inferno\\/(?:archive\\/)?intents\\/([^/]+)\\/${dir}\\/([^/]+)\\.${ext}$`),
+});
 const KINDS = {
-  reviews: { ext: 'yaml', key: /^\.specs-inferno\/(?:archive\/)?intents\/([^/]+)\/reviews\/([^/]+)\.yaml$/ },
-  'work-items': { ext: 'md', key: /^\.specs-inferno\/(?:archive\/)?intents\/([^/]+)\/work-items\/([^/]+)\.md$/ },
+  reviews: [lensOf('reviews', 'yaml', 'contract'), lensOf('reviews/quality', 'yaml', 'quality')],
+  'work-items': [lensOf('work-items', 'md', 'spec')],
 };
 
-const pathsOf = (kind, intent, item) => {
-  const { ext } = KINDS[kind];
-  return [`.specs-inferno/intents/${intent}/${kind}/${item}.${ext}`, `.specs-inferno/archive/intents/${intent}/${kind}/${item}.${ext}`];
-};
+/** The two places a file of one lens can live, its own folder first. */
+const pathsOf = ({ dir, ext }, intent, item) =>
+  [`.specs-inferno/intents/${intent}/${dir}/${item}.${ext}`, `.specs-inferno/archive/intents/${intent}/${dir}/${item}.${ext}`];
+
+/** The key a version is compared under: the item, and the lens when the kind holds more than one. */
+const keyOf = (kind, change) => `${change.intent}/${change.item}${KINDS[kind].length > 1 ? `#${change.lens}` : ''}`;
 
 /** Blob contents for `<commit>:<path>` refs, in one git call; null for a ref with no blob. */
 function readBlobs(tree, refs) {
@@ -59,28 +69,35 @@ function readBlobs(tree, refs) {
 }
 
 /**
- * Every change to a kind of file in base..head, oldest first, each with its intent, item and
- * content (null for a deletion), plus the content each key had at base.
+ * Every change to a kind of file in base..head, oldest first, each with its intent, item, lens
+ * and content (null for a deletion), plus the content each key had at base. One git walk reads
+ * every lens of the kind, so the changes of one commit stay together. A key is `<intent>/<item>`,
+ * with `#<lens>` after it for a kind of more than one lens.
  */
 function versions(tree, base, head, kind) {
-  const { ext, key } = KINDS[kind];
-  const specs = [`:(glob).specs-inferno/intents/*/${kind}/*.${ext}`, `:(glob).specs-inferno/archive/intents/*/${kind}/*.${ext}`];
+  const lenses = KINDS[kind];
+  const specs = lenses.flatMap(({ dir, ext }) =>
+    [`:(glob).specs-inferno/intents/*/${dir}/*.${ext}`, `:(glob).specs-inferno/archive/intents/*/${dir}/*.${ext}`]);
   const log = git(tree, ['log', '--reverse', '--topo-order', '--no-renames', '--format=%x00%H', '--name-status', `${base}..${head}`, '--', ...specs]);
   const changes = [];
   for (const chunk of log.split('\0').filter((part) => part.trim() !== '')) {
     const [sha, ...lines] = chunk.trim().split('\n');
     for (const line of lines.filter(Boolean)) {
       const [status, file] = line.split('\t');
-      const match = key.exec(file || '');
-      if (match) changes.push({ sha, file, deleted: status === 'D', intent: match[1], item: match[2] });
+      for (const one of lenses) {
+        const match = one.key.exec(file || '');
+        if (match) changes.push({ sha, file, deleted: status === 'D', intent: match[1], item: match[2], lens: one.lens });
+      }
     }
   }
-  const keys = [...new Map(changes.map((change) => [`${change.intent}/${change.item}`, change])).values()];
-  const baseRefs = keys.flatMap((change) => pathsOf(kind, change.intent, change.item).map((file) => `${base}:${file}`));
+  const lensBy = new Map(lenses.map((one) => [one.lens, one]));
+  const keys = [...new Map(changes.map((change) => [keyOf(kind, change), change])).values()];
+  const placesOf = (change) => pathsOf(lensBy.get(change.lens), change.intent, change.item);
+  const baseRefs = keys.flatMap((change) => placesOf(change).map((file) => `${base}:${file}`));
   const blobs = readBlobs(tree, [...changes.filter((change) => !change.deleted).map((change) => `${change.sha}:${change.file}`), ...baseRefs]);
   const atBase = new Map(keys.map((change) => {
-    const found = pathsOf(kind, change.intent, change.item).map((file) => blobs.get(`${base}:${file}`)).find((text) => text != null);
-    return [`${change.intent}/${change.item}`, found === undefined ? null : found];
+    const found = placesOf(change).map((file) => blobs.get(`${base}:${file}`)).find((text) => text != null);
+    return [keyOf(kind, change), found === undefined ? null : found];
   }));
   for (const change of changes) change.text = change.deleted ? null : blobs.get(`${change.sha}:${change.file}`);
   return { changes, atBase };
@@ -88,12 +105,13 @@ function versions(tree, base, head, kind) {
 
 /** The content of each item's spec at a commit, wherever it lives: its own folder or the archive. */
 function specsAt(tree, head, keys) {
-  const refs = keys.flatMap(({ intent, item }) => pathsOf('work-items', intent, item).map((file) => `${head}:${file}`));
+  const [where] = KINDS['work-items'];
+  const refs = keys.flatMap(({ intent, item }) => pathsOf(where, intent, item).map((file) => `${head}:${file}`));
   const blobs = readBlobs(tree, refs);
   return new Map(keys.map(({ intent, item }) => {
-    const text = pathsOf('work-items', intent, item).map((file) => blobs.get(`${head}:${file}`)).find((found) => found != null);
+    const text = pathsOf(where, intent, item).map((file) => blobs.get(`${head}:${file}`)).find((found) => found != null);
     return [`${intent}/${item}`, text === undefined ? null : text];
   }));
 }
 
-module.exports = { UsageError, commitOf, git, specsAt, versions };
+module.exports = { UsageError, commitOf, git, keyOf, specsAt, versions };
