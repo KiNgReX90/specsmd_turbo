@@ -156,3 +156,30 @@ The quality reviewer wrote a finding's text as a folded block scalar with the st
 ### How the host got through
 
 The orchestrator sent the file back and the reviewer rewrote the value with `|`. Until the fix, an orchestrator can add one sentence to each reviewer dispatch: write a multi-line value with `|` or `|-`, never `>-`.
+
+## 6. A reviewer that lists an owned ledger file under `files`, as its text tells it to, is refused
+
+Seen 2026-11-11 on the app repo, intent `a-lane-run-needs-no-hands-and-a-wrong-test-is-fixed-in-one-landing`, item `lnh-every-lane-red-and-refusal-names-its-class`, on 0.1.83. It is what the fix for an item that owns a file under `.specs-inferno/` left open.
+
+### What happens
+
+- The item owns `.specs-inferno/config.yaml` in `ownership.editable` and changed it.
+- Both reviewer texts say `files: [<every file the item changed>]` (`src/flows/inferno/agents/reviewer/agent.md:46`, `src/flows/inferno/agents/reviewer-quality/agent.md:62`). The contract reviewer did that and listed the config.
+- `run.cjs review --item` refused the file: "files lists .specs-inferno/config.yaml; the ledger is never part of the code a review binds". The file went back to the reviewer for one more round, though its content was right.
+
+### Why
+
+- 0.1.83 decided that an owned file under `.specs-inferno/` stays outside the item's proof and outside what its review binds (`CHANGELOG.md`, "an item may own a file under `.specs-inferno/`"). The proof side follows that: `inLedger` in `S/run-item-proof.cjs:68` leaves those paths out of the proof and out of what changed since.
+- The review side still refuses where it should leave out: `boundFiles` throws on any listed path under `.specs-inferno/` (`S/run-review-file.cjs:131-133`).
+- The dispatch names the proof's paths, so it does not list the config (`S/run-review.cjs:166`). The reviewer reads the range all the same, sees the change, and its own text tells it to list every changed file.
+
+### What the flow should do
+
+- `boundFiles` leaves a listed path under `.specs-inferno/` out of the bound files and does not throw. The review is recorded, and what it binds is the same set the proof holds.
+- Or the two reviewer texts say it in their template: every file the item changed, except a path under `.specs-inferno/`. That costs words in two texts that are near a host's ceiling, so the first is the better one.
+- Not the way: counting only `state.yaml` and the intent folders as ledger. A host config would then be bound by the review and left out of the proof, and the two would disagree again.
+- Tests: an item review that lists an owned `.specs-inferno/config.yaml` beside its code files is recorded, and its bound files are the code files. A review that lists only ledger paths is still refused, with "files must list every file the review read for this item".
+
+### How the host got through
+
+The reviewer rewrote the file without the config. Until the fix, an orchestrator adds one sentence to the reviewer dispatch of an item that owns a file under `.specs-inferno/`: leave paths under `.specs-inferno/` out of `files`.
