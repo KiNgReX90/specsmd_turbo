@@ -1,20 +1,13 @@
 item: ri-integrate-refuses-only-the-dirt-it-reads-or-commits
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-dirt.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-e2e-impact.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-beside.test.cjs
-findings:
-  - id: Q3
-    check: correctness
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
-    line: 122
-    evidence: "Read e2eSelection at 118-124 and its caller at 238. The selection's own window is impact.sinceRef: off the base it returns the anchor, so changedSince takes every path the intent committed since merge-base(base, HEAD); on the base it returns the latest integrated_sha proof (run-e2e-impact.cjs 136-152, 116-134). The new filter keeps a dirty path only when it is in a different window, from..HEAD, where from is checkAndLand's since: the --since commit when one is named, origin/<base> on the base, or the merge base, which is HEAD on the base when landing.all is set (run-since.cjs 39-45). So a browser-facing path the intent committed inside the selection window but before from (an item committed before --since, or on the base after the last proof but already pushed, or every committed path in the landing.all case) is selected while clean and silently dropped once a sibling has the same file dirty: the browser step reports SKIP for a committed change instead of running it or refusing the dirty file, which is what happened before this range. The comment at 119-120 says committed paths still select. No test covers a committed and dirty path outside from..HEAD."
-    fix: "Decide committed from the same window the selection reads, not from checkAndLand's since. In run-e2e-impact.cjs split changedSince into its committed part (the committedPaths result it already computes) and the working plus untracked part, export the committed part as committedSince(tree, since), and in e2eSelection keep a dirty path only when committedSince(tree, since) holds it; then drop the from parameter and its argument at 238. Add a case to run-integrate-beside.test.cjs: an item commits a mapped path, integrate runs with --since naming a later commit, a sibling leaves that path dirty, and the result is the DIRTY refusal (or the browser step selected), never SKIP e2e."
-    severity: major
-tree: 4c40cd7ab87ae064bfbf24b1512e115d6cd4358d7597d91165a42c98371d7a61
-commit: dbbdfd280ad2f6bc39eb8ea6ebc450f1eb20ecbb
-reviewer: a64048ed19a282275
+tree: 49b0512c56186d9caa896ac37404c96b19c20260d81d042f76d3c9bfe73b224b
+commit: 6196a5e6f1ab22b661ea999a1f0886f5ef182aaf
+reviewer: a34b9ba1b557af4e6

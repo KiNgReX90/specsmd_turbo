@@ -1,5 +1,5 @@
 item: ri-integrate-refuses-only-the-dirt-it-reads-or-commits
-verdict: fix
+verdict: clean
 files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-dirt.cjs
@@ -7,14 +7,8 @@ files:
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs
   - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-beside.test.cjs
-findings:
-  - criterion: "item step 2, the selection reads committed paths only (`git diff --name-only --no-renames <anchor> HEAD`), so a tolerated sibling file never selects a check, and a committed path still does"
-    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
-    line: 122
-    evidence: "e2eSelection keeps a dirty file only when `git diff <from> HEAD` lists it (:122-123), with `from` the landing's since (passed at :238), while impact.changedSince reads its committed paths from impact.sinceRef's range: off the base the whole intent from its fork, on the base the last integrated sha or HEAD~1 (run-e2e-impact.cjs:116-152). A path committed inside that range but before `from`, which a sibling has edited again, is now dropped from the selection. Ran a throwaway case on review-fixture's repo with this suite's MAPPED config (integrate_e2e map docs/** to e2e/docs.spec.ts, a-two freed of depends_on) on a branch `work` off main: a-two commits docs/b.md, then a-one commits src/a.ts and is reviewed clean, then `integrate --item a-one --since <the commit between them>`. Clean tree: `PASS 0s echo ran e2e/docs.spec.ts`, `completed a-one`. Same tree with docs/b.md edited again and left uncommitted: `SKIP e2e (nothing browser-facing changed. Base fold paths are excluded.)`, `completed a-one`, exit 0. A sibling's uncommitted edit now deselects a browser journey the committed change selects, and the landing completes without running it, where a selection read from the committed paths of the anchor selects it and then refuses docs/b.md as a file the browser step reads. The same drop hits on the base, where `from` is --since, origin/<base>, or HEAD itself when there is no diff (landing.all), and the impact range starts at the last integrated sha. The new case at run-integrate-beside.test.cjs:275-289 covers only an uncommitted file no commit touched."
-    fix: "Build `committed` from the start changedSince itself reads, not the landing's since: in e2eSelection, after `const since = impact.sinceRef(...)`, take the start as `since.since` when `since.direct`, else `lib.git(tree, ['merge-base', since.base, 'HEAD'])` for an anchor off the base, else `since` when sinceRef returned a sha, and diff `git diff --name-only --no-renames <start> HEAD`; drop the `from` parameter and :238's argument. Add a case to run-integrate-beside.test.cjs with the MAPPED config on a branch off main: a-two commits docs/b.md, a-one commits src/a.ts and is reviewed, docs/b.md is edited again uncommitted, and `integrate --item a-one --since <the commit between them>` exits 2 with DIRTY naming docs/b.md and never prints SKIP e2e."
-    severity: blocker
-    repeat: true
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-e2e-impact.cjs
+findings: []
 mutants:
   - criterion: 1
     file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
@@ -30,6 +24,6 @@ mutants:
     replace: "scopes[command] || []"
     test: "node --test --test-name-pattern=\"refuses a dirty path an unscoped check reads\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs"
     caught: yes
-tree: 4c40cd7ab87ae064bfbf24b1512e115d6cd4358d7597d91165a42c98371d7a61
-commit: dbbdfd280ad2f6bc39eb8ea6ebc450f1eb20ecbb
-reviewer: a6d8e48a17116ff86
+tree: 49b0512c56186d9caa896ac37404c96b19c20260d81d042f76d3c9bfe73b224b
+commit: 6196a5e6f1ab22b661ea999a1f0886f5ef182aaf
+reviewer: a152fc7753e22d304

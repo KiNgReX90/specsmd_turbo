@@ -64,13 +64,13 @@ intents:
         complexity: high
         mode: autopilot
         status: pending
-        review: fix
-        review_hash: 4c40cd7ab87ae064bfbf24b1512e115d6cd4358d7597d91165a42c98371d7a61
-        review_commit: dbbdfd280ad2f6bc39eb8ea6ebc450f1eb20ecbb
+        review: clean
+        review_hash: 49b0512c56186d9caa896ac37404c96b19c20260d81d042f76d3c9bfe73b224b
+        review_commit: 6196a5e6f1ab22b661ea999a1f0886f5ef182aaf
         review_tier: strong
         review_misses: 2
-        review_weight: repeat
-        reviewed_at: 2026-11-11T10:26:10Z
+        review_weight: none
+        reviewed_at: 2026-11-11T10:34:58Z
         depends_on: [ri-integrate-on-the-base-diffs-from-since-or-origin, ri-the-ledger-commit-stages-only-what-completion-wrote]
       - id: ri-verify-item-waits-only-on-an-overlapping-open-dispatch
         title: "Verify-item waits only on an open dispatch whose frozen ownership overlaps the item's"
