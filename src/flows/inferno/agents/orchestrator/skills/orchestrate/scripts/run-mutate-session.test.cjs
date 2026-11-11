@@ -13,7 +13,7 @@ const path = require("node:path");
 const {
   LINES, calls, checks, journalOf, mutated, outsideConfig, readIn, sessionBatch, sessionBlock, sessionTree, wrapped,
 } = require("./run-mutate-session-fixture.cjs");
-const { git } = require("./run-mutate-fixture.cjs");
+const { fakeTest, git } = require("./run-mutate-fixture.cjs");
 const { writeFile } = require("./test-write.cjs");
 
 const CONFIG = `mutate:\n${sessionBlock()}`;
@@ -209,4 +209,24 @@ test("the session's open, send and close run bare, and only the test it runs goe
   assert.equal(wrappedLines.length, 3, wrappedLines.join("\n"));
   assert.ok(wrappedLines.every((line) => /node remote\.cjs run build$/.test(line)), wrappedLines.join("\n"));
   assertWhole(f);
+});
+
+// A Rust entry never goes into a session, but its test may reach cargo through the wrapper: it is
+// switched then, so the batch builds once. One whose wrapped command only reads the source is built in place.
+const READS_SOURCE = "'use strict';\nconst ok = require('fs').readFileSync('src/lib.rs', 'utf8').includes(process.argv[2]);\n" +
+  "console.log(ok ? '# pass 1' : '# fail 1');\nprocess.exit(ok ? 0 : 1);\n";
+
+test("a Rust entry whose test reaches cargo through the wrapper is switched, and one whose wrapped test reads the source is built in place", (t) => {
+  const lib = "pub fn alpha() -> usize { ONE + TEN }\npub fn beta() -> usize { 2 }\n";
+  const f = sessionTree(t, { "src/lib.rs": lib, "reads.cjs": READS_SOURCE });
+  const result = sessionBatch(f, [
+    { criterion: "AC1", file: "src/lib.rs", line: 1, find: "ONE", replace: "TWO", test: wrapped(fakeTest(f, "alpha", "ONE + TEN")) },
+    { criterion: "AC2", file: "src/lib.rs", line: 2, find: "2", replace: "8", test: wrapped("node reads.cjs '{ 2 }'") },
+  ], { config: outsideConfig(f, CONFIG), json: true });
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.form, e.caught]), [["switch", true], ["classic", true]]);
+  assert.equal(result.payload.switched, 1);
+  assert.equal(result.payload.entries[1].own, "its test starts no cargo run, so it reads the source in place");
+  assert.equal(readIn(f, "src/lib.rs"), lib);
+  assert.equal(git(f.tree, "status", "--porcelain"), "");
 });

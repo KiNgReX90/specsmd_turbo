@@ -88,7 +88,7 @@ test("an owed proposal whose line moved and changed no longer locks a clean inte
   assert.equal(result.code, 0, shown(result));
   assert.match(result.out, /intent review clean, recorded/);
   assert.match(result.out, /mutants: 2 ran, 2 caught, 0 survived, 1 without a verdict/);
-  assert.match(result.out, /^MUTANT a-one:1 no verdict: src\/a\.ts:1 changed, and find no longer marks one line of it; /m);
+  assert.match(result.out, /^MUTANT a-one:1 no verdict: src\/a\.ts:1 changed, and find no longer marks one line of it; this record's own proposal for a-one:1 stands in its place$/m);
   assert.deepEqual(runs(fixture), ["checks/a2.expect", "checks/one.expect"]);
   const intent = read(tree, INTENT_REVIEW);
   assert.match(intent, /criterion: a-one:1\n {4}file: src\/a\.ts\n(?:.*\n){4} {4}caught: none\n {4}why: "src\/a\.ts:1 changed, and find no longer marks one line of it"/);
@@ -143,4 +143,17 @@ test("an item's next round follows a moved line into the file the correction mov
   assert.deepEqual(runs(fixture), ["checks/one.expect", "checks/a2.expect"]);
   const recorded = parseItemReview(tree, REVIEW, "a-one", { recorded: true });
   assert.deepEqual(recorded.mutants.map((m) => [m.criterion, m.file, m.line, m.caught]), [["1", "src/c.ts", "1", "yes"], ["2", "src/a.ts", "2", "yes"]]);
+});
+
+test("an owed proposal no line holds, in a record without a proposal for its criterion, is the next intent review's", () => {
+  const { fixture, tree } = intentTree();
+  owedRound(fixture, tree, itemReview(`mutants:\n${CAUGHT_ONE}${STRONG_TWO}`), 0);
+  moveA(tree, "export const a = 0 + 1;", "0 + 1");
+  const finding = "findings:\n  - criterion: a-one:1\n    file: src/c.ts\n    line: 1\n    evidence: read src/c.ts, a reads one through a sum\n" +
+    "    fix: write the value plainly\n    severity: minor\n    owner: a-one\n";
+
+  const result = intentReview(fixture, tree, `verdict: fix\n${finding}`);
+
+  assert.equal(result.code, 2, shown(result));
+  assert.match(result.out, /^MUTANT a-one:1 no verdict: src\/a\.ts:1 changed, and find no longer marks one line of it; propose another for a-one:1 in the next intent review$/m);
 });
