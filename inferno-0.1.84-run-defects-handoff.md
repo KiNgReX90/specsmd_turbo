@@ -188,3 +188,25 @@ A reviewer writes a test per mutant, usually one test name each, so two mutants 
 ### How the host gets through
 
 It sets `mutate.session` as it is, for the entries that do share a command, and leaves `mutate.run` unset. Its reviewers already write the wrapper themselves in 317 of the 342 entries, so the key would move little today, and with one open per test command it would send every light test through its own sync and wait. The host sets `mutate.run` once a batch is one session.
+
+## 7. A check the host's wrapper refused to run reads as a failed check, and the builder is sent after a machine fault
+
+Read 2026-11-12 in the 0.1.85 source on this branch by the session that owns the first host's wrapper, before the first integrate ran through a session. It holds for a plain wrapped check too, and a session adds new ways to meet it.
+
+### What the code does
+
+- `runCommand` (`S/run-proofs.cjs:156-170`) reads a check only as exit 0 or not. A wrapper that ran nothing, because its machine did not answer or the session's slot was gone, exits non-zero, so the check is `fail`.
+- When a session's open fails, `checkSession` (`S/run-check-session.cjs:76-82`) gives every check of the step that exit without running one.
+- `run.cjs integrate` (`S/run-integrate.cjs:290-297`) then prints FAIL per check and "send every failure above to the builder in one correction", and exits 2. The gate reads the same result as a red.
+- The first host's wrapper marks this case: exit 75 and a line that starts `remote-run: REFUSED [machine]` and ends "no verdict". It gives that for a lost connection, a restarted machine and a session whose holder ended (idle for 900 seconds, or 6 hours old). `mutate` already reads a session that did not open as no verdict; the checks have no such reading.
+
+### What the flow should do
+
+- Give a host one optional key, `verification.refused`: a regex of the line its wrapper prints when it ran nothing. A check, or a session open, that exits non-zero with that line in its log is no verdict.
+- In a session, open a fresh session once and run the checks that got no verdict again. A check outside a session runs once more.
+- After a second refusal, integrate and the gate end with their own exit code and one line that names the machine fault and says to run the step again. They print no FAIL for those checks and no line about a builder, and they mint no proof.
+- Tests: a session whose first open is refused and whose second opens gives a green integrate with two opens in its log. Two refused opens give the no-verdict exit, not exit 2, and no check reads failed. A check that exits non-zero without the line is a fail as today.
+
+### How the host gets through
+
+An orchestrator that sees every check of an integrate or a gate fail with a REFUSED line under it runs the step again and sends nothing to its builder. The host's own direct landing gets the retry in its driver.
