@@ -331,3 +331,34 @@ The reviewer names a check script as the mutant's test. The check goes red on th
 ### How the host got through
 
 For a check that a gate command runs, the orchestrator ends the criterion's line with `(gate: <that finalize command>)` in a commit that changes the spec alone, and the criterion owes no mutant. For any other check the reviewer names a runner test that covers the same line.
+
+## 12. After a fold, a line the base added to a file the item owns reads as the item's own
+
+Seen 2026-11-12 on the app repo, intent `the-declaration-of-conformity-is-complete-for-every-stated-law`, item `doc-a-typed-law-carries-its-publication-reference`, on 0.1.83.
+
+### What happens
+
+- The base branch gained a commit that puts `#[ignore = "regenerates only the policy export goldens; review the diff"]` on one test of `src-tauri/src/dossier/render/tests/changed_document_goldens.rs`. The item also changes that file. The intent folded the base in while the item was open.
+- `run.cjs verify-item` then failed the item on a line it never wrote:
+
+  ```text
+  switched off: src-tauri/src/dossier/render/tests/changed_document_goldens.rs:144: #[ignore = "regenerates only the policy export goldens; review the diff"]
+  ```
+
+- The fold also changed bytes the item's accepted dispatch had recorded, and `verify-item` asked for the dispatch again. The host answered with an empty `dispatch-log` and its accept.
+
+### Why
+
+- `readDiff` reads the lines an item added to a test file from one diff, the baseline `from` to the tree: `parseAddedLines(git([...DIFF, '-U0', from, '--', literal(file)]))` (`S/run-item-proof.cjs:253-270`). A fold between `from` and now is inside that diff, so the base's lines in that file are in it.
+- The flow knows a fold, at the level of whole paths: `foldedSince` lists the paths the base brought in "and nothing changed since" (`S/run-attribute.cjs:43-59`), and the ownership check skips such a path when the item does not claim it. A file that both the base and the item changed is not such a path, and nothing reads it line by line.
+- The same diff is the item's proof and the range a first review reads, so a reviewer of that item is shown the base's lines as the item's too.
+
+### What the flow should do
+
+- For a file the item owns that the fold also changed, the lines the base added are the base's. `foldedSince` already finds the two commits that bound them: the last base commit the baseline held, and the base tip that was folded. A line added between those two is left out of `tests_changed.switched_off`.
+- A fold that changes bytes of a path an accepted dispatch recorded is attributed to the fold, with no new dispatch asked for, when the path's change is the base's alone.
+- Tests: the base adds `#[ignore]` to a test in a file the item also edits, the intent folds, and `verify-item` passes. The item adding its own `#[ignore]` to the same file after the fold is still refused.
+
+### How the host got through
+
+It ran `verify-item --since <the fold's merge commit>`, so the baseline starts after the fold, behind an empty `dispatch-log` and its accept. That is safe only for an item whose review on record already read its work from before the fold: check that the review range the runner prints still starts at or before the item's first commit, and name the item's earlier files in the brief when it does not.
