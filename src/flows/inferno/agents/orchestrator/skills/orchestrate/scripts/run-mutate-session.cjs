@@ -39,30 +39,14 @@ const fs = require('fs');
 const lib = require('./run-lib.cjs');
 const { reseal, unseal } = require('./run-mutate-seal.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
-const { quote } = require('./run-mutate-host.cjs');
+const { call, exported, reach, validateSessionKey } = require('./run-host-session.cjs');
 
-const { RunError } = lib;
 const KEYS = ['match', 'open', 'send', 'run', 'close'];
-/** The exit codes a shell gives when a signal ended its child. */
-const KILLED = { 130: 'SIGINT', 137: 'SIGKILL', 143: 'SIGTERM' };
 const UNSEALED = 'the batch stopped, since a seal could not be put back';
 
 /** Refuse a `mutate.session` this runner cannot use, naming the file. */
 function validateSession(mutate, file) {
-  const session = mutate.session;
-  if (session === undefined) return;
-  const bad = (key, what) => new RunError(`${key} in ${file} must be ${what}.`, 'BAD_CONFIG');
-  if (!session || typeof session !== 'object' || Array.isArray(session)) throw bad('mutate.session', `a map of ${KEYS.join(', ')}`);
-  const unknown = Object.keys(session).filter((key) => !KEYS.includes(key));
-  if (unknown.length > 0) throw bad('mutate.session', `a map of ${KEYS.join(', ')} only, not ${unknown.join(', ')}`);
-  for (const key of KEYS) {
-    if (typeof session[key] !== 'string' || session[key].trim() === '') throw bad(`mutate.session.${key}`, 'a non-empty string');
-  }
-  try {
-    new RegExp(session.match);
-  } catch (error) {
-    throw bad('mutate.session.match', `a regex (${error.message})`);
-  }
+  validateSessionKey(mutate.session, 'mutate.session', KEYS, file);
 }
 
 /** The session a config names, with its regex compiled, or null. */
@@ -80,9 +64,9 @@ function sessionGroups(hosted, entries, plans) {
   const groups = new Map();
   for (const e of hosted ? entries.filter((item) => !item.rust) : []) {
     const command = e.command || e.test;
-    const reached = hosted.match.exec(command);
-    if (!reached || reached.index !== 0) continue;
-    const inner = command === e.test ? command.slice(reached[0].length) : e.test;
+    const rest = reach(hosted.match, command);
+    if (rest === null) continue;
+    const inner = command === e.test ? rest : e.test;
     if (!groups.has(e.test)) groups.set(e.test, { test: e.test, inner, entries: [] });
     groups.get(e.test).entries.push(e);
     plans.set(e.k, { form: 'session' });
@@ -92,14 +76,6 @@ function sessionGroups(hosted, entries, plans) {
 
 /** The verdict of a mistake whose reseal did not exit 0: none, with the signal that stops the batch if one ended it. */
 const unsealedVerdict = (failed) => ({ caught: null, why: failed.why, code: failed.code, log: failed.log, signal: failed.signal });
-
-const exported = (env) => `export ${Object.entries(env).map(([key, value]) => `${key}=${quote(value)}`).join(' ')}; `;
-
-/** Run one session command in the tree; `signal` names the signal that ended it, also when a shell reports it killed. */
-function call(command, env, log) {
-  const run = lib.runShell(exported(env) + command, env.INFERNO_TREE, log, { wrap: false });
-  return { code: run.code, log: run.log, signal: run.signal || KILLED[run.code] || null };
-}
 
 const stopOn = (what, signal) => ({ stopped: `the ${what} ended on ${signal}, so the batch stopped` });
 

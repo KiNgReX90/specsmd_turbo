@@ -24,7 +24,7 @@ const WRAP = String.raw`'use strict';
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const [mode, tree, test, ...rest] = process.argv.slice(2);
-fs.appendFileSync(process.env.WRAP_LOG, JSON.stringify({ mode, tree, test, rest, mutant: process.env.INFERNO_MUTANT || null }) + '\n');
+fs.appendFileSync(process.env.WRAP_LOG, JSON.stringify({ mode, tree, test, rest, mutant: process.env.INFERNO_MUTANT || null, machines: process.env.WRAP_MACHINES || null }) + '\n');
 if (process.env.WRAP_REFUSE) { console.log('wrapper: no machine free, refusing'); process.exit(3); }
 const run = spawnSync('bash', ['-c', test], { cwd: tree, stdio: 'inherit' });
 process.exit(run.status === null ? 1 : run.status);
@@ -75,6 +75,57 @@ test("a test that already starts with the wrapper is not wrapped twice", (t) => 
   assert.equal(commandOf(hostOf({ mutate: { run: "tools/w.sh {tree} {test}" } }), "/w/app", "tools/w.sh . npm test"), "tools/w.sh . npm test");
   assert.equal(commandOf(hostOf({ mutate: { run: "tools/w.sh {tree} {test}" } }), "/w/app", "tools/w.shx npm test"), "tools/w.sh '/w/app' 'tools/w.shx npm test'");
   assert.equal(commandOf(hostOf({}), "/w/app", "npm test"), "npm test", "without the key a test runs as written");
+});
+
+// A host that adopted mutate.run late has recorded reviews whose tests spell its wrapper in other
+// ways: behind an environment prefix, by its absolute path, by its path under ~, in double quotes.
+// `mutate.wrapped` is the regex of those spellings, matched at the start of the test as written.
+const WRAPPED = String.raw`^(?:\w+=\S* +)*node +"?(?:~|/)\S*/wrap\.cjs"? `;
+
+test("with mutate.wrapped a test behind an environment prefix, by absolute path, under ~ or in quotes runs as written, and a bare test is wrapped once", (t) => {
+  const f = hostTree(t);
+  const bare = checks("alpha = 1", "beta = 2", "gamma = 3");
+  const word = shellWord(bare);
+  const spellings = [
+    `WRAP_MACHINES=north node ${f.wrap} auto . ${word}`,
+    `node ${f.wrap} auto . ${word}`,
+    `node ~/wrap.cjs auto . ${word}`,
+    `node "${f.wrap}" auto . ${word}`,
+    bare,
+  ];
+  const mutants = [[1, "1", "7"], [2, "2", "8"], [3, "3", "9"], [1, "1", "6"], [2, "2", "5"]];
+  const entries = spellings.map((spelled, i) => ({ criterion: `AC${i + 1}`, file: "src/m.txt", line: mutants[i][0], find: mutants[i][1], replace: mutants[i][2], test: spelled }));
+  const result = batch(f, entries, `mutate:\n${runKey(f)}  wrapped: '${WRAPPED}'\n`, { HOME: f.dir });
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(result.payload.entries.map((e) => [e.test, e.caught]), spellings.map((spelled) => [spelled, true]));
+  assert.deepEqual(f.wrapped().map((call) => [call.tree, call.test, call.rest.length, call.machines]),
+    [[".", bare, 0, "north"], [".", bare, 0, null], [".", bare, 0, null], [".", bare, 0, null], [f.tree, bare, 0, null]], "one call of the wrapper per test");
+  assert.equal(git(f.tree, "status", "--porcelain"), "");
+});
+
+test("mutate.wrapped matches at the start of the test as written, beside the wrapper's own words, and without it the rule is as before", () => {
+  const run = "/home/builder/acme-shop/tools/remote-run.sh auto {tree} {test}";
+  const host = hostOf({ mutate: { run, wrapped: String.raw`^(?:\w+=\S* +)*"?(?:~|/home/builder)/acme-shop/tools/remote-run\.sh"? ` } });
+  for (const spelled of [
+    "REMOTE_MACHINES=north /home/builder/acme-shop/tools/remote-run.sh auto . 'npm test'",
+    "~/acme-shop/tools/remote-run.sh auto . 'npm test'",
+    "REMOTE_MACHINES=north ~/acme-shop/tools/remote-run.sh auto . 'npm test'",
+    `"/home/builder/acme-shop/tools/remote-run.sh" auto . 'npm test'`,
+    `"~/acme-shop/tools/remote-run.sh" auto . 'npm test'`,
+    "/home/builder/acme-shop/tools/remote-run.sh auto . npm test",
+  ]) assert.equal(commandOf(host, "/w/app", spelled), spelled, spelled);
+  const indented = "  ~/acme-shop/tools/remote-run.sh auto . 'npm test'";
+  assert.equal(commandOf(host, "/w/app", indented), indented, "blanks before the test are not its start");
+  const wrap = (test) => `/home/builder/acme-shop/tools/remote-run.sh auto '/w/app' ${shellWord(test)}`;
+  assert.equal(commandOf(host, "/w/app", "npm test"), wrap("npm test"));
+  assert.equal(commandOf(host, "/w/app", "npm test ~/acme-shop/tools/remote-run.sh x"), wrap("npm test ~/acme-shop/tools/remote-run.sh x"), "a match past the start wraps");
+  const loose = hostOf({ mutate: { run, wrapped: String.raw`remote-run\.sh ` } });
+  assert.equal(commandOf(loose, "/w/app", "npm test remote-run.sh x"), wrap("npm test remote-run.sh x"));
+  assert.equal(commandOf(loose, "/w/app", "remote-run.sh x"), "remote-run.sh x");
+  const own = "/home/builder/acme-shop/tools/remote-run.sh auto . 'npm test'";
+  assert.equal(commandOf(loose, "/w/app", own), own, "the wrapper's own words still count beside the key");
+  const hand = "~/acme-shop/tools/remote-run.sh auto . 'npm test'";
+  assert.equal(commandOf(hostOf({ mutate: { run } }), "/w/app", hand), wrap(hand), "without the key only the wrapper's own words count");
 });
 
 test("Rust entries keep their shared build through mutate.run, and each switch reaches the wrapped test", (t) => {
@@ -179,7 +230,7 @@ test("the record step's mutants stop on a killed control run with MUTATE_STOPPED
   assert.equal(git(f.tree, "status", "--porcelain"), "");
 });
 
-test("mutate.run and mutate.checks this runner cannot use fail at config load, naming the key and the file", (t) => {
+test("mutate.run, mutate.wrapped and mutate.checks this runner cannot use fail at config load, naming the key and the file", (t) => {
   const f = hostTree(t);
   for (const [body, key] of [
     ["mutate:\n  run: \"\"\n", /mutate\.run in \S+ must be the wrapper's command with \{tree\} and \{test\} once each, after its own words\./],
@@ -192,7 +243,12 @@ test("mutate.run and mutate.checks this runner cannot use fail at config load, n
     ["mutate:\n  checks:\n    - match: a\n      finding: b\n      exit: 1\n", /mutate\.checks\[0\] in \S+ must be a map of match and finding only, not exit\./],
     ["mutate:\n  checks:\n    - finding: b\n", /mutate\.checks\[0\]\.match in \S+ must be a non-empty regex\./],
     ["mutate:\n  checks:\n    - match: a\n      finding: '(b'\n", /mutate\.checks\[0\]\.finding in \S+ must be a regex \(/],
-    ["mutate:\n  runs: x\n", /mutate in \S+ must be a map holding sealed, reseal_seconds, session, run and checks only, not runs\./],
+    [`mutate:\n${runKey(f)}  wrapped: ""\n`, /mutate\.wrapped in \S+ must be a non-empty regex\./],
+    [`mutate:\n${runKey(f)}  wrapped: [a]\n`, /mutate\.wrapped in \S+ must be a non-empty regex\./],
+    [`mutate:\n${runKey(f)}  wrapped: '(node'\n`, /mutate\.wrapped in \S+ must be a regex \(/],
+    [`mutate:\n${runKey(f)}  wrapped: '(?:\\w+= )*'\n`, /mutate\.wrapped in \S+ must be a regex that an empty test does not match, or every test reads as wrapped\./],
+    ["mutate:\n  wrapped: '^node '\n", /mutate\.wrapped in \S+ must be set beside mutate\.run, the wrapper whose spellings it marks\./],
+    ["mutate:\n  runs: x\n", /mutate in \S+ must be a map holding sealed, reseal_seconds, session, run, wrapped and checks only, not runs\./],
   ]) {
     const config = outsideConfig(f, body, "bad.yaml");
     const result = sessionBatch(f, [{ criterion: "AC1", file: "src/m.txt", line: 1, find: "1", replace: "7", test: "node lint.cjs" }], { config });
@@ -204,15 +260,19 @@ test("mutate.run and mutate.checks this runner cannot use fail at config load, n
   assert.deepEqual(f.wrapped(), [], "a refused config runs nothing");
 });
 
-test("a --config file without a mutate block inherits mutate.run and mutate.checks, and a bad one is refused against the file that holds it", (t) => {
+test("a --config file without a mutate block inherits mutate.run, mutate.wrapped and mutate.checks, and a bad one is refused against the file that holds it", (t) => {
   const f = hostTree(t);
   const own = path.join(f.tree, ".specs-inferno", "config.yaml");
   fs.mkdirSync(path.dirname(own), { recursive: true });
-  writeFile(own, `mutate:\n${runKey(f)}  checks:\n    - match: lint\n      finding: FINDING\n`);
+  writeFile(own, `mutate:\n${runKey(f)}  wrapped: '^node +~/wrap\\.cjs '\n  checks:\n    - match: lint\n      finding: FINDING\n`);
   const selected = outsideConfig(f, "worker:\n  model: x\n", "selected.yaml");
   const host = hostOf(readConfig(f.tree, selected));
   assert.equal(host.run.text, `node ${f.wrap} auto {tree} {test}`);
   assert.equal(host.checks.length, 1);
+  const hand = "node ~/wrap.cjs auto . 'npm test'";
+  assert.equal(commandOf(host, f.tree, hand), hand, "the inherited regex marks a test as wrapped");
   writeFile(own, "mutate:\n  run: \"tools/w.sh {test}\"\n");
   assert.throws(() => readConfig(f.tree, selected), (error) => error.code === "BAD_CONFIG" && error.message.includes(own));
+  writeFile(own, `mutate:\n${runKey(f)}  wrapped: '(node'\n`);
+  assert.throws(() => readConfig(f.tree, selected), (error) => error.code === "BAD_CONFIG" && /mutate\.wrapped/.test(error.message) && error.message.includes(own));
 });

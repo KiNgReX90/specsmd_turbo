@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install eval: install the INFERNO flow into a fresh sandbox for Claude Code +
-# Codex with the scripted install, then assert the inferno-flow surfaces exist
-# and every bundled flow script suite passes from the installed location.
+# Codex with the scripted install, then assert the inferno-flow surfaces exist,
+# install again over it and read the running-session line, and run every
+# bundled flow script suite from the installed location.
 #
 #   evals/install-eval.sh <path-to-specsmd-tarball>   the packed release
 #   evals/install-eval.sh --source <path-to-src>      a source checkout, no registry needed
@@ -35,8 +36,11 @@ git init -q
 # installer's list never moves it onto another one. The budget lookup is pointed
 # at an empty data folder: this eval checks the release, not this machine's budget
 # script (evals/budget-eval.sh runs a consumer's).
-SPECSMD_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 XDG_DATA_HOME="$SANDBOX/.eval-data" INFERNO_FLOW_BUDGET= \
-  "${INSTALL[@]}" --flow inferno --tools claude,codex > install.log 2>&1
+install_inferno() {
+  SPECSMD_TELEMETRY_DISABLED=1 DO_NOT_TRACK=1 XDG_DATA_HOME="$SANDBOX/.eval-data" INFERNO_FLOW_BUDGET= \
+    "${INSTALL[@]}" --flow inferno --tools claude,codex > "$1" 2>&1
+}
+install_inferno install.log
 INSTALL_EXIT=$?
 note "--- installer tail ---"; tail -n 12 install.log; note "----------------------"
 if [ "$INSTALL_EXIT" -eq 0 ]; then
@@ -185,6 +189,28 @@ absent .claude/commands/specsmd-fire-team.md
 absent .claude/commands/specsmd-fire-team-planner.md
 absent .specsmd/fire
 
+# A session started before an install keeps the agent definitions it read at its
+# start. An install over an existing one says so in one line; the first install,
+# into a host with none, says nothing of it.
+SESSION_LINE='session started before it keeps the agent definitions it read when it started'
+if grep -q "$SESSION_LINE" install.log; then
+  note "FAIL first install printed the running-session line"; FAIL=1
+else
+  note "OK   first install prints no running-session line"
+fi
+install_inferno reinstall.log
+REINSTALL_EXIT=$?
+if [ "$REINSTALL_EXIT" -eq 0 ]; then
+  note "OK   install over the first exited 0"
+else
+  note "FAIL install over the first exited $REINSTALL_EXIT"; FAIL=1
+fi
+if [ "$(grep -c "$SESSION_LINE" reinstall.log)" -eq 1 ] && grep -q "A Claude Code or Codex $SESSION_LINE" reinstall.log; then
+  note "OK   install over the first prints the running-session line once, for Claude Code and Codex"
+else
+  note "FAIL install over the first does not print the running-session line once for Claude Code and Codex"; FAIL=1
+fi
+
 # Discover every installed suite, including newly added safety regressions.
 shopt -s globstar nullglob
 suites=("$SANDBOX"/.specsmd/inferno/agents/**/*.test.cjs)
@@ -200,6 +226,6 @@ done
 if [ "$FAIL" -eq 0 ]; then
   note "INSTALL EVAL: PASS (sandbox kept at $SANDBOX)"
 else
-  note "INSTALL EVAL: FAIL (inspect $SANDBOX, install.log)"
+  note "INSTALL EVAL: FAIL (inspect $SANDBOX, install.log, reinstall.log)"
 fi
 exit "$FAIL"

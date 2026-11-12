@@ -1,10 +1,11 @@
 'use strict';
 
 /**
- * Three config keys the gate and ship read beside the lanes: `verification.merge_slot`, whether
+ * Four config keys the gate and ship read beside the lanes: `verification.merge_slot`, whether
  * a merge waits its turn in the slot across worktrees, `verification.ship_cleanup`, the host's
- * one shell command ship runs once a shipped worktree is gone, and `review.outside`, the globs
- * of a knowledge base the base branch syncs, whose folded changes keep the intent review current.
+ * one shell command ship runs once a shipped worktree is gone, `verification.session`, the host
+ * session the checks of one integrate or gate share (run-check-session.cjs), and `review.outside`,
+ * the globs of a knowledge base the base branch syncs, whose folded changes keep the intent review current.
  *
  * It sits apart from run-lib.cjs, as run-lane-config.cjs does, so the config reader validates
  * and inherits both keys and every reader asks one place for their values. The YAML reader has
@@ -34,6 +35,8 @@ function validateGates(config, file) {
       'BAD_CONFIG'
     );
   }
+  // Required here: run-check-session.cjs loads run-lib.cjs, which loads this file.
+  require('./run-check-session.cjs').validateChecks(verification, file);
   const review = isMap(config.review) ? config.review : {};
   if (review.outside !== undefined && !globList(review.outside)) {
     throw new RunError(
@@ -44,9 +47,9 @@ function validateGates(config, file) {
   }
 }
 
-/** A --config file inherits merge_slot, ship_cleanup and review.outside from the project config when it sets none. */
+/** A --config file inherits merge_slot, ship_cleanup, session and review.outside from the project config when it sets none. */
 function inheritGates(config, defaults) {
-  for (const [section, key] of [['verification', 'merge_slot'], ['verification', 'ship_cleanup'], ['review', 'outside']]) {
+  for (const [section, key] of [['verification', 'merge_slot'], ['verification', 'ship_cleanup'], ['verification', 'session'], ['review', 'outside']]) {
     const from = defaults[section];
     if (!isMap(from) || from[key] === undefined) continue;
     if (config[section] === undefined) config[section] = {};
