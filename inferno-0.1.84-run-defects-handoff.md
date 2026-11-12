@@ -153,3 +153,38 @@ Met 2026-11-12 on the app repo, at the first `run.cjs frontier` of an intent.
 ### How the host gets through
 
 It takes the path out of the second item's `context.required` in a spec-only commit and puts it back in another one once the first item is integrated.
+
+## 6. A mutate session opens once per distinct test command, so a review whose mutants each name their own test saves little
+
+Read 2026-11-12 in the 0.1.85 source on this branch, before the host set the key. It is a gap in 0.1.85, written here because this is the one open file.
+
+### What the code does
+
+- `sessionGroups` (`S/run-mutate-session.cjs:63-76`) keys its groups on the test command, and `runGroup` (`:152`) opens and closes one session of the wrapper per group. A batch of eight mutants with eight test commands pays eight opens: eight syncs of the tree and eight waits in the test machine's queue.
+- The `run` command already takes its test per call, as INFERNO_TEST, and `verification.session` already runs the different checks of one integrate in one session (`S/run-check-session.cjs`). Nothing in the wrapper's contract ties a session to one test.
+- The Rust entries that share a build stay outside every session: `execute` (`S/run-mutate-batch.cjs:112`) runs the control and each switched entry through the plain wrapper, so a batch of N of them pays N + 1 syncs and waits.
+
+### What it costs, measured
+
+The first host's nine intents in flight hold 31 review files with mutants, 342 mutants in all.
+
+| Count | Value |
+| --- | --- |
+| Mutants no Rust build shares | 251 |
+| Distinct test commands, summed per review | 185 |
+| Opens with a session per test command | 185, so 66 of 251 saved (26%) |
+| Opens with a session per batch | 31, so 220 of 251 saved (88%) |
+| Mutants of a shared Rust build, outside every session | 91 |
+
+A reviewer writes a test per mutant, usually one test name each, so two mutants seldom share a command.
+
+### What the flow should do
+
+- Open one session per batch, at the first entry `mutate.session.match` reaches, and close it once after the last. Per mutant the steps stay as they are: write, reseal, send, run with that entry's own test as INFERNO_TEST, put back, send back.
+- Keep what a group stop means today, per batch: a send back that failed stops the session's remaining entries with no verdict, and a signal stops the batch.
+- Run the control and the switched runs of a shared Rust build in that same session when their command is reached, so a batch of Rust entries syncs once and waits once.
+- Tests: a batch of three mutants with three test commands opens one session and closes one. A batch whose second send back fails leaves the third with no verdict and still closes. A batch with two switched Rust entries and one other entry opens one session.
+
+### How the host gets through
+
+It sets `mutate.session` as it is, for the entries that do share a command, and leaves `mutate.run` unset. Its reviewers already write the wrapper themselves in 317 of the 342 entries, so the key would move little today, and with one open per test command it would send every light test through its own sync and wait. The host sets `mutate.run` once a batch is one session.
