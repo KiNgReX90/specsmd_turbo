@@ -120,3 +120,25 @@ test('a sibling that ran between two attempts still answers for a change outside
   assert.equal(result.code, 2, result.out);
   assert.match(result.out, new RegExp(`dispatch ${two} for b claims shared\\.cjs outside its ownership`));
 });
+
+test('a change two siblings claim is refused when one ran beside the item, though the other ran between its attempts', (t) => {
+  const f = fixture(t, { ...ITEMS, c: ['shared.cjs', 'c.cjs'] });
+  const one = f.start('--item', 'a');
+  const beside = f.start('--item', 'c');
+  f.write('a.cjs', 'module.exports = 2;\n');
+  f.accepted(one, ['a.cjs']);
+  const between = f.start('--item', 'b');
+  f.write('shared.cjs', 'b\n');
+  f.accepted(between, ['shared.cjs']);
+  f.accepted(beside, ['shared.cjs']);
+  const fix = f.start('--item', 'a');
+  f.write('shared.cjs', 'b\nfixed by a\n');
+  f.accepted(fix, ['shared.cjs']);
+  // The only change to shared.cjs lies in the one stretch both siblings ran across. --peers reads
+  // the records in the order it names them, so the first order finds the run between a's attempts first.
+  for (const peers of [[between, beside], [beside, between]]) {
+    const result = f.verify('a', '--peers', JSON.stringify(peers));
+    assert.equal(result.code, 2, `${peers}: ${result.out}`);
+    assert.match(result.out, new RegExp(`overlaps at shared\\.cjs with dispatch ${beside}`));
+  }
+});
