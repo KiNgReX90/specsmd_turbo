@@ -22,8 +22,9 @@ status: {{status}}
 
 ## Success Criteria
 
+{{!-- after_ship: a criterion whose instrument runs only once the intent landed on the base branch, such as a timer the default branch runs; only a criterion so marked may be proven after the merge --}}
 {{#each success_criteria}}
-- {{this.id}}: {{this.text}}
+- {{this.id}}: {{this.text}}{{#if this.after_ship}} (after ship){{/if}}
 {{/each}}
 
 ## Item Map

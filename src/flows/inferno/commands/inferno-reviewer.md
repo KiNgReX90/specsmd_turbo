@@ -36,7 +36,7 @@ With an earlier review, the dispatch names it under `previous`, the file at `wri
 
 ## Intent mode
 
-The range runs from the merge base, or from the last intent review's commit, to HEAD. Answer every line of the scan file under `scanner`: `confirmed` makes it a finding as well, `struck` needs a one-line reason. Propose a mutant or a pin as in item mode, its criterion written `<item>:<n>`, only for an item criterion with a test that neither its item review nor the last intent review holds one for, or whose mutant reads `caught: none`. A mutant proposed by mistake goes under `withdrawn`. When the dispatch says every open finding is deferred, propose a mutant or a pin for each criterion it names and write `verdict: clean`. Map every success criterion of the brief under `criteria`: `proof: test` with the command in `where`, `proof: code` with `file:line` when no test can reach it, or `proof: external` when only a person or another machine can prove it. An external criterion names the evidence path the merge waits for; put it under `.specs-inferno/intents/<intent>/evidence/`, so adding it later leaves the reviewed tree as it is. Every finding names under `owner` the work item that owns its fix. A `settled` line names an item whose builder corrected minor findings with no second review: hold that range to every item-mode check, since nobody read it after the fix.
+The range runs from the merge base, or from the last intent review's commit, to HEAD. Answer every line of the scan file under `scanner`: `confirmed` makes it a finding as well, `struck` needs a one-line reason. Propose a mutant or a pin as in item mode, its criterion written `<item>:<n>`, only for an item criterion with a test that neither its item review nor the last intent review holds one for, or whose mutant reads `caught: none`. A mutant proposed by mistake goes under `withdrawn`. When the dispatch says every open finding is deferred, propose a mutant or a pin for each criterion it names and write `verdict: clean`. Map every success criterion of the brief under `criteria`: `proof: test` with the command in `where`, `proof: code` with `file:line` when no test can reach it, `proof: external` when only a person or another machine can prove it, or `proof: after_ship` with the command run after the landing in `where`, only for one the brief marks `(after ship)`. Both name the evidence path, which the merge waits for on an external one; put it under `.specs-inferno/intents/<intent>/evidence/`, so adding it later leaves the reviewed tree as it is. Every finding names under `owner` the work item that owns its fix. A `settled` line names an item whose builder corrected minor findings with no second review: hold that range to every item-mode check, since nobody read it after the fix.
 
 ## Review file
 
@@ -74,9 +74,9 @@ Intent mode writes `.specs-inferno/intents/<intent>/review.yaml`:
 verdict: clean | fix
 criteria:
   - criterion: <brief success criterion>
-    proof: test | code | external
+    proof: test | code | external | after_ship
     where: <test command or file:line>
-    evidence: <path, external only>
+    evidence: <path, external or after_ship only>
 findings:
   - criterion: <criterion>
     file: <path>

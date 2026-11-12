@@ -26,6 +26,7 @@ const { teardownCall } = require('./run-call.cjs');
 const { ownership } = require('./run-owner.cjs');
 const { resolveBudget } = require('./run-budget.cjs');
 const { dispatchOracle, isOracleDispatch } = require('./run-oracle-route.cjs');
+const { shippedOwed } = require('./run-after-ship.cjs');
 
 /** An in_progress intent counts as abandoned after this long with no process, edit or commit in its worktree. */
 const DEFAULT_IDLE_MINUTES = 60;
@@ -159,6 +160,8 @@ function select(options) {
     ? null
     : resolveBase(config, null, root);
   const leftovers = base ? leftoverWorktrees(root, ledger, base) : [];
+  // A shipped intent whose after_ship proof has no evidence yet, so the session on the base branch finds it.
+  const owed = shippedOwed(root, ledger, archivedIds(archivePaths(ledger.file).archiveFile));
 
   const out = [];
   out.push(claimable.length > 0 ? 'claimable' : 'no claimable intent');
@@ -180,7 +183,8 @@ function select(options) {
   for (const entry of leftovers) {
     out.push(`leftover ${entry.id}  ${entry.path}  merged into ${base}; run ${teardownCall(entry.path)}`);
   }
-  return { exit: 0, payload: { claimable, blocked, parked, running, recovery, leftovers }, out };
+  for (const entry of owed) out.push(`owed ${entry.id}  after ship: ${entry.where} -> ${entry.evidence}`);
+  return { exit: 0, payload: { claimable, blocked, parked, running, recovery, leftovers, owed }, out };
 }
 
 // ---------------------------------------------------------------------------

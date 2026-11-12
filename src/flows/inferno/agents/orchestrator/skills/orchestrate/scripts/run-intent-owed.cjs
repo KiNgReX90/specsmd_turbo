@@ -27,6 +27,7 @@ const { reviewOutside } = require('./run-config-gates.cjs');
 const { reviewPath } = require('./run-review-file.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
 const { deferredItems } = require('./state-defer.cjs');
+const { evidenceExists, openAfterShip } = require('./run-after-ship.cjs');
 
 const { RunError } = lib;
 
@@ -192,22 +193,10 @@ function settledItems(tree, intentId, from) {
 }
 
 /**
- * Whether an evidence path exists. A path inside the intent's own dir is found wherever the
- * intent lives now: both hosts archive that dir before they merge.
- */
-function evidenceExists(tree, intentId, rel) {
-  const live = `${lib.SPECS_DIR}/intents/${intentId}/`;
-  const archived = `${lib.SPECS_DIR}/archive/intents/${intentId}/`;
-  const candidates = [rel];
-  if (rel.startsWith(live)) candidates.push(archived + rel.slice(live.length));
-  if (rel.startsWith(archived)) candidates.push(live + rel.slice(archived.length));
-  return candidates.some((candidate) => fs.existsSync(path.join(tree, candidate)));
-}
-
-/**
  * What a merge still owes beyond the command proofs: the review for this tree and the
- * evidence of every external criterion. The smoke lane's proof joins this list when the
- * flow gains one.
+ * evidence of every external criterion. `after` lists the after_ship entries whose path is
+ * missing, which the merge does not wait for and the ship prints as owed (run-after-ship.cjs).
+ * The smoke lane's proof joins this list when the flow gains one.
  */
 function mergeOwed(tree, config, intentId) {
   const owed = [];
@@ -224,7 +213,7 @@ function mergeOwed(tree, config, intentId) {
     owed.push('evidence');
     out.push(...missing.map((entry) => `evidence owed: ${entry.evidence} for ${entry.criterion}`));
   }
-  return { owed, out };
+  return { owed, out, after: state.review ? openAfterShip(tree, intentId, state.review.criteria) : [] };
 }
 
 module.exports = {

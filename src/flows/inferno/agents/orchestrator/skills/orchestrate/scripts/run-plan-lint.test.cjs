@@ -379,3 +379,51 @@ test("a plan without a mark lints as before and never reads the config", () => {
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /^clean gift-cards: 2 open items, 2 criteria$/m);
 });
+
+// A later item may cite a file an earlier item it depends on creates; a path nobody creates is
+// refused at plan time, as the frontier refuses it before a dispatch.
+const STORE_OWNS = "ownership:\n  editable:\n    - src/store.ts";
+const REQUIRED = "  required:\n    - path: src/cards.ts\n      reason: primary implementation target";
+const NEEDS_BALANCE = `${REQUIRED}\n    - path: src/balance.ts\n      reason: the balance module card-store creates`;
+const creates = { ...ITEMS, "card-store": ITEMS["card-store"].replace(STORE_OWNS, `${STORE_OWNS}\n    - src/balance.ts`) };
+const needing = (body) => body.replace(REQUIRED, NEEDS_BALANCE);
+
+test("a later item may cite a file the item it depends on owns and has not made yet", () => {
+  const result = lint(plan({ items: { ...creates, "show-balance": needing(ITEMS["show-balance"]) } }));
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(findings(result.out), []);
+});
+
+test("a cited file no item it depends on owns is a finding", () => {
+  const alone = item({ id: "show-balance", delivers: ["SC-2"], owns: "src/cards.ts", adds: "`test/cards.test.ts` :: shows the balance" });
+  const tree = plan({ items: { ...creates, "show-balance": needing(alone) }, state: { "card-store": {}, "show-balance": {} } });
+  assertOneFinding(tree, /^FINDING show-balance: context\.required path does not exist: src\/balance\.ts, and no item show-balance depends on owns it$/);
+});
+
+test("a cited file the dependency completed without making is a finding", () => {
+  const done = { ...DEPENDS, "card-store": { status: "completed", extra: "\n        integrated_sha: abc1234\n        review: clean\n        completed_at: 2026-11-10T08:00:00Z" } };
+  const tree = plan({ items: { ...creates, "show-balance": needing(ITEMS["show-balance"]) }, state: done });
+  assertOneFinding(tree, /^FINDING show-balance: context\.required path does not exist: src\/balance\.ts, and card-store, which owns it, completed without creating it$/);
+});
+
+test("a dependency through a third item counts", () => {
+  const wrap = item({
+    id: "gift-wrap", depends: ["show-balance"], delivers: ["SC-2"], owns: "src/cards.ts", adds: "`test/cards.test.ts` :: wraps a card",
+    integration: ["show-balance: `test/cards.test.ts` :: wraps the balance shown"],
+  });
+  const brief = BRIEF.replace("| SC-2 | show-balance |", "| SC-2 | show-balance, gift-wrap |");
+  const tree = plan({ brief, items: { ...creates, "gift-wrap": needing(wrap) }, state: { ...DEPENDS, "gift-wrap": { depends: ["show-balance"] } } });
+  const result = lint(tree);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(findings(result.out), []);
+});
+
+// A success criterion whose instrument runs only after the landing ends in `(after ship)`; only the
+// brief carries that mark, spelled so the intent review's recorder reads it.
+test("a success criterion marked (after ship) lints clean, a misspelled mark and an item criterion marked so are findings", () => {
+  assert.equal(lint(plan({ brief: BRIEF.replace("reports 0 fail\n- SC-2", "reports 0 fail (after ship)\n- SC-2") })).code, 0);
+  assertOneFinding(plan({ brief: BRIEF.replace("reports 0 fail\n- SC-2", "reports 0 fail (after-ship)\n- SC-2") }),
+    /^FINDING brief: SC-1 carries an after-ship mark the scripts do not read; end its line in \(after ship\)$/);
+  const items = withItem("card-store", "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance)", "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance) (after ship)");
+  assertOneFinding(plan({ items }), /^FINDING card-store: acceptance criterion 1 is marked \(after ship\), which only a success criterion of the brief carries/);
+});
