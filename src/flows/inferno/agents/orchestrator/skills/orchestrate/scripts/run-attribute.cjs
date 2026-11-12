@@ -220,4 +220,4 @@ function attribute(tree, items, options) {
   return { since: attributed[0].since, outside: [...outside].sort(), unreported: [...unreported].sort(), attributed };
 }
 
-module.exports = { attribute, verifyDispatch };
+module.exports = { attribute, openDispatches, verifyDispatch };

@@ -117,6 +117,14 @@ function planOracleCall(tree, plan) {
     flag('config', called.config);
 }
 
+/**
+ * One dispatch-log for the items `ids` names, so one builder builds them as a chain; of the
+ * intent the site names, the positional one, so the call carries no other.
+ */
+function chainDispatchCall(tree, intent, ids) {
+  return `${RUNNER} dispatch-log ${intent} --items ${ids.join(',')} --tier <tier> --agent <agent> --tree ${tree}${flag('config', called.config)}`;
+}
+
 /** The real-app check over a review's range, read from the item's own paths when one is named. */
 const realAppCall = (tree, range, id = null) => runCall('real-app', tree, null, ['--range', range, ...(id ? ['--item', id] : [])]);
 
@@ -153,7 +161,7 @@ const deferItemCall = (intent, item, dependents = []) => writerCall('defer-item'
   ['--item', item, '--reason', '"<why it waits for a later plan>"', ...dependents.map((id) => `--rewire ${id}=<new-dep>`)]);
 
 module.exports = {
-  RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
+  RUNNER, RUNNER_PATH, caller, blockIntentCall, chainDispatchCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
   intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, laneIntermittentCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
   verifyItemCall,
 };
