@@ -1,5 +1,7 @@
 # INFERNO, future improvements
 
+**The verdict on each item, build now or not, and the build order are in `inferno-build-next.md`. This file holds the detail of each item.**
+
 Written 2026-09-18, after planning one intent statement on the app repo with the old and the new planner text, on Opus 5 (Claude) and gpt-5.6-sol (Codex). Each item says what to change, why, and the measurement that proves it worked.
 
 ## Where we are
@@ -40,11 +42,9 @@ Counting notes. Claude usage sits on each API message, and one message spans sev
 
 Claude Code reads `.claude/agents/*.md` when a session starts. A subagent spawned later in that session still gets the old definition. Evals and the first run after an install need a fresh session, and the installer should print one line saying so.
 
-## 6. Bring the docs repo back onto the canonical scripts
+## 6. Done: the docs repo is back on the canonical scripts
 
-Canonical and the app repo share one module split of the orchestrator scripts, ported on 2026-09-14: `run-integrate`, `run-probes`, `run-proofs`, `run-owner`, `run-e2e-impact`, `run-error`, `state-block` and `state-lists`. the docs repo split the same scripts its own way on 2026-09-10 and 11: `run-dispatch`, `run-processes`, `run-proof` and `state-store`, each with its own tests. Until they converge, every flow change is ported twice by hand.
-
-Port what the the docs repo modules do that canonical lacks, reinstall the docs repo from canonical, and run its flow suites. Its Codex install needs the same pass: the planner Codex loads there is an untracked `.codex/agents/specsmd-inferno-planner.toml`, beside an older tracked copy under `.codex/skills/`.
+Struck on 2026-11-12. Canonical holds both module splits, and every host on the first host's machine was reinstalled from canonical with a matching lock. The evidence is in `inferno-build-next.md`, section 3.
 
 ## 7. The config step proposes the tools that fit the host's stack, per role
 
