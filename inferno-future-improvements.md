@@ -58,3 +58,13 @@ The config step reads the stack (file kinds by count, the manifests, what is alr
 - **One list of tools and versions** the host installs from on every machine it runs on, and a line when a machine lacks one.
 
 The app repo's accepted set is the worked example: ast-grep for search and for its own rules, shellcheck, actionlint, ruff, `tsc --checkJs` over its scripts, and cargo-nextest after one measured run. Its owner accepted all of them on 2026-11-11.
+
+## 8. Integrate's checks take one slot together, or run beside each other
+
+`run.cjs integrate` runs the commands of `verification.integrate` one after the other (`run-integrate.cjs:264`). On a host that sends every check to another machine through a wrapper, each command syncs the tree again and waits in that machine's queue again.
+
+Measured on the app repo on 2026-11-11, one item's integrate with eight orchestrators on two test machines: 990, 1021, 1218, 1416 and 1661 seconds for its five commands, 105 minutes in all. The same morning, with an empty queue, four of those commands ran in 319, 437, 746 and 126 seconds. So well over half of the 105 minutes was queue and sync, paid five times.
+
+- **One slot for the whole integrate.** A host key beside `mutate.session`, with the same open, run and close, so the tree is synced once and the queue is waited in once, and the five commands run back to back. Each command keeps its own proof, keyed as today.
+- **Or the commands run beside each other** when the host says they may, each on the machine its wrapper picks. Wall time is then the longest command. This helps only while machines are free, so the one slot is the first to build.
+- **The gate's finalize commands** have the same shape and take the same key.
