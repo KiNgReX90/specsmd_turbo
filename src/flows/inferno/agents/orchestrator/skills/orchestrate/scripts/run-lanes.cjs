@@ -25,6 +25,7 @@ const slot = require('./run-slot.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const intermittent = require('./run-lanes-intermittent.cjs');
 const { gateStartCall, gateWaitCall, laneAcceptCall, laneIntermittentCall } = require('./run-call.cjs');
+const { NO_VERDICT } = require('./run-exit.cjs');
 
 const { RunError } = lib;
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
@@ -248,12 +249,18 @@ function waitAll(job, options, deadline, gateResult, lead = []) {
     const fit = (gateOut, tail = []) =>
       [...lead, ...lib.capLines(gateOut, Math.max(1, MAX_LINES - lead.length - laneOut.length - tail.length)), ...laneOut, ...tail];
     const lanePayload = { lanes: states };
-    if ((gate && gate.exit !== 0) || lanes.some((entry) => entry.verdict === 'red')) {
+    // A gate that reached no verdict waits for its lanes, since a red lane is still a verdict, and then ends as itself.
+    const unrun = Boolean(gate) && gate.exit === NO_VERDICT;
+    if ((gate && gate.exit !== 0 && !unrun) || lanes.some((entry) => entry.verdict === 'red')) {
       const gateOut = gate ? gate.out : [`gate still running pid ${job.pid}`];
       if (mergeSlot(config)) slot.release(tree, job.holder);
       return { exit: 2, payload: { ...(gate ? gate.payload : { ok: false }), ok: false, ...lanePayload }, out: fit(gateOut) };
     }
     const running = !gate || lanes.some((entry) => entry.verdict === 'running');
+    if (!running && unrun) {
+      if (mergeSlot(config)) slot.release(tree, job.holder);
+      return { exit: NO_VERDICT, payload: { ...gate.payload, ok: false, ...lanePayload }, out: fit(gate.out) };
+    }
     if (!running) {
       const owed = lanes.filter((entry) => entry.verdict === 'unbounded').map((entry) => entry.name);
       if (owed.length > 0) return { exit: UNBOUNDED_EXIT, payload: { ...gate.payload, ok: false, owed, ...lanePayload }, out: fit(gate.out) };

@@ -30,7 +30,10 @@ const { owedReviews } = require('./run-review.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { landingSince, sinceCommit } = require('./run-since.cjs');
 const dirt = require('./run-dirt.cjs');
-const { closeLeft, inSession } = require('./run-check-session.cjs');
+const { checkRounds, closeLeft } = require('./run-check-session.cjs');
+const { noVerdictLine } = require('./run-check-refused.cjs');
+const { NO_VERDICT } = require('./run-exit.cjs');
+const { integrateAgainCall } = require('./run-call.cjs');
 
 const { RunError } = lib;
 
@@ -276,17 +279,15 @@ function checkAndLand(tree, options, initial) {
   // three followups to learn what one run could have said.
   // With verification.session the commands it reaches run in one session of the host's wrapper,
   // closed before anything is reported; the browser step runs only after every command passed.
-  const checked = inSession(tree, config, dir, (shell) => {
-    for (const [index, command] of commands.entries()) {
-      if (!runs(command)) {
-        results.push({ command, result: 'skip' });
-        continue;
-      }
-      results.push(proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), false, shell));
-    }
-    if (results.some((entry) => entry.result === 'fail') || !(selection && selection.command)) return null;
-    return proofs.runCommand(tree, config, options.config, selection.command, path.join(dir, 'e2e.log'), false, shell);
+  // A check the wrapper ran nothing for runs once more in a fresh session (run-check-refused.cjs).
+  const checked = checkRounds(tree, config, dir, (check) => {
+    const ran = commands.map((command, index) => (runs(command)
+      ? check(index, (shell) => proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), false, shell))
+      : { command, result: 'skip' }));
+    if (ran.some((entry) => entry.result === 'fail' || entry.result === 'refused') || !(selection && selection.command)) return { ran, e2e: null };
+    return { ran, e2e: check('e2e', (shell) => proofs.runCommand(tree, config, options.config, selection.command, path.join(dir, 'e2e.log'), false, shell)) };
   });
+  results.push(...checked.value.ran);
   const failures = results.filter((entry) => entry.result === 'fail');
   if (failures.length > 0) {
     return red([
@@ -296,6 +297,8 @@ function checkAndLand(tree, options, initial) {
       `${failures.length} of ${commands.length} integrate command(s) failed; send every failure above to the builder in one correction.`,
     ]);
   }
+  const unrun = noVerdict(results, checked, lead, ids, options, { tree, branch, folded, total: commands.length });
+  if (unrun) return unrun;
 
   const out = [...lead, ...(doubles ? doubles.out : [])];
   if (commands.length === 0) {
@@ -304,10 +307,10 @@ function checkAndLand(tree, options, initial) {
     out.push(...gate.describe(results));
   }
 
-  if (checked.value) {
-    results.push(checked.value);
+  if (checked.value.e2e) {
+    results.push(checked.value.e2e);
     out.push(...gate.describe(results.slice(-1)));
-    if (checked.value.result === 'fail') return red([...out, ...checked.notes]);
+    if (checked.value.e2e.result === 'fail') return red([...out, ...checked.notes]);
   } else if (selection) {
     out.push(`SKIP e2e (${selection.reason})`);
   }
@@ -326,6 +329,22 @@ function checkAndLand(tree, options, initial) {
     exit: 0,
     payload: { ok: true, tree, branch, items: ids, proof: completion.proof, folded: folded.length > 0, results },
     out: [...out, ...completion.out],
+  };
+}
+
+/**
+ * The end of an integrate whose checks the host's wrapper ran nothing for twice: no FAIL, no
+ * builder, no proof of theirs, its own exit and the call that runs the step again. Null when every
+ * check reached a verdict.
+ */
+function noVerdict(results, checked, lead, ids, options, { tree, branch, folded, total }) {
+  if (checked.refused.length === 0) return null;
+  const all = checked.value.e2e ? [...results, checked.value.e2e] : results;
+  return {
+    exit: NO_VERDICT,
+    payload: { ok: false, tree, branch, items: ids, folded: folded.length > 0, results: all, no_verdict: checked.refused.map((entry) => entry.command) },
+    out: [...lead, ...gate.describe(all), ...checked.notes,
+      noVerdictLine('integrate', checked.refused.length, total + (checked.value.e2e ? 1 : 0), integrateAgainCall(tree, ids, options.since))],
   };
 }
 

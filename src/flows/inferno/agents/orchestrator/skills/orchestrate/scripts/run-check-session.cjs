@@ -21,6 +21,8 @@
  * the landing, or one whose proof still holds, opens nothing, and a step that runs none of them
  * opens no session. A session that did not open fails every command that would have run in it,
  * with the open's exit and log in the command's own log, so none of them runs or mints a proof.
+ * An open that printed the host's `verification.refused` line gives them no verdict instead, and
+ * `checkRounds` runs them again in a fresh session.
  * The close runs once the open has started, on every exit of the step: after the last command,
  * after a gate's first red, and after an error. A close that failed is a line beside the result,
  * and the host closes that session by hand.
@@ -37,6 +39,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { alive, owner } = require('./run-mutate-journal.cjs');
 const { call, ending, exported, reach, validateSessionKey } = require('./run-host-session.cjs');
+const { refusalIn, refusedOf } = require('./run-check-refused.cjs');
 
 const KEYS = ['match', 'open', 'run', 'close'];
 
@@ -57,6 +60,7 @@ function checkSession(tree, config, dir) {
   const key = config.verification && config.verification.session;
   if (!key) return null;
   const match = new RegExp(key.match);
+  const refused = refusedOf(config);
   const env = { INFERNO_TREE: tree, INFERNO_SESSION: null };
   const record = path.join(recordsOf(tree), `${lib.stamp()}-${process.pid}.json`);
   let opened = null;
@@ -77,7 +81,9 @@ function checkSession(tree, config, dir) {
       if (!opened) opened = open();
       if (opened.code === 0) return lib.runShell(exported({ ...env, INFERNO_TEST: inner }) + key.run, tree, log, { wrap: false });
       fs.mkdirSync(path.dirname(log), { recursive: true });
-      fs.appendFileSync(log, `the host session did not open (exit ${opened.code} -> ${opened.log}), so this check did not run\n`);
+      // The open's refusal line goes into the check's own log, where runCommand reads it as no verdict.
+      const line = refused ? refusalIn(refused, opened.log) : null;
+      fs.appendFileSync(log, `the host session did not open (exit ${opened.code} -> ${opened.log}), so this check did not run\n${line ? `${line}\n` : ''}`);
       return { command, code: opened.code || 1, signal: null, seconds: 0, log, wrapped: false };
     },
     close() {
@@ -104,6 +110,37 @@ function inSession(tree, config, dir, steps) {
     notes = session.close();
   }
   return { value, notes };
+}
+
+/**
+ * Run the checks of one step with `plan`, and once more each one the host's wrapper ran nothing
+ * for (`verification.refused`, run-check-refused.cjs), so integrate and the gate share one retry.
+ * `plan(check)` runs the step's checks in order, each as `check(key, run)`: `run(shell)` runs it
+ * and returns its result. While a check was refused on its only run, the session closes and
+ * `plan` runs again in a fresh one: a check with a verdict, or refused twice, returns its last
+ * result without running, and one refused once runs again. A check outside the session runs once
+ * more the same way, and a check a round first reaches, such as the browser step after the others
+ * passed, gets its own second run. Returns what the last `plan` returned, the lines every close
+ * left, and the checks refused twice.
+ */
+function checkRounds(tree, config, dir, plan) {
+  const done = new Map();
+  const notes = [];
+  const again = (entry) => entry.result.result === 'refused' && entry.runs < 2;
+  const round = () => {
+    const ran = inSession(tree, config, dir, (shell) => plan((key, run) => {
+      const before = done.get(key);
+      if (before && !again(before)) return before.result;
+      const result = run(shell);
+      done.set(key, { result, runs: before ? before.runs + 1 : 1 });
+      return result;
+    }));
+    notes.push(...ran.notes);
+    return ran.value;
+  };
+  let value = round();
+  while ([...done.values()].some(again)) value = round();
+  return { value, notes, refused: [...done.values()].map((entry) => entry.result).filter((result) => result.result === 'refused') };
 }
 
 /**
@@ -142,4 +179,4 @@ function closeLeft(tree) {
   return out;
 }
 
-module.exports = { checkSession, closeLeft, inSession, validateChecks };
+module.exports = { checkRounds, checkSession, closeLeft, inSession, validateChecks };
