@@ -131,3 +131,87 @@ test("a batch that stops with no verdict and left a file changed does not say ev
   const clean = runBatch(f, [{ ...entries[0], test: fakeTest(f, "gamma", "{ 99 }") }]);
   assert.match(clean.out, /^every file is restored$/m);
 });
+
+// --- beside another item's work --------------------------------------------
+// One intent worktree holds several items at once, so a sibling's builder or reviewer may write
+// in the tree while a batch runs. A path another item's open dispatch owns or claims, or another
+// item's review file, is that item's work: it is printed as moved, never as left behind, and the
+// verdicts stand. Beside an open dispatch, a path nobody owns may be either one's, so it is
+// printed as changed with the hint for the test command, and the batch's own files decide.
+
+const { settle } = require("./run-mutate-left.cjs");
+
+/** A builder of another item still running on the tree: its dispatch started and was never accepted. */
+function openDispatch(f, item, editable) {
+  const old = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = f.cache;
+  try {
+    return require("./run-dispatch.cjs").recordDispatch(f.root, { intent: "alpha", item, dispatch_id: `build-${item}`, editable });
+  } finally {
+    if (old === undefined) delete process.env.XDG_CACHE_HOME;
+    else process.env.XDG_CACHE_HOME = old;
+  }
+}
+
+const SIBLING_REVIEW = ".specs-inferno/intents/alpha/reviews/b-two.yaml";
+const MOVED = /^WARNING moved during the batch: /m;
+
+test("a batch during which another item's review file is written keeps its verdicts and names the file as moved, not left", (t) => {
+  const f = batchTree(t, FILES);
+  const result = runBatch(f, js(`mkdir -p .specs-inferno/intents/alpha/reviews && echo item: b-two > ${SIBLING_REVIEW}; ${CHECK}`), { json: true });
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.equal(result.payload.restored, true);
+  assert.equal(result.payload.left, undefined);
+  assert.deepEqual(result.payload.moved, [{ file: SIBLING_REVIEW, by: "the review file of b-two" }]);
+  assert.equal(result.payload.entries[0].caught, true);
+  assert.equal(read(f, SIBLING_REVIEW), "item: b-two\n", "the sibling's file is left as it wrote it");
+  fs.rmSync(path.join(f.root, ".specs-inferno"), { recursive: true });
+  const out = runBatch(f, js(`mkdir -p .specs-inferno/intents/alpha/reviews && echo item: b-two > ${SIBLING_REVIEW}; ${CHECK}`)).out;
+  assert.match(out, /^WARNING moved during the batch: \.specs-inferno\/intents\/alpha\/reviews\/b-two\.yaml \(the review file of b-two\); it may be another dispatch's work/m);
+  assert.doesNotMatch(out, /not restored|left .* changed/);
+  assert.doesNotMatch(out, HINT);
+});
+
+test("a path an open dispatch of another item owns, changed during the batch, reads moved by that dispatch", (t) => {
+  const f = batchTree(t, FILES);
+  openDispatch(f, "b-two", ["README.md"]);
+  const result = runBatch(f, js(`echo more >> README.md; ${CHECK}`), { json: true });
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.equal(result.payload.restored, true);
+  assert.deepEqual(result.payload.moved, [{ file: "README.md", by: "owned by dispatch build-b-two of b-two" }]);
+  assert.equal(read(f, "README.md"), "readme\nmore\n", "the sibling's change stays");
+});
+
+test("beside an open dispatch, a path nobody owns reads changed, may be another dispatch's work, and keeps the hint for the test command", (t) => {
+  const f = batchTree(t, FILES);
+  openDispatch(f, "b-two", ["docs/**"]);
+  const result = runBatch(f, js(`mkdir -p gen && echo x > gen/new.txt; ${CHECK}`), { json: true });
+  assert.equal(result.code, 2, result.out + result.err);
+  assert.equal(result.payload.restored, false);
+  assert.deepEqual(result.payload.left, ["gen/new.txt"]);
+  assert.deepEqual(result.payload.beside, ["dispatch build-b-two of b-two"]);
+  assert.equal(result.payload.entries[0].caught, true);
+  fs.rmSync(path.join(f.root, "gen"), { recursive: true });
+  const out = runBatch(f, js(`mkdir -p gen && echo x > gen/new.txt; ${CHECK}`)).out;
+  assert.match(out, /^WARNING changed during the batch: gen\/new\.txt, while dispatch build-b-two of b-two ran beside it, so it may be another dispatch's work/m);
+  assert.match(out, /if the test command wrote it: a sealed file goes under mutate\.sealed/);
+  assert.doesNotMatch(out, /^not restored/m);
+  assert.doesNotMatch(out, MOVED, "a path nobody owns is not named as another's");
+});
+
+test("a file the batch broke is its own, whoever else owns it: it is never moved, and nothing ran beside it", () => {
+  const result = { exit: 0, payload: { entries: [{ file: "src/m.js" }], restored: true }, out: ["every file is restored"] };
+  const by = {
+    "README.md": { by: "the review file of b-two", who: "a reviewer of b-two" },
+    "src/m.js": { by: "owned by dispatch d of b-two", who: "dispatch d of b-two" },
+  };
+  const behind = { paths: ["README.md", "src/m.js"], by, beside: ["dispatch d of b-two"] };
+  const settled = settle(result, behind);
+  assert.equal(settled.exit, 2);
+  assert.deepEqual(settled.payload.left, ["src/m.js"]);
+  assert.deepEqual(settled.payload.moved, [{ file: "README.md", by: "the review file of b-two" }]);
+  assert.equal(settled.payload.beside, undefined, "the batch's own file decides: it reads left behind");
+  assert.match(settled.out.join("\n"), /^not restored: the test command left src\/m\.js changed/m);
+  assert.match(settled.out.join("\n"), HINT);
+  assert.doesNotMatch(settled.out.join("\n"), /README\.md changed/);
+});
