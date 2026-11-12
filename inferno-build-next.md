@@ -8,7 +8,7 @@ Build section 2 from top to bottom. One release, 0.1.85, carries all of it, so e
 
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
 
-`inferno-0.1.83-run-defects-handoff.md` holds fifteen sections. The first fourteen are built on this branch, and nothing of them is left to build. Section 15 was found while the first host read 0.1.84, and it is item 0 of section 2 below.
+The first host handed off fourteen findings on 0.1.83. All fourteen are built on this branch as 0.1.84, and the first host installed it on 2026-11-12 with the shipped suite green there. Nothing of them is left to build. Their text is in this branch's history at `912c9feb`.
 
 | Section | Finding | Built in |
 | --- | --- | --- |
@@ -27,7 +27,7 @@ Build section 2 from top to bottom. One release, 0.1.85, carries all of it, so e
 | 13 | A grant takes a file another dispatch changed beside it | `7bdf52ff` |
 | 14 | A product red with no `verdicts` key ends with no step | `075d2bc2` |
 
-What is left for these is on the host, not here: the first host installs 0.1.84, sets the new keys it needs (`mutate.run`, `mutate.checks`, `real_app.prove`, `verification.<lane>.verdicts`) and reports what does not hold. The handoff file is removed from this branch once that install is green on the host.
+What is left for these is on the host: it sets the new keys it needs (`mutate.checks`, `real_app.prove`, `verification.<lane>.verdicts`) in its own time. `mutate.run` waits for item 0 below.
 
 ## 2. BUILD NOW, in this order
 
@@ -35,7 +35,7 @@ Each item is specified in `inferno-future-improvements.md` under the number give
 
 | Order | What | Specified in | Done when |
 | --- | --- | --- | --- |
-| 0 | **A host says what counts as an already wrapped mutant test.** Without it the first host cannot set `mutate.run`: its recorded reviews spell the wrapper four ways, and every other spelling would be wrapped twice. | `inferno-0.1.83-run-defects-handoff.md`, section 15 | A test behind an environment prefix, one with the wrapper's absolute path and one with its path under `~` each run as written, and a bare test is wrapped once. |
+| 0 | **A host says what counts as an already wrapped mutant test.** Without it the first host cannot set `mutate.run`: its recorded reviews spell the wrapper four ways, and every other spelling would be wrapped twice. | `inferno-0.1.84-run-defects-handoff.md`, section 1 | A test behind an environment prefix, one with the wrapper's absolute path and one with its path under `~` each run as written, and a bare test is wrapped once. |
 | 1 | **The install says that a running session keeps the old flow.** One line after an install over an existing install: a session started before it keeps its old agent definitions, so start a fresh session or re-read the definition at the next item boundary. | improvement 5 | The install eval installs twice and reads that line on the second install, and no such line on the first. |
 | 2 | **A work item names the functions it writes through, and `frontier` finds the callers it missed.** An optional `writes:` list beside `reads:`. `run.cjs frontier` greps the callers of each and prints every caller file the item does not cite as a `candidate` line. It refuses nothing. | improvement 2 | On a fixture plan the check is quiet while the item cites the caller's file, and prints that file once the citation is removed. A plan without `writes:` prints nothing and builds as before. |
 | 3 | **The checks of one integrate take one slot together.** A host key with the same open, run and close as `mutate.session`, used by `run.cjs integrate` and by the gate's finalize commands. The tree is synced once and the queue is waited in once. Each command keeps its own proof, keyed as today. | improvement 8 | On a fixture host whose wrapper counts its opens, an integrate of five commands opens one session, runs five commands in it and closes it, and writes five proofs. Without the key the five run as today. A command that fails closes the session and reports as today. |
