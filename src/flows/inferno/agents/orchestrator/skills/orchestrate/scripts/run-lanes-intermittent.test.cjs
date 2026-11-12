@@ -16,6 +16,10 @@ const TEST = 'checkout/gift-card.test.mjs "redeems a card it\'s given for $5"';
 const OTHER = 'checkout/refund.test.mjs "refunds a used card"';
 const PROVEN = [[TEST, 'green', 'green']];
 const PRINTED = /^the lane proved every red intermittent: (node \S+run\.cjs smoke --accept-intermittent .+)$/m;
+/** The line a product red prints when its lane names no verdicts file: the key, and the shape the lane writes there. */
+const NO_KEY = 'an intermittent red can be accepted once the lane writes its red tests to the file verification.smoke.verdicts names, ' +
+  'as {"red": [{"name": "<test>", "base": "green", "again": "green"}]}, one entry per red test with its walk on the base and its second walk on the branch';
+const REFUSED = 'no intermittent accept: ';
 
 const lines = (result) => result.out.trim().split('\n');
 const accept = (f, tests, ...extra) =>
@@ -47,6 +51,7 @@ test('a product red the lane proved intermittent is owed its accept, and the pri
   const owed = gated(f);
   assert.equal(owed.code, 3, owed.out + owed.err);
   assert.match(owed.out, /RED lane smoke: product red \(exit 10\)/);
+  assert.ok(!owed.out.includes(REFUSED) && !owed.out.includes(NO_KEY), owed.out);
   const printed = PRINTED.exec(lines(owed).pop());
   assert.ok(printed, `the accept line is not last: ${owed.out}`);
   assert.equal(run(f, 'green').code, 3);
@@ -87,18 +92,31 @@ test('a red the second walk did not clear, or the base walk did not clear, has n
   const red = gated(f);
   assert.equal(red.code, 2, red.out + red.err);
   assert.doesNotMatch(red.out, /--accept-intermittent/);
+  assert.match(lines(red).pop(), /^no intermittent accept: not proven intermittent: checkout\/refund\.test\.mjs "refunds a used card" \(base green, again red\) in \S+verdicts\.json$/);
   const refused = accept(f, [TEST, OTHER]);
   assert.equal(refused.code, 2, refused.out + refused.err);
   assert.match(refused.err, /not proven intermittent: checkout\/refund\.test\.mjs "refunds a used card" \(base green, again red\)/);
   assert.deepEqual(filesEnding(f.cache, '.intermittent'), []);
 
   nextVerdicts(f, [[TEST, 'red', 'green']]);
-  assert.equal(gated(f, '--force').code, 2);
+  const onBase = gated(f, '--force');
+  assert.equal(onBase.code, 2, onBase.out + onBase.err);
+  assert.equal(lines(onBase).pop(), `${REFUSED}not proven intermittent: ${TEST} (base red, again green) in ${f.verdicts}`);
   const base = accept(f, [TEST]);
   assert.equal(base.code, 2, base.out + base.err);
   assert.match(base.err, /not proven intermittent: .* \(base red, again green\)/);
   assert.deepEqual(filesEnding(f.cache, '.intermittent'), []);
   assert.equal(run(f, 'green').code, 3);
+
+  // A file that lists no red test, or one without a name, proves nothing either, and says so.
+  nextVerdicts(f, []);
+  const none = gated(f, '--force');
+  assert.equal(none.code, 2, none.out + none.err);
+  assert.equal(lines(none).pop(), `${REFUSED}no red test listed as {"red": [{"name": "<test>", "base": "green", "again": "green"}]} in ${f.verdicts}`);
+  nextVerdicts(f, [[' ', 'green', 'green']]);
+  const unnamed = gated(f, '--force');
+  assert.equal(unnamed.code, 2, unnamed.out + unnamed.err);
+  assert.equal(lines(unnamed).pop(), `${REFUSED}a red test without a name in ${f.verdicts}`);
 });
 
 test('a --test the verdicts file does not hold, or a red test no --test names, is refused; one call names every red test', (t) => {
@@ -122,7 +140,9 @@ test('a --test the verdicts file does not hold, or a red test no --test names, i
 test("a verdicts file the lane did not write, or wrote before its last run, is refused", (t) => {
   const f = fixture(t, withVerdicts('10'));
   touch(f);
-  assert.equal(gated(f).code, 2);
+  const unwritten = gated(f);
+  assert.equal(unwritten.code, 2, unwritten.out + unwritten.err);
+  assert.match(lines(unwritten).pop(), /^no intermittent accept: no verdicts file the smoke lane wrote at \S+verdicts\.json: ENOENT/);
   const missing = accept(f, [TEST]);
   assert.equal(missing.code, 2, missing.out + missing.err);
   assert.match(missing.err, /no verdicts file the smoke lane wrote at \S+verdicts\.json/);
@@ -130,6 +150,7 @@ test("a verdicts file the lane did not write, or wrote before its last run, is r
   const red = gated(f, '--force');
   assert.equal(red.code, 2, red.out + red.err);
   assert.doesNotMatch(red.out, /--accept-intermittent/);
+  assert.match(lines(red).pop(), /^no intermittent accept: the verdicts file \S+verdicts\.json is older than the lane's last run, started \S+$/);
   const refused = accept(f, [TEST]);
   assert.equal(refused.code, 2, refused.out + refused.err);
   assert.match(refused.err, /the verdicts file \S+verdicts\.json is older than the lane's last run, started \S+/);
@@ -143,6 +164,10 @@ test('a lane that names no verdicts file can never accept a product red as inter
   const red = gated(f);
   assert.equal(red.code, 2, red.out + red.err);
   assert.doesNotMatch(red.out, /--accept-intermittent/);
+  // The product red says how its lane gets an accept: the key, and the shape the lane writes there.
+  assert.equal(lines(red).pop(), NO_KEY);
+  assert.ok(!red.out.includes(REFUSED), red.out);
+  assert.equal(lines(red).filter((line) => line === NO_KEY).length, 1, red.out);
   const refused = accept(f, [TEST]);
   assert.equal(refused.code, 2, refused.out + refused.err);
   assert.match(refused.err, /the smoke lane names no verdicts file, so its product red has no accept: set verification\.smoke\.verdicts/);
@@ -172,6 +197,7 @@ test('an edit to the tree after the accept drops it', (t) => {
   assert.equal(moved.code, 2, moved.out + moved.err);
   assert.match(moved.out, /RED lane smoke: product red \(exit 10\)/);
   assert.doesNotMatch(moved.out, /ACCEPTED|--accept-intermittent/);
+  assert.match(lines(moved).pop(), /^no intermittent accept: no product red of the smoke lane on this tree to accept: run run\.cjs gate --detach --tree \S+, then node \S+run\.cjs gate --wait --tree \S+\.$/);
   const verdict = run(f, 'green', '--json');
   assert.equal(verdict.code, 3, verdict.out + verdict.err);
   assert.deepEqual(JSON.parse(verdict.out).owed, ['smoke']);
@@ -276,12 +302,13 @@ test('a second accept of a test prints the earlier one from the base, and a thir
 });
 
 test('the verdicts key and form the config example documents are the ones the flow reads', (t) => {
-  const { intermittentTests } = require('./run-lanes-intermittent.cjs');
+  const { SHAPE, intermittentTests } = require('./run-lanes-intermittent.cjs');
   const { configuredLanes } = require('./run-lane-config.cjs');
   const lib = require('./run-lib.cjs');
   const example = fs.readFileSync(path.join(__dirname, '../../../config.example.yaml'), 'utf8');
   const documented = /^ {4}# verdicts: (\S+)\s+# optional: .* as (\{"red": \[.*?\]\})/m.exec(example);
   assert.ok(documented, 'no verdicts line under the smoke lane in config.example.yaml');
+  assert.equal(documented[2], SHAPE);
   const form = JSON.parse(documented[2]);
   assert.deepEqual(intermittentTests(form), { tests: ['<test>'], entries: form.red });
   const f = fixture(t, `verification:\n  smoke:\n    command: npm run smoke\n    scope: ["src/**"]\n    verdicts: ${documented[1]}\n`);

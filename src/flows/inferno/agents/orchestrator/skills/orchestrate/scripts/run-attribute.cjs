@@ -12,6 +12,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const dispatch = require('./run-dispatch.cjs');
+const { foldRanges, foldedAlone } = require('./run-fold.cjs');
 const { grantedPaths } = require('./run-grant.cjs');
 const { ownershipOverlaps, unexplainedChanges } = require('./run-peers.cjs');
 
@@ -42,17 +43,14 @@ function gitNames(tree, args) {
 
 /**
  * Paths the fold of `base` brought in since the baseline at `head` and nothing changed since:
- * what the base changed after the last base commit the baseline held, merged or fast-forwarded.
- * On the base branch itself nothing is a fold.
+ * what the base changed in each fold range (run-fold.cjs), merged or fast-forwarded.
  */
 function foldedSince(tree, head, base) {
-  if (!base || lib.currentBranch(tree) === base) return new Set();
+  const ranges = foldRanges(tree, head, base);
+  if (ranges.length === 0) return new Set();
   const dirty = new Set([...gitNames(tree, ['diff', '--name-only', '--no-renames', 'HEAD']), ...gitNames(tree, ['ls-files', '--others', '--exclude-standard'])]);
   const folded = new Set();
-  for (const ref of [base, `origin/${base}`]) {
-    const tip = lib.git(tree, ['merge-base', 'HEAD', ref], { tolerate: true });
-    const held = tip && lib.git(tree, ['merge-base', head, tip], { tolerate: true });
-    if (!held || held === tip) continue;
+  for (const { held, tip } of ranges) {
     for (const file of gitNames(tree, ['diff', '--name-only', '--no-renames', held, tip])) if (!dirty.has(file)) folded.add(file);
   }
   return folded;
@@ -98,7 +96,7 @@ function verifyDispatch(tree, record, specEditable, options = {}) {
       'make it visible to git, then verify again');
   }
   for (const file of own.claimed) {
-    if (!dispatch.same(snapshot, record.acceptedSnapshot, file)) {
+    if (!dispatch.same(snapshot, record.acceptedSnapshot, file) && !foldedAlone(tree, options.base, record.acceptedSnapshot, snapshot, file)) {
       throw refuse(`accepted dispatch bytes changed at ${file}: run dispatch-log before a correction resumes the builder, ` +
         'then accept-dispatch its result');
     }
@@ -220,4 +218,4 @@ function attribute(tree, items, options) {
   return { since: attributed[0].since, outside: [...outside].sort(), unreported: [...unreported].sort(), attributed };
 }
 
-module.exports = { attribute, verifyDispatch };
+module.exports = { attribute, openDispatches, verifyDispatch };

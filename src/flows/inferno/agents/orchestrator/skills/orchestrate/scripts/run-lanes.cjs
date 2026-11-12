@@ -196,7 +196,8 @@ function acceptFix(tree, lane, selected) {
 
 /**
  * A product red holds on its intermittent accept. Unaccepted, it is red, or owed that accept when
- * the lane's verdicts file proves every red test of this run on this tree intermittent.
+ * the lane's verdicts file proves every red test of this run on this tree intermittent. A red it
+ * is not owed ends on why: the key its lane does not set, or the refusal of its verdicts.
  */
 function productRed(tree, selected, config, entry) {
   const lane = laneOf(config, entry.lane, selected);
@@ -205,7 +206,7 @@ function productRed(tree, selected, config, entry) {
   if (held) return { verdict: 'hold', out: heldLines(entry.lane, held) };
   const out = [`RED lane ${entry.lane}: product red (exit ${entry.code}) -> ${entry.log}`, ...lib.tail(entry.log, 5)];
   const read = intermittent.proven(tree, lane, entry, proof);
-  if (read.refusal) return { verdict: 'red', out };
+  if (read.refusal) return { verdict: 'red', out: [...out, intermittent.unproven(lane, read)] };
   return { verdict: 'unbounded', out: [...out, `the lane proved every red intermittent: ${laneIntermittentCall(entry.lane, tree, read.tests)}`] };
 }
 
