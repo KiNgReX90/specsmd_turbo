@@ -2,7 +2,7 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURE FIRST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-Build section 2 from top to bottom. One release, 0.1.85, carries all of it, so each host reinstalls once.
+Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b. Rows 0b and 0c came in after those were built: they go into 0.1.85 if its release steps have not run yet, and into the next release otherwise.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -27,29 +27,38 @@ The first host handed off fourteen findings on 0.1.83. All fourteen are built on
 | 13 | A grant takes a file another dispatch changed beside it | `7bdf52ff` |
 | 14 | A product red with no `verdicts` key ends with no step | `075d2bc2` |
 
-What is left for these is on the host: it sets the new keys it needs (`mutate.checks`, `real_app.prove`, `verification.<lane>.verdicts`) in its own time. `mutate.run` waits for item 0 below.
+What is left for these is on the host: it sets the new keys it needs (`mutate.checks`, `real_app.prove`, `verification.<lane>.verdicts`) in its own time. `mutate.run` it sets together with `mutate.wrapped` once it installs 0.1.85.
+
+## 1b. DONE: six items of the build list, built as 0.1.85
+
+Built on this branch on 2026-11-12. `CHANGELOG.md` says what each one does.
+
+| Was order | What | Built in |
+| --- | --- | --- |
+| 0 | A host says what counts as an already wrapped mutant test (`mutate.wrapped`) | `e3bb0844` |
+| 1 | The install says that a running session keeps the old flow | `9bb841e5` |
+| 2 | A work item names the functions it writes through, and `frontier` finds the callers it missed (`writes:`) | `1fb7906c` |
+| 3 | The checks of one integrate take one slot together (`verification.session`) | `7ac83452` |
+| 4 | The config step proposes the tools that fit the host, per role (`run.cjs tools`) | `5ab4fd5f` |
+| 5 | A planner A/B eval, one command (`evals/planner-ab/`) | `cd3f5dfd` |
+
+Still owed from item 5: one recorded run of both arms in the pull request text. Item 6 below reads that run.
 
 ## 2. BUILD NOW, in this order
 
-Each item is specified in `inferno-future-improvements.md` under the number given. "Done when" is the proof the item is finished.
+"Done when" is the proof the item is finished.
 
 | Order | What | Specified in | Done when |
 | --- | --- | --- | --- |
-| 0 | **A host says what counts as an already wrapped mutant test.** Without it the first host cannot set `mutate.run`: its recorded reviews spell the wrapper four ways, and every other spelling would be wrapped twice. | `inferno-0.1.84-run-defects-handoff.md`, section 1 | A test behind an environment prefix, one with the wrapper's absolute path and one with its path under `~` each run as written, and a bare test is wrapped once. |
 | 0b | **A mutant is checked against the criterion it names.** A reviewer that numbers its mutants in the order it wrote them credits them to the wrong criteria, and the runner takes the numbers as written. The dispatch prints the numbered criteria, each entry repeats the criterion's opening words, and the intent review can move a recorded one. | `inferno-0.1.84-run-defects-handoff.md`, section 2 | A review numbered in order past a skipped criterion is refused and the message names the right number. A review whose numbers and words agree records as today. After a move the criterion left behind takes a proposal in the intent review. |
 | 0c | **A proof that exists only after the merge has its own kind.** An external criterion with no evidence file stops the ship, also when only the ship makes the proof possible, such as a timer that runs from the default branch. A fourth proof, `after_ship`, is listed as owed by the ship and marked in the brief at plan time. | `inferno-0.1.84-run-defects-handoff.md`, section 3 | A review with one `after_ship` entry and no file is green and the ship prints the owed line. The same entry spelled `external` is refused as today. An `after_ship` entry for a criterion the brief does not mark is refused. |
-| 1 | **The install says that a running session keeps the old flow.** One line after an install over an existing install: a session started before it keeps its old agent definitions, so start a fresh session or re-read the definition at the next item boundary. | improvement 5 | The install eval installs twice and reads that line on the second install, and no such line on the first. |
-| 2 | **A work item names the functions it writes through, and `frontier` finds the callers it missed.** An optional `writes:` list beside `reads:`. `run.cjs frontier` greps the callers of each and prints every caller file the item does not cite as a `candidate` line. It refuses nothing. | improvement 2 | On a fixture plan the check is quiet while the item cites the caller's file, and prints that file once the citation is removed. A plan without `writes:` prints nothing and builds as before. |
-| 3 | **The checks of one integrate take one slot together.** A host key with the same open, run and close as `mutate.session`, used by `run.cjs integrate` and by the gate's finalize commands. The tree is synced once and the queue is waited in once. Each command keeps its own proof, keyed as today. | improvement 8 | On a fixture host whose wrapper counts its opens, an integrate of five commands opens one session, runs five commands in it and closes it, and writes five proofs. Without the key the five run as today. A command that fails closes the session and reports as today. |
-| 4 | **The config step proposes the tools that fit the host, per role.** | improvement 7 | The config skill, run on a fixture host with two languages, proposes a search tool for the reading roles and one lint per kind of file, writes each accepted lint as a scoped check in `verification.integrate`, and writes nothing the owner declined. |
-| 5 | **A planner A/B eval, one command.** It plans a fixed statement at a fixed commit on both hosts, two runs per arm, and prints rounds, shell calls, output tokens, wall time, item count and the frontier result. This item also carries improvement 4: one sentence in `dev_release_guide.md` that a planner text change is measured on the other host before it is ported. | improvements 3 and 4 | `evals/` holds the command, its counting tests pass (one count per API message id, Codex subcommands counted), and one recorded run of both arms is in the pull request text. |
 | 6 | **Thinner work items.** The planner stops writing prose that explains what the code does and keeps what a builder cannot get alone. | improvement 1 | It is adopted only on numbers: the eval of item 5, then one intent built both ways, show that the builder's cost (rounds, output tokens, wall time, red integrate steps per item) rises less than the planner's cost falls. If it does not, the text change is reverted and this line says so. |
 | 7 | **The release steps on the combined tree.** `npm run validate:all`, `npm pack`, both install evals and the e2e smoke, on 0.1.85. | `dev_release_guide.md` | Each result is one line in the pull request text. |
 
 Two notes for whoever builds:
 
-- Item 3 has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The flow builds the key and its fixture. The first host adds the commands to its own wrapper afterwards.
-- Item 6 is the only one that can make things worse without anyone seeing it, because a builder that searches longer still finishes. That is why it comes last and behind a number.
+- `verification.session` has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The first host adds them to its own wrapper and sets the key.
+- Item 6 is the only one that can make things worse without anyone seeing it, because a builder that searches longer still finishes. That is why it stays behind a number.
 
 ## 3. DONE: strike it
 

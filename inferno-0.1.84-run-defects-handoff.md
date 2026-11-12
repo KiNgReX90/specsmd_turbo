@@ -8,6 +8,8 @@ The fourteen sections of the 0.1.83 file are built as 0.1.84 and installed on th
 
 ## 1. `mutate.run` wraps a hand-wrapped test a second time unless it is spelled exactly like the key
 
+**Built as 0.1.85 in `e3bb0844` (`mutate.wrapped`). Nothing of this section is left to build.**
+
 Found 2026-11-12 on the app repo by reading 0.1.84 before setting the key. Not met in a run: the host holds the key back because of it.
 
 ### What would happen
