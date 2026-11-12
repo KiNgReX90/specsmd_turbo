@@ -4,7 +4,9 @@
  * The runner runs a review's mutants, once, when it records the review (P1 of the improvement plan).
  *
  * Item review. A first review proposes one mutant per acceptance criterion a test covers, under
- * `mutants`, named by the criterion's number: `{criterion, file, line, find, replace, test}`. The
+ * `mutants`, named by the criterion's number and repeating its opening words under `says`, which
+ * the record holds to the criterion at that number (run-criterion-says.cjs):
+ * `{criterion, says, file, line, find, replace, test}`. The
  * record step runs them in one batch, writes `caught` (yes, no, or none with `why`) on each, and
  * writes a `major` finding per survivor, marked `mutant: <criterion>`; a survivor makes the verdict
  * fix. A delta review proposes none: its record carries the last review's entries over, reruns
@@ -24,6 +26,7 @@
  * placed before anything is judged, followed into another file when the item moved its line
  * there; one that cannot be placed reads `caught: none` with its why, holds its criterion for
  * nobody and counts as caught for nothing, so the reviewer may propose for it in the same record.
+ * An item mutant recorded under the wrong criterion moves under `moved` (run-mutant-moves.cjs).
  * A survivor may take another test: the reviewer writes its entry again with only `test` changed,
  * and the record runs it with that test and keeps the first one as `was`.
  *
@@ -41,8 +44,10 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const {
-  ITEM_KEYS, isMap, itemCriterion, mutantsOf, pinsOf, proposalsOf, readDoc, refuseComments, refuseNew, sameMutant, samePin, bad,
+  ITEM_KEYS, isMap, itemCriterion, mutantsOf, pinsOf, proposalsOf, readDoc, refuseComments, refuseNew, sameMutant, samePin, bad, withSays,
 } = require('./run-review-file.cjs');
+const { saysProblem } = require('./run-criterion-says.cjs');
+const { MOVE_HOW, carryMoves } = require('./run-mutant-moves.cjs');
 const { carryAside } = require('./run-review-aside.cjs');
 const { checkPins, pinProblem, previousPins, testPaths } = require('./run-review-pins.cjs');
 const { INTENT_KEYS, parseIntentReview } = require('./run-intent-review-file.cjs');
@@ -54,7 +59,10 @@ const {
 const { RunError } = lib;
 
 /** A pin as a review file keeps it, in the schema's key order. */
-const keptPin = (pin) => ({ criterion: pin.criterion, file: pin.file, test: pin.test, text: pin.text });
+const keptPin = (pin) => withSays({ criterion: pin.criterion, file: pin.file, test: pin.test, text: pin.text }, pin.says);
+
+/** An item review's entry as its file keeps it: the words it repeats of its criterion stay with it. */
+const keptSaid = (entry) => withSays(kept(entry), entry.says);
 
 /** An entry still to run: a proposal that never ran, or one whose test stayed green. */
 const due = (entry) => entry.find !== undefined && (entry.caught === undefined || entry.caught === 'no');
@@ -105,7 +113,7 @@ async function itemMutants(tree, context) {
     }
     pins = carriedPins(tree, rel, doc, owner, out);
   } else {
-    const named = itemCriterion(item.id, acceptanceCriteria(fs.readFileSync(spec.file, 'utf8')).length);
+    const named = itemCriterion(item.id, acceptanceCriteria(fs.readFileSync(spec.file, 'utf8')));
     entries = proposalsOf(rel, doc, named);
     refuseComments(tree, rel, entries);
     checkTargets(tree, rel, entries);
@@ -122,7 +130,7 @@ async function itemMutants(tree, context) {
   rewrite(path.join(tree, rel), doc, ITEM_KEYS, {
     verdict: own.length > 0 || survivors.length > 0 ? 'fix' : 'clean',
     findings: [...own, ...survivors.map((entry) => survivorFinding(entry))],
-    mutants: entries.map(kept),
+    mutants: entries.map(keptSaid),
     pins: pins.length > 0 ? pins.map(keptPin) : undefined,
   });
   return [...out, ...ranLines(result, entries, owes)];
@@ -135,14 +143,18 @@ function scanIds(tree, intent, owed) {
   return isMap(doc) && Array.isArray(doc.lines) ? doc.lines.map((line) => line && line.id).filter((id) => typeof id === 'string') : [];
 }
 
-/** How the intent review names a criterion: `<item>:<n>`, an item of the intent and one of its criteria. */
-const intentCriterion = (proofs) => (text) => {
+/**
+ * How the intent review names a criterion: `<item>:<n>`, an item of the intent and one of its
+ * criteria. An entry that repeats the criterion's words under `says` is held to them.
+ */
+const intentCriterion = (proofs) => (text, entry = {}) => {
   const match = /^([^:\s]+):(\d+)$/.exec(text);
   if (!match) return `criterion reads ${text}; name it <item>:<n>, the work item and the number of its acceptance criterion`;
   const item = proofs.find((proof) => proof.id === match[1]);
   if (!item) return `names ${match[1]}, which is no work item of this intent`;
   const n = Number(match[2]);
-  return n >= 1 && n <= item.criteria.length ? null : `names criterion ${n}, and ${item.id} has ${item.criteria.length} acceptance criteria`;
+  if (n < 1 || n > item.criteria.length) return `names criterion ${n}, and ${item.id} has ${item.criteria.length} acceptance criteria`;
+  return entry.says === undefined ? null : saysProblem(item.id, item.criteria, n, entry.says);
 };
 
 /** The item and the criterion index an intent entry names, or null for a released flow's free text. */
@@ -163,7 +175,8 @@ function refuseSecond(rel, proofs, proposals, held) {
       const survivor = runs.find((entry) => entry.caught === 'no');
       throw bad(rel, `mutants proposes one for ${proposal.criterion}, which has a mutant ${caught ? 'its item review caught' : 'this record runs'}; ` +
         'propose only for a criterion still without one' + (survivor ? `. To give its survivor another test, write that entry again ` +
-        `(${survivor.file}:${survivor.line}, find ${JSON.stringify(survivor.find)}, replace ${JSON.stringify(survivor.replace)}) with only test changed` : ''));
+        `(${survivor.file}:${survivor.line}, find ${JSON.stringify(survivor.find)}, replace ${JSON.stringify(survivor.replace)}) with only test changed` : '') +
+        `. ${MOVE_HOW}`);
     }
   });
 }
@@ -223,11 +236,13 @@ async function intentMutants(tree, context) {
   const abs = path.join(tree, rel);
   // The withdrawn mutants and the deferred findings, carried over and left out of what runs (run-review-aside.cjs).
   const aside = carryAside(tree, rel, intent, items);
+  // The moves, held to their criteria and carried over, before any entry is counted (run-mutant-moves.cjs).
+  const moves = carryMoves(tree, rel, intent, items, INTENT_KEYS);
   const text = fs.readFileSync(abs, 'utf8');
   const doc = readDoc(tree, rel);
   const own = ownFindings(doc);
   const proofs = aside.answer(itemProofs(tree, intent, items));
-  const carried = aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes'));
+  const carried = moves.rename(aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes')));
   retest(rel, doc, carried);
   // Placed before anything is judged: an owed proposal its item's code no longer holds is held by nothing and counts for nothing.
   // A set-aside one is left out before it is placed, as a carried one is.

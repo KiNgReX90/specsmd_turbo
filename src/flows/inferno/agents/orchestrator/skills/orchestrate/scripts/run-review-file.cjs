@@ -14,6 +14,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { SAME_ITEM, deltaProblem } = require('./run-review-delta.cjs');
+const { NO_SAYS, saysProblem } = require('./run-criterion-says.cjs');
 
 const { RunError } = lib;
 
@@ -52,6 +53,20 @@ const PROPOSE = `propose {${MUTANT_KEYS.join(', ')}}; the runner runs it and wri
  */
 const PIN_KEYS = ['criterion', 'file', 'test', 'text'];
 const PIN_WORDS = 4;
+/**
+ * A first item review's mutants and pins also repeat, under `says`, the opening words of the
+ * criterion they name (run-criterion-says.cjs). The key is optional in every other file, so a review
+ * recorded before it existed still reads, and the runner keeps it where it is written.
+ */
+const SAID = (keys) => [keys[0], 'says', ...keys.slice(1)];
+const ITEM_MUTANT_KEYS = SAID(MUTANT_KEYS);
+const ITEM_PIN_KEYS = SAID(PIN_KEYS);
+/** An entry with its `says` placed after its criterion, or left out when it has none. */
+const withSays = (entry, says) => {
+  if (says === undefined) return entry;
+  const { criterion, ...rest } = entry;
+  return { criterion, says, ...rest };
+};
 
 function reviewPath(intentId, itemId) {
   return path.join(lib.SPECS_DIR, 'intents', intentId, 'reviews', `${itemId}.yaml`);
@@ -205,7 +220,7 @@ function weightOf(review) {
  * the released flow's reviewer ran itself. `replace` may be empty, since dropping text is a mistake.
  */
 function mutantsOf(rel, doc) {
-  return entries(rel, doc, 'mutants', ['criterion', 'test'], [...TARGET_KEYS, ...RUNNER_KEYS], ['replace']).map((mutant, index) => {
+  return entries(rel, doc, 'mutants', ['criterion', 'test'], ['says', ...TARGET_KEYS, ...RUNNER_KEYS], ['replace']).map((mutant, index) => {
     const at = `mutants entry ${index + 1}`;
     const targeted = TARGET_KEYS.some((key) => mutant[key] !== undefined);
     if (targeted) {
@@ -230,9 +245,9 @@ const pinWords = (text) => text.split(/\s+/).filter((word) => /\p{L}/u.test(word
  * recorded file was named when it was recorded, so its read leaves it out.
  */
 function pinsOf(rel, doc, criterionOf = () => null) {
-  return entries(rel, doc, 'pins', PIN_KEYS).map((pin, index) => {
+  return entries(rel, doc, 'pins', PIN_KEYS, ['says']).map((pin, index) => {
     const at = `pins entry ${index + 1}`;
-    const problem = criterionOf(pin.criterion);
+    const problem = criterionOf(pin.criterion, pin);
     if (problem) throw bad(rel, `${at} ${problem}`);
     const [file, test] = [relativePath(rel, pin.file, at), relativePath(rel, pin.test, at)];
     const ledger = [file, test].find((name) => name === lib.SPECS_DIR || name.startsWith(`${lib.SPECS_DIR}/`));
@@ -242,7 +257,7 @@ function pinsOf(rel, doc, criterionOf = () => null) {
       throw bad(rel, `${at} text holds ${words} word${words === 1 ? '' : 's'}; a pin holds reader-facing copy of at least ${PIN_WORDS}, ` +
         'and a pattern, a count or a computed value keeps its mutant');
     }
-    return { criterion: pin.criterion, file, test, text: pin.text };
+    return withSays({ criterion: pin.criterion, file, test, text: pin.text }, pin.says);
   });
 }
 
@@ -268,11 +283,11 @@ function proposalsOf(rel, doc, criterionOf, held = () => false) {
     if (held(mutant)) return [];
     const at = `mutants entry ${index + 1}`;
     if (mutant.find === undefined) throw bad(rel, `${at} has no file: ${PROPOSE}`);
-    const problem = criterionOf(mutant.criterion);
+    const problem = criterionOf(mutant.criterion, mutant);
     if (problem) throw bad(rel, `${at} ${problem}`);
     const file = relativePath(rel, mutant.file, at);
     if (file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`)) throw bad(rel, `${at} breaks ${file}; a mutant breaks the code, never the ledger`);
-    return [Object.fromEntries(MUTANT_KEYS.map((key) => [key, key === 'file' ? file : mutant[key]]))];
+    return [withSays(Object.fromEntries(MUTANT_KEYS.map((key) => [key, key === 'file' ? file : mutant[key]])), mutant.says)];
   });
   const counts = new Map();
   for (const { criterion } of proposals) counts.set(criterion, (counts.get(criterion) || 0) + 1);
@@ -318,11 +333,15 @@ function refuseComments(tree, rel, proposals) {
   });
 }
 
-/** How a first item review names a criterion: its number alone, among the item's `count`. */
-const itemCriterion = (itemId, count) => (text) => {
+/**
+ * How a first item review names a criterion: its number alone, among the item's `criteria`, and
+ * under `says` the opening words of the criterion at that number.
+ */
+const itemCriterion = (itemId, criteria) => (text, entry) => {
   if (!/^\d+$/.test(text)) return `criterion reads ${text}; name the acceptance criterion by its number alone, 1 for the first`;
   const n = Number(text);
-  return n >= 1 && n <= count ? null : `names criterion ${n}, and ${itemId} has ${count} acceptance criteria`;
+  if (n < 1 || n > criteria.length) return `names criterion ${n}, and ${itemId} has ${criteria.length} acceptance criteria`;
+  return entry.says === undefined ? NO_SAYS : saysProblem(itemId, criteria, n, entry.says);
 };
 
 /** A delta review holds no mutant the last review did not hold: the runner carries those over itself. */
@@ -365,7 +384,7 @@ function verdictParts(rel, doc, findingKeys, optional = []) {
 }
 
 module.exports = {
-  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, commentMarker, entries, isMap, itemCriterion, mutantsOf,
+  FINDING_KEYS, ITEM_KEYS, ITEM_MUTANT_KEYS, ITEM_PIN_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, commentMarker, entries, isMap, itemCriterion, mutantsOf,
   parseItemReview, pinsOf, proposalsOf, readDoc, recordedReviewer, refuseComments, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, samePin,
-  verdictParts, weightOf,
+  verdictParts, weightOf, withSays,
 };

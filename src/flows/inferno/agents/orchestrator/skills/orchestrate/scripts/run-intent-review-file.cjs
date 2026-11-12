@@ -17,7 +17,7 @@ const { gapRefusal, mutantGaps } = require('./run-mutant-coverage.cjs');
 const { SAME_INTENT, deltaProblem } = require('./run-review-delta.cjs');
 const { answered, deferredOf, withdrawnOf } = require('./run-review-aside.cjs');
 
-const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants', 'pins', 'withdrawn', 'deferred'];
+const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants', 'pins', 'moved', 'withdrawn', 'deferred'];
 /** An intent review also records the hash that leaves out the kb the base synced (review.outside). */
 const INTENT_RECORDED = [...RECORDED_KEYS, 'tree_outside'];
 const CRITERION_KEYS = ['criterion', 'proof', 'where'];

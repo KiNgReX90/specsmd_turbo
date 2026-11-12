@@ -143,7 +143,7 @@ test("an owed item proposal the intent reviewer withdraws before it ever ran is 
 /** Item a-one's two criteria each caught, then an intent review that found one blocker and two minor findings. */
 function threeFindings() {
   const { fixture, tree } = intentTree();
-  write(tree, REVIEW, withMutants(CAUGHT_ONE, CAUGHT_TWO.replace("a-one:2", "2")));
+  write(tree, REVIEW, withMutants(CAUGHT_ONE, CAUGHT_TWO.replace("a-one:2", "2\n    says: a2 reads two")));
   assert.equal(record(fixture, [], tree).code, 0);
   runs(fixture);
   const finding = (line, file, severity, evidence) => `  - criterion: a-one:${line}\n    file: ${file}\n    line: ${line}\n` +

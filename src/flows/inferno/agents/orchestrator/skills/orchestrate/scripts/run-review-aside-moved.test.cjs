@@ -61,7 +61,7 @@ function deferFinding(tree, entry) {
 
 test("a withdrawn owed proposal whose line a later commit moved to another file is not run and gets no finding", () => {
   const { fixture, tree } = intentTree();
-  owedItem(fixture, tree, withMutants(CAUGHT_ONE, CAUGHT_TWO.replace("a-one:2", "2")));
+  owedItem(fixture, tree, withMutants(CAUGHT_ONE, CAUGHT_TWO.replace("a-one:2", "2\n    says: a2 reads two")));
   moved(tree, "export { a } from './c';\nexport const a2 = 2;\n", "export const a = 1;\n", { "checks/one.expect": "src/c.ts a = 1\n" });
   const placed = proposal("a-one:1", { file: "src/c.ts" });
   const withdrawn = `withdrawn:\n${placed}    reason: it changes nothing a reader sees\n`;
@@ -166,7 +166,7 @@ test("a deferral that leaves a criterion without a proof keeps the review fix, n
 });
 
 test("a deferral that leaves no criterion without a proof records clean", () => {
-  const { fixture, tree } = minorOnly(CAUGHT_TWO.replace("a-one:2", "2"));
+  const { fixture, tree } = minorOnly(CAUGHT_TWO.replace("a-one:2", "2\n    says: a2 reads two"));
   const deferred = deferFinding(tree, 1);
   assert.equal(deferred.code, 0, shown(deferred));
   assert.match(deferred.out, /\n {2}no finding stays open, so the review now says clean\n/);

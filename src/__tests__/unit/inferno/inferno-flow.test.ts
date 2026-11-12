@@ -157,10 +157,12 @@ describe('inferno flow', () => {
     };
     expect(top(blocks[0])).toEqual(item.ITEM_KEYS);
     expect(nested(blocks[0], 'findings')).toEqual([...item.FINDING_KEYS, 'repeat']);
-    expect(nested(blocks[0], 'mutants')).toEqual(item.MUTANT_KEYS);
-    expect(nested(blocks[0], 'pins')).toEqual(item.PIN_KEYS);
-    // The reviewer never writes `deferred`: only the orchestrator's defer-finding does.
-    expect(top(blocks[1])).toEqual(intent.INTENT_KEYS.filter((key: string) => key !== 'deferred'));
+    // A first item review repeats each criterion's words under `says`; the intent review may.
+    expect(nested(blocks[0], 'mutants')).toEqual(item.ITEM_MUTANT_KEYS);
+    expect(nested(blocks[0], 'pins')).toEqual(item.ITEM_PIN_KEYS);
+    // The reviewer never writes `deferred`: only the orchestrator's defer-finding does. `moved`, the
+    // rare repair of a mutant an older review numbered wrong, is taught by the refusal that meets it.
+    expect(top(blocks[1])).toEqual(intent.INTENT_KEYS.filter((key: string) => key !== 'deferred' && key !== 'moved'));
     expect(nested(blocks[1], 'criteria')).toEqual([...intent.CRITERION_KEYS, 'evidence']);
     expect(nested(blocks[1], 'findings')).toEqual([...item.FINDING_KEYS, 'owner']);
     expect(nested(blocks[1], 'scanner')).toEqual(intent.SCANNER_KEYS);

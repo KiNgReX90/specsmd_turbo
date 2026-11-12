@@ -324,7 +324,7 @@ test("a settled item's caught mutant and checked pin count at the intent review 
   } });
   const tree = worktree(fixture, INTENT_TREE);
   const host = { fixture, tree, at: (args) => run(fixture, [...args, "--tree", tree]) };
-  const pin = `pins:\n  - criterion: 2\n    file: src/notice.html\n    test: checks/notice.test.cjs\n    text: "${SENTENCE}"\n`;
+  const pin = `pins:\n  - criterion: 2\n    says: a2 reads two\n    file: src/notice.html\n    test: checks/notice.test.cjs\n    text: "${SENTENCE}"\n`;
   write(tree, REVIEW, itemReview(`findings:\n  - criterion: AC1\n    file: src/a.ts\n    line: 1\n    evidence: the name a reads as nothing\n` +
     `    fix: say what it counts\n    severity: minor\nmutants:\n${CAUGHT_ONE}${pin}`, "fix"));
   const recorded = host.at(["review", "--item", "a-one", "--reviewer", "rev-1"]);
