@@ -5,6 +5,9 @@ const path = require("node:path");
 
 const { CONFIG, STATE, git, repo, run, worktree, write } = require("./review-fixture.cjs");
 const { writeFile } = require("./test-write.cjs");
+const { filesHash } = require("./run-review-hash.cjs");
+const { parseQualityReview, readItemReview } = require("./run-review-quality.cjs");
+const { boundFiles } = require("./run-review-file.cjs");
 
 // The ladder itself, from the first rung to its end, is held in run-review-ladder.test.cjs.
 
@@ -222,10 +225,39 @@ test("a key inside a finding that the schema does not name is refused", () => {
   refused(repo(), body, /BAD_REVIEW.*unknown key residual in findings entry 1/);
 });
 
-test("a listed path that is not in the tree, or one in the ledger, is refused", () => {
+test("a listed path that is not in the tree is refused, and so is a list of ledger paths alone", () => {
   const fixture = repo();
   refused(fixture, CLEAN.replace("[src/a.ts]", "[src/gone.ts]"), /BAD_REVIEW.*src\/gone\.ts, which is not in the tree/);
-  refused(fixture, CLEAN.replace("[src/a.ts]", "[.specs-inferno/state.yaml]"), /BAD_REVIEW.*the ledger is never part/);
+  refused(fixture, CLEAN.replace("[src/a.ts]", "[.specs-inferno/state.yaml, .specs-inferno/config.yaml]"),
+    /BAD_REVIEW.*files must list every file the review read for this item/);
+});
+
+test("a review that lists an owned ledger file beside the code is recorded, and binds the code files alone", () => {
+  const fixture = repo({ editable: ["src/a.ts", ".specs-inferno/config.yaml"] });
+  write(fixture.root, "src/a.ts", "export const a = 2;\n");
+  write(fixture.root, ".specs-inferno/config.yaml", `${CONFIG}# the item's own host setting\n`);
+  git(fixture.root, ["commit", "-qam", "a-one built"]);
+  write(fixture.root, REVIEW, CLEAN.replace("[src/a.ts]", "[src/a.ts, .specs-inferno/config.yaml]"));
+
+  const result = review(fixture);
+
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /review a-one clean/);
+  const hash = /review_hash: ([0-9a-f]{64})/.exec(ledger(fixture))[1];
+  assert.equal(hash, filesHash(fixture.root, ["src/a.ts"]), "the hash binds the code file and never the ledger");
+  const read = readItemReview(fixture.root, "alpha", "a-one", { recorded: true });
+  assert.deepEqual(read.files, ["src/a.ts"]);
+});
+
+test("both lenses leave a listed ledger path out of what they bind, fresh or recorded, and refuse a list of ledger paths alone", () => {
+  const fixture = repo();
+  const doc = { files: ["src/a.ts", ".specs-inferno/config.yaml", ".specs-inferno"] };
+  for (const recorded of [false, true]) assert.deepEqual(boundFiles(fixture.root, REVIEW, doc, { recorded }), ["src/a.ts"]);
+  assert.throws(() => boundFiles(fixture.root, REVIEW, { files: [".specs-inferno/config.yaml"] }),
+    /files must list every file the review read for this item/);
+  const QUALITY = ".specs-inferno/intents/alpha/reviews/quality/a-one.yaml";
+  write(fixture.root, QUALITY, "item: a-one\nverdict: clean\nfiles: [src/a.ts, .specs-inferno/config.yaml]\n");
+  assert.deepEqual(parseQualityReview(fixture.root, QUALITY, "a-one", { recorded: false }).files, ["src/a.ts"]);
 });
 
 test("a refused review file goes back to the reviewer, never to the orchestrator's pen", () => {
