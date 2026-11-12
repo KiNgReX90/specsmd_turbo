@@ -17,7 +17,8 @@
  * relative to the tree, and `run` gets INFERNO_TEST, the test.
  *
  * Only the entries no Rust build shares go into a session; one whose test command `match` does not
- * reach runs in place as before. After those, with every file and seal back, each test command
+ * reach runs in place as before. `match` reads the command as `mutate.run` wrapped it
+ * (run-mutate-host.cjs), and a session of a test the key wrapped runs the test as written. After those, with every file and seal back, each test command
  * opens a session. Per mutant the line is written (and resealed when the host seals the file), the
  * file and every path the reseal changed are sent, the test runs, the file and the seal go back,
  * and those paths are sent again. A session that did not open, and a send of the mutant that
@@ -38,6 +39,7 @@ const fs = require('fs');
 const lib = require('./run-lib.cjs');
 const { reseal, unseal } = require('./run-mutate-seal.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
+const { quote } = require('./run-mutate-host.cjs');
 
 const { RunError } = lib;
 const KEYS = ['match', 'open', 'send', 'run', 'close'];
@@ -71,14 +73,17 @@ function sessionOf(config) {
 
 /**
  * The groups of the entries `hosted` reaches, one per test command in the order given, each with
- * the test its session runs. Each grouped entry's plan becomes `session`.
+ * the test its session runs. An entry's `command` is its test as the host's wrapper runs it, the
+ * test itself when no `mutate.run` wrapped it. Each grouped entry's plan becomes `session`.
  */
 function sessionGroups(hosted, entries, plans) {
   const groups = new Map();
   for (const e of hosted ? entries.filter((item) => !item.rust) : []) {
-    const reached = hosted.match.exec(e.test);
+    const command = e.command || e.test;
+    const reached = hosted.match.exec(command);
     if (!reached || reached.index !== 0) continue;
-    if (!groups.has(e.test)) groups.set(e.test, { test: e.test, inner: e.test.slice(reached[0].length), entries: [] });
+    const inner = command === e.test ? command.slice(reached[0].length) : e.test;
+    if (!groups.has(e.test)) groups.set(e.test, { test: e.test, inner, entries: [] });
     groups.get(e.test).entries.push(e);
     plans.set(e.k, { form: 'session' });
   }
@@ -88,7 +93,6 @@ function sessionGroups(hosted, entries, plans) {
 /** The verdict of a mistake whose reseal did not exit 0: none, with the signal that stops the batch if one ended it. */
 const unsealedVerdict = (failed) => ({ caught: null, why: failed.why, code: failed.code, log: failed.log, signal: failed.signal });
 
-const quote = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
 const exported = (env) => `export ${Object.entries(env).map(([key, value]) => `${key}=${quote(value)}`).join(' ')}; `;
 
 /** Run one session command in the tree; `signal` names the signal that ended it, also when a shell reports it killed. */
@@ -126,7 +130,8 @@ function mutant(ctx, group, e, env) {
   let verdict = sent ? { caught: null, why: `the send of ${sent.rel} into the session failed (exit ${sent.code} -> ${sent.log})`, code: sent.code, log: sent.log } : null;
   if (!verdict) {
     const run = lib.runShell(exported({ ...env, INFERNO_TEST: group.inner }) + ctx.hosted.run, session.tree, session.log(`session-${e.k}`));
-    verdict = { ...verdictOf(run, readLog(run.log), e.abs), code: run.code, log: run.log, signal: run.signal };
+    const read = verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: ctx.checks || [] });
+    verdict = { ...read, code: run.code, log: run.log, signal: run.signal };
   }
   verdicts.set(e.k, verdict);
   session.putBack(e.rel);
@@ -165,8 +170,8 @@ async function inSession(ctx, group, env, n) {
 
 /**
  * Run one group in a session of its own, the `n`th of the batch. `ctx` holds the batch's journal
- * session, the seal, the session key, the verdicts to fill, the notes to print, the count of
- * sessions opened and `signalled`. Returns `{stopped}` when the batch must stop, `{}` otherwise.
+ * session, the seal, the session key, the host's checks, the verdicts to fill, the notes to print,
+ * the count of sessions opened and `signalled`. Returns `{stopped}` when the batch must stop, `{}` otherwise.
  */
 async function runGroup(ctx, group, n) {
   const { session } = ctx;

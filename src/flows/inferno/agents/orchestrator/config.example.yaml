@@ -114,6 +114,10 @@ wiring:                           # optional: per kind (command, table or event)
 #     send: "tools/remote-test.sh send"        # puts INFERNO_FILE, a path relative to the tree, into the session as the tree holds it now, and deletes it there when the tree no longer does
 #     run: "tools/remote-test.sh run"          # runs INFERNO_TEST in the session; its output and exit code are the test's
 #     close: "tools/remote-test.sh close"      # gives the session and the slot up; it runs on every exit once open started, and in the next step that reads the tree when a kill skipped it, so it exits 0 when nothing is open
+#   run: "tools/remote-test.sh {tree} {test}"   # optional: the wrapper every mutant test runs through, so a reviewer writes the bare test and the host decides the machine; {tree} and {test} each go in once as one single-quoted shell word, a test that already starts with the wrapper's own words runs as written, session.match reads the wrapped command, and the wrapper passes INFERNO_MUTANT on to the test
+#   checks:                       # optional: the host's checks (a contract script, a lint), which print no test runner's summary; a red run of a listed check that printed its finding line reads caught, and one that printed no such line (a wrapper error) reads no verdict
+#     - match: '^npm run check:wire\b'     # a regex in single quotes that marks a test command, as the reviewer wrote it, as this check
+#       finding: '^WIRE MISMATCH: '         # a regex in single quotes of the line the check prints on a finding
 
 # standards:                      # optional: the project's rule files under .specs-inferno/standards/, each with the path globs it applies to; dispatch-log prints every file that applies to a builder's ownership.editable, and a listed file that does not exist refuses the dispatch; /specsmd-inferno-standards drafts them; a --config file without the block takes this one
 #   - file: typescript.md

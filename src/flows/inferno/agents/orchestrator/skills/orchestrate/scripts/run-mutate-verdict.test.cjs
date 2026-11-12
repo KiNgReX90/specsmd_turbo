@@ -76,3 +76,98 @@ for (const [name, result, text, expected] of [
     else if (expected.why) assert.equal(verdict.why, expected.why);
   });
 }
+
+// A compiler that a signal ended makes cargo exit 101 with `error: could not compile`, as a build
+// that failed does. The machine killed it, so it is a kill, and a crate no mutated file belongs to
+// that did not compile is never the mutant's doing.
+const fs = require("node:fs");
+const path = require("node:path");
+const { tempDir } = require("./test-temp.cjs");
+const { writeFile } = require("./test-write.cjs");
+
+const SCCACHE_KILLED = "   Compiling dep-utils v2.0.0\nsccache: Compiler killed by signal 15\nerror: could not compile `dep-utils` (lib)\n\nCaused by:\n  process didn't exit successfully: `sccache rustc --crate-name dep_utils` (exit status: 254)\n";
+const LINKER_KILLED = "collect2: fatal error: ld terminated with signal 9 [Killed]\nerror: could not compile `shop` (bin \"shop\") due to 1 previous error\n";
+const OTHER_CRATE = "   Compiling dep-ui v0.18.0\nerror: failed to run custom build command for `dep-ui-sys v0.18.0`\nerror: could not compile `dep-ui` (lib) due to 1 previous error\n";
+const OWN_CRATE = "error[E0308]: mismatched types\n --> src/lib.rs:3:5\nerror: could not compile `shop-core` (lib) due to 1 previous error\n";
+const PRINTED_KILL = "running 1 test\ntest tests::supervisor ... FAILED\nchild killed by signal 15\n\ntest result: FAILED. 0 passed; 1 failed\n";
+
+/** A tree whose crate `shop-core` holds src/lib.rs, and a src/notes.txt that belongs to no crate. */
+function crateTree() {
+  const root = tempDir("inferno-verdict-crate-");
+  fs.mkdirSync(path.join(root, ".git"));
+  fs.mkdirSync(path.join(root, "core", "src"), { recursive: true });
+  writeFile(path.join(root, "core", "Cargo.toml"), "[package]\nname = \"shop-core\"\nversion = \"0.1.0\"\n\n[dependencies]\nname-tool = \"1\"\n");
+  writeFile(path.join(root, "core", "src", "lib.rs"), "pub fn one() -> u8 { 1 }\n");
+  fs.mkdirSync(path.join(root, "src"));
+  writeFile(path.join(root, "src", "notes.txt"), "one\n");
+  return { lib: path.join(root, "core", "src", "lib.rs"), notes: path.join(root, "src", "notes.txt") };
+}
+
+test("a compiler a signal ended reads killed, never did not build", () => {
+  const { lib } = crateTree();
+  assert.deepEqual(verdictOf(run(101), SCCACHE_KILLED, lib), { caught: null, why: "killed (SIGTERM)" });
+  assert.deepEqual(verdictOf(run(101), SCCACHE_KILLED, null, { files: [] }), { caught: null, why: "killed (SIGTERM)" });
+  assert.deepEqual(verdictOf(run(101), LINKER_KILLED, lib), { caught: null, why: "killed (SIGKILL)" });
+});
+
+test("a kill a test prints in its own output stays the test's red", () => {
+  assert.deepEqual(verdictOf(run(101), PRINTED_KILL, ABS), { caught: true });
+});
+
+test("a crate no mutated file belongs to that did not compile is not the mutant's build", () => {
+  const { lib } = crateTree();
+  const verdict = verdictOf(run(101), OTHER_CRATE, lib);
+  assert.equal(verdict.caught, null);
+  assert.notEqual(verdict.why, "did not build");
+  assert.match(verdict.why, /dep-ui/);
+  assert.match(verdict.why, /no mutated file belongs to/);
+  assert.equal(verdictOf(run(101), OTHER_CRATE, null, { files: [lib] }).why, verdict.why);
+});
+
+test("the mutated file's own crate that did not compile, or a crate nothing can tell, reads did not build", () => {
+  const { lib, notes } = crateTree();
+  assert.deepEqual(verdictOf(run(101), OWN_CRATE, lib), { caught: null, why: "did not build" });
+  assert.deepEqual(verdictOf(run(101), OTHER_CRATE + OWN_CRATE, lib), { caught: null, why: "did not build" });
+  assert.deepEqual(verdictOf(run(101), OTHER_CRATE, notes), { caught: null, why: "did not build" });
+  assert.deepEqual(verdictOf(run(101), OTHER_CRATE, null, { files: [lib, notes] }), { caught: null, why: "did not build" });
+});
+
+// A check, a contract script or a lint, prints no test runner's summary. A host names its checks
+// with the line each prints on a finding, and a red run that printed that line is caught. The same
+// command ended by a wrapper error printed no such line, so it still reads no verdict.
+const CHECKS = [{ match: /^npm run check:wire\b/, finding: /^WIRE MISMATCH: /m }];
+const WIRE_FOUND = "> shop@1.0.0 check:wire\n> node scripts/wire.mjs\n\nWIRE MISMATCH: gift_card.amount is a string on the wire\n";
+
+test("a listed check whose red run printed its finding line reads caught", () => {
+  assert.deepEqual(verdictOf(run(1), WIRE_FOUND, ABS, { test: "npm run check:wire", checks: CHECKS }), { caught: true });
+});
+
+test("a listed check that a wrapper error ended reads no verdict, and its green run reads caught no", () => {
+  const verdict = verdictOf(run(2), REFUSED, ABS, { test: "npm run check:wire", checks: CHECKS });
+  assert.equal(verdict.caught, null);
+  assert.match(verdict.why, /^no test summary.*\(exit 2\)/);
+  assert.doesNotMatch(verdict.why, /cannot prove/);
+  assert.deepEqual(verdictOf(run(0), WIRE_FOUND, ABS, { test: "npm run check:wire", checks: CHECKS }), { caught: false });
+});
+
+test("a finding line of a command no check lists is no verdict", () => {
+  const verdict = verdictOf(run(1), WIRE_FOUND, ABS, { test: "node scripts/wire.mjs", checks: CHECKS });
+  assert.equal(verdict.caught, null);
+});
+
+test("no summary on a command that is no known runner names the gate mark and the host key", () => {
+  for (const test of ["npm run check:wire", "node scripts/clause-map.mjs", "bash tools/lint.sh src"]) {
+    const verdict = verdictOf(run(1), WIRE_FOUND, ABS, { test });
+    assert.match(verdict.why, /^no test summary reports a failure \(exit 1\)/);
+    assert.match(verdict.why, /a check cannot prove a mutant/);
+    assert.match(verdict.why, /\(gate: <name>\)/);
+    assert.match(verdict.why, /mutate\.checks/);
+  }
+});
+
+test("no summary on a known runner's command says only that", () => {
+  for (const test of ["cargo test --manifest-path core/Cargo.toml one", "node --test test/a.test.cjs", "npx vitest run a.test.ts",
+    "npm test", "npm run test:unit", "npx playwright test", "npx jest a", "tools/remote.sh . cargo test one"]) {
+    assert.equal(verdictOf(run(2), REFUSED, ABS, { test }).why, "no test summary reports a failure (exit 2)", test);
+  }
+});

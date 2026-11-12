@@ -25,6 +25,7 @@ const { batch } = require('./run-mutate-batch.cjs');
 const { committedFile } = require('./run-mutate-entries.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
 const seals = require('./run-mutate-seal.cjs');
+const { commandOf, hostOf } = require('./run-mutate-host.cjs');
 const { leftBehind, settle, snapshot } = require('./run-mutate-left.cjs');
 
 const { RunError } = lib;
@@ -47,7 +48,9 @@ function single(options) {
     throw new RunError(USAGE, 'BAD_ARGS', 1);
   }
   const tree = options.tree || lib.repoRoot(options.cwd);
-  const sealed = seals.sealOf(lib.readConfig(tree, options.config));
+  const config = lib.readConfig(tree, options.config);
+  const sealed = seals.sealOf(config);
+  const host = hostOf(config);
   const out = recoverInterrupted(tree);
   const dirty = lib.dirtyPaths(tree);
   if (dirty.length > 0) {
@@ -80,18 +83,18 @@ function single(options) {
   try {
     fs.writeFileSync(abs, mutant);
     unsealed = seals.reseal(ctx, sealed, [rel], 'mutant');
-    if (!unsealed) run = lib.runShell(options.test, tree, path.join(path.dirname(journal), `${logs}.log`));
+    if (!unsealed) run = lib.runShell(commandOf(host, tree, options.test), tree, path.join(path.dirname(journal), `${logs}.log`));
   } finally {
     failed = [journals.restore(tree, rel, abs, original), ...seals.unseal(ctx)].filter(Boolean);
     if (failed.length === 0) fs.rmSync(journal, { force: true });
     release();
   }
   if (failed.length > 0) return { exit: 2, payload: { restored: false, file: rel, line: n, failed }, out: [...out, ...failed] };
-  return settle(outcome(out, options, { rel, abs, n }, unsealed, run), leftBehind(tree, before));
+  return settle(outcome(out, options, { rel, abs, n, checks: host.checks }, unsealed, run), leftBehind(tree, before));
 }
 
 /** The verdict of a mutant whose files are all back: no verdict, or caught yes or no. */
-function outcome(out, options, { rel, abs, n }, unsealed, run) {
+function outcome(out, options, { rel, abs, n, checks }, unsealed, run) {
   const at = `${rel}:${n}`;
   if (unsealed) {
     return {
@@ -105,7 +108,7 @@ function outcome(out, options, { rel, abs, n }, unsealed, run) {
     const how = run ? `ended on ${run.signal}` : 'never ran';
     return { exit: 2, payload: { file: rel, line: n, signal: run && run.signal }, out: [...out, `the test ${how}, so there is no verdict; ${at} is restored`] };
   }
-  const verdict = verdictOf(run, readLog(run.log), abs);
+  const verdict = verdictOf(run, readLog(run.log), abs, { test: options.test, checks });
   const said = verdict.caught === null ? `no verdict: ${verdict.why}` : `caught ${verdict.caught ? 'yes' : 'no'}`;
   return {
     // A killed run is this machine's failure, not the mutant's; a build that failed is the mutant's.
