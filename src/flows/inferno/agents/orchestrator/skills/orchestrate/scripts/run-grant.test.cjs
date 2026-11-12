@@ -145,11 +145,11 @@ test('a sibling reads a granted change as the granting dispatch\'s own', (t) => 
   assert.deepEqual(sibling.data.outside, []);
 });
 
-test('a sibling that changes a path granted to another dispatch overlaps it', (t) => {
+test('a sibling dispatched after a grant that changes the granted path overlaps it', (t) => {
   const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs', 'other.cjs'] });
   const one = f.start('--item', 'a');
-  const two = f.start('--item', 'b');
   assert.equal(f.call('grant', one, '--path', 'other.cjs', '--tree', f.root).code, 0);
+  const two = f.start('--item', 'b');
   f.write('other.cjs', 'both touched it\n');
   f.write('b.cjs', 'module.exports = 2;\n');
   f.accepted(one, ['other.cjs']);
@@ -180,4 +180,65 @@ test('a correction whose spec now lists an earlier grant starts with that path o
   assert.equal(read.code, 0, read.out);
   assert.deepEqual(read.data.granted, []);
   assert.deepEqual(read.data.started, ['a.cjs', 'other.cjs']);
+});
+
+/** The refusal of a grant that another item's dispatch stands in the way of, with both ways on. */
+function assertBlocked(f, result, other) {
+  assert.equal(result.code, 2, result.out);
+  assert.match(result.out, new RegExp(`grant shared\\.cjs: dispatch ${other} for b `));
+  assert.match(result.out, new RegExp(`dispatch-log alpha --items a,b --tier <tier> --agent <agent> --tree ${f.root}`));
+  assert.match(result.out, /until b is integrated/);
+}
+
+test('a grant of a path another open dispatch owns is refused, and the record is left as it was', (t) => {
+  const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs', 'shared.cjs'] });
+  const one = f.start('--item', 'a');
+  const two = f.start('--item', 'b');
+  const before = cacheBytes(f);
+  const refused = f.call('grant', one, '--path', 'shared.cjs', '--tree', f.root);
+  assertBlocked(f, refused, two);
+  assert.match(refused.out, /owns it and is still open/);
+  assert.deepEqual(cacheBytes(f), before);
+});
+
+test('a grant of a path an accepted dispatch changed inside the item\'s window is refused', (t) => {
+  const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs', 'shared.cjs'] });
+  const one = f.start('--item', 'a');
+  const two = f.start('--item', 'b');
+  f.write('shared.cjs', 'changed by b\n');
+  f.write('b.cjs', 'module.exports = 2;\n');
+  f.accepted(two, ['b.cjs', 'shared.cjs']);
+  const refused = f.call('grant', one, '--path', 'shared.cjs', '--tree', f.root);
+  assertBlocked(f, refused, two);
+  assert.match(refused.out, /changed it beside this item/);
+});
+
+test('a grant of a path no other dispatch owns open or changed is accepted', (t) => {
+  const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs', 'shared.cjs'] });
+  const one = f.start('--item', 'a');
+  const two = f.start('--item', 'b');
+  f.write('b.cjs', 'module.exports = 2;\n');
+  f.accepted(two, ['b.cjs']);
+  for (const file of ['other.cjs', 'shared.cjs']) {
+    const granted = f.call('grant', one, '--path', file, '--tree', f.root);
+    assert.equal(granted.code, 0, `${file}: ${granted.out}`);
+  }
+});
+
+test('a grant on a correction takes a path a sibling changed after the item, and verify-item agrees', (t) => {
+  const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs', 'shared.cjs'] });
+  const one = f.start('--item', 'a');
+  f.write('a.cjs', 'module.exports = 2;\n');
+  f.accepted(one, ['a.cjs']);
+  const two = f.start('--item', 'b');
+  f.write('shared.cjs', 'changed by b\n');
+  f.accepted(two, ['shared.cjs']);
+  const fix = f.start('--item', 'a');
+  const granted = f.call('grant', fix, '--path', 'shared.cjs', '--tree', f.root);
+  assert.equal(granted.code, 0, granted.out);
+  f.write('shared.cjs', 'changed by b\nthen by a\n');
+  f.accepted(fix, ['shared.cjs']);
+  const result = f.verify('a');
+  assert.equal(result.code, 0, result.out);
+  assert.deepEqual(result.data.outside, []);
 });
