@@ -153,3 +153,80 @@ Met 2026-11-12 on the app repo, at the first `run.cjs frontier` of an intent.
 ### How the host gets through
 
 It takes the path out of the second item's `context.required` in a spec-only commit and puts it back in another one once the first item is integrated.
+
+## 6. A mutate session opens once per distinct test command, so a review whose mutants each name their own test saves little
+
+Read 2026-11-12 in the 0.1.85 source on this branch, before the host set the key. It is a gap in 0.1.85, written here because this is the one open file.
+
+### What the code does
+
+- `sessionGroups` (`S/run-mutate-session.cjs:63-76`) keys its groups on the test command, and `runGroup` (`:152`) opens and closes one session of the wrapper per group. A batch of eight mutants with eight test commands pays eight opens: eight syncs of the tree and eight waits in the test machine's queue.
+- The `run` command already takes its test per call, as INFERNO_TEST, and `verification.session` already runs the different checks of one integrate in one session (`S/run-check-session.cjs`). Nothing in the wrapper's contract ties a session to one test.
+- The Rust entries that share a build stay outside every session: `execute` (`S/run-mutate-batch.cjs:112`) runs the control and each switched entry through the plain wrapper, so a batch of N of them pays N + 1 syncs and waits.
+
+### What it costs, measured
+
+The first host's nine intents in flight hold 31 review files with mutants, 342 mutants in all.
+
+| Count | Value |
+| --- | --- |
+| Mutants no Rust build shares | 251 |
+| Distinct test commands, summed per review | 185 |
+| Opens with a session per test command | 185, so 66 of 251 saved (26%) |
+| Opens with a session per batch | 31, so 220 of 251 saved (88%) |
+| Mutants of a shared Rust build, outside every session | 91 |
+
+A reviewer writes a test per mutant, usually one test name each, so two mutants seldom share a command.
+
+### What the flow should do
+
+- Open one session per batch, at the first entry `mutate.session.match` reaches, and close it once after the last. Per mutant the steps stay as they are: write, reseal, send, run with that entry's own test as INFERNO_TEST, put back, send back.
+- Keep what a group stop means today, per batch: a send back that failed stops the session's remaining entries with no verdict, and a signal stops the batch.
+- Run the control and the switched runs of a shared Rust build in that same session when their command is reached, so a batch of Rust entries syncs once and waits once.
+- Tests: a batch of three mutants with three test commands opens one session and closes one. A batch whose second send back fails leaves the third with no verdict and still closes. A batch with two switched Rust entries and one other entry opens one session.
+
+### How the host gets through
+
+It sets `mutate.session` as it is, for the entries that do share a command, and leaves `mutate.run` unset. Its reviewers already write the wrapper themselves in 317 of the 342 entries, so the key would move little today, and with one open per test command it would send every light test through its own sync and wait. The host sets `mutate.run` once a batch is one session.
+
+## 7. A check the host's wrapper refused to run reads as a failed check, and the builder is sent after a machine fault
+
+Read 2026-11-12 in the 0.1.85 source on this branch by the session that owns the first host's wrapper, before the first integrate ran through a session. It holds for a plain wrapped check too, and a session adds new ways to meet it.
+
+### What the code does
+
+- `runCommand` (`S/run-proofs.cjs:156-170`) reads a check only as exit 0 or not. A wrapper that ran nothing, because its machine did not answer or the session's slot was gone, exits non-zero, so the check is `fail`.
+- When a session's open fails, `checkSession` (`S/run-check-session.cjs:76-82`) gives every check of the step that exit without running one.
+- `run.cjs integrate` (`S/run-integrate.cjs:290-297`) then prints FAIL per check and "send every failure above to the builder in one correction", and exits 2. The gate reads the same result as a red.
+- The first host's wrapper marks this case: exit 75 and a line that starts `remote-run: REFUSED [machine]` and ends "no verdict". It gives that for a lost connection, a restarted machine and a session whose holder ended (idle for 900 seconds, or 6 hours old). `mutate` already reads a session that did not open as no verdict; the checks have no such reading.
+
+### What the flow should do
+
+- Give a host one optional key, `verification.refused`: a regex of the line its wrapper prints when it ran nothing. A check, or a session open, that exits non-zero with that line in its log is no verdict.
+- In a session, open a fresh session once and run the checks that got no verdict again. A check outside a session runs once more.
+- After a second refusal, integrate and the gate end with their own exit code and one line that names the machine fault and says to run the step again. They print no FAIL for those checks and no line about a builder, and they mint no proof.
+- Tests: a session whose first open is refused and whose second opens gives a green integrate with two opens in its log. Two refused opens give the no-verdict exit, not exit 2, and no check reads failed. A check that exits non-zero without the line is a fail as today.
+
+### How the host gets through
+
+An orchestrator that sees every check of an integrate or a gate fail with a REFUSED line under it runs the step again and sends nothing to its builder. The host's own direct landing gets the retry in its driver.
+
+## 8. A dispatch-log over several completed items joins their histories, and verify-item then refuses a peer that ran beside one of them
+
+Met 2026-11-12 on the app repo, at the fix of an intent review that touched six completed items. The code is the same in 0.1.85.
+
+### What happened
+
+- The orchestrator logged one dispatch for the fix with `--items` over the six items. `recordDispatch` (`S/run-dispatch.cjs:155-166`) put each item's last dispatch under `previous`, so the new record has six.
+- `lineage` (`S/run-dispatch.cjs:112-127`) follows every `previous`, so the fix's history is the six items' histories joined. `effective` (`:130-138`) claims every file any of them changed, and `layout` (`S/run-peers.cjs:125-136`) takes every attempt of all six as the item's own.
+- An accepted dispatch of a seventh item, outside the batch, had changed one test file. Of the six, one item owns and changed that file, and the seventh item's dispatch did not run beside it. It did run beside an attempt of another of the six, which neither owns nor touched the file.
+- Joined, the file is the batch's own and the seventh item's dispatch ran beside the batch, so `checkPeerChange` (`S/run-peers.cjs:107-118`) refused with DISPATCH_PROOF "dispatch ownership overlaps". Each of the six had verified clean on its own before the batch.
+
+### What the flow should do
+
+- Keep, per member of a joined history, which `previous` branch it came through. A peer's change to a file overlaps only when the peer ran beside an attempt of a branch that claims or owns that file. The batch's own attempt counts for every item it covers.
+- Tests: items A and B each hold an accepted dispatch, and a peer ran beside A's attempt and changed a file only B owns, after B's attempt ended. One dispatch-log over A and B, then `verify-item --items A,B`, passes. The same setup with the peer beside B's attempt is refused as today.
+
+### How the host gets through
+
+It runs `verify-item --items ... --since <the commit the batch started from>`, so the windows before the batch are not read again. Each item's own verify covered them when the item completed.
