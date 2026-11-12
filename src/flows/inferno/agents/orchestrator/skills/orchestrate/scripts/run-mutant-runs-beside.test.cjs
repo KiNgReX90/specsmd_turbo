@@ -75,6 +75,21 @@ test("a path a sibling's open dispatch owns, changed during the batch, leaves th
   assert.equal(read(fixture.root, "docs/b.md"), "docs\nmid-build\n", "the sibling's work is left as it is");
 });
 
+test("a sibling's dispatch open at the start and accepted during the batch still owns what it changed: the verdicts are recorded", () => {
+  const dispatchModule = JSON.stringify(require.resolve("./run-dispatch.cjs"));
+  const accept = `require(${dispatchModule}).acceptDispatch(process.cwd(), { dispatch_id: "build-a-two", changed_paths: ["docs/b.md"] });\n`;
+  const fixture = mutantRepo({ files: { "accept.cjs": accept } });
+  openDispatch(fixture);
+  write(fixture.root, REVIEW, reviewRunning("echo mid-build >> docs/b.md && node accept.cjs"));
+
+  const result = record(fixture);
+
+  assert.equal(result.code, 0, shown(result));
+  assert.match(result.out, /^WARNING moved during the batch: docs\/b\.md \(claimed by dispatch build-a-two of a-two\)/m);
+  assert.deepEqual(recorded(fixture), [["1", "yes"]]);
+  assert.equal(read(fixture.root, "docs/b.md"), "docs\nmid-build\n", "the sibling's work is left as it is");
+});
+
 test("beside a sibling's open dispatch, a path nobody owns leaves the verdicts recorded, with the warning and the hint", () => {
   const fixture = mutantRepo();
   openDispatch(fixture);

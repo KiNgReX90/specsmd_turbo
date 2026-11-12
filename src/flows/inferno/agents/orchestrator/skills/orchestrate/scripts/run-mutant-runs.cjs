@@ -52,13 +52,13 @@ function changedFiles(tree) {
 
 /**
  * Whether a mutant may run on the tree now, beside the review files `signs` this record signs and
- * another item's pending review files: `{ why }` when it may not, else `{ pending }`, the paths
+ * any other item's pending review files: `{ why }` when it may not, else `{ pending }`, the paths
  * the batch is to allow. Git names a new directory instead of the files in it, so that name is
  * allowed once every file under it proved to be one of those.
  */
 function busy(tree, signs) {
-  const own = signs.map(reviewedBy).filter(Boolean);
-  const allowed = (file) => signs.includes(file) || (reviewedBy(file) !== null && !own.includes(reviewedBy(file)));
+  // An item's own pending lens files are always among `signs`: the record signs every lens file written.
+  const allowed = (file) => signs.includes(file) || reviewedBy(file) !== null;
   const changed = changedFiles(tree);
   const dirty = changed.filter((file) => !allowed(file));
   if (dirty.length > 0) return { why: `the tree holds uncommitted work in ${dirty.slice(0, 3).join(', ')}` };
