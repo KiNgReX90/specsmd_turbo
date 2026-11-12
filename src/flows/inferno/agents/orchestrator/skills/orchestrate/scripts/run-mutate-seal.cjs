@@ -48,9 +48,9 @@ function validateSealed(config, file) {
   if (config.mutate === undefined) return;
   const bad = (key, what) => new RunError(`${key} in ${file} must be ${what}.`, 'BAD_CONFIG');
   const mutate = config.mutate;
-  const holding = 'a map holding sealed, reseal_seconds, session, run and checks';
+  const holding = 'a map holding sealed, reseal_seconds, session, run, wrapped and checks';
   if (!mutate || typeof mutate !== 'object' || Array.isArray(mutate)) throw bad('mutate', holding);
-  const unknown = Object.keys(mutate).filter((key) => !['sealed', 'reseal_seconds', 'session', 'run', 'checks'].includes(key));
+  const unknown = Object.keys(mutate).filter((key) => !['sealed', 'reseal_seconds', 'session', 'run', 'wrapped', 'checks'].includes(key));
   if (unknown.length > 0) throw bad('mutate', `${holding} only, not ${unknown.join(', ')}`);
   // Required here: run-mutate-session.cjs loads this file.
   require('./run-mutate-session.cjs').validateSession(mutate, file);
