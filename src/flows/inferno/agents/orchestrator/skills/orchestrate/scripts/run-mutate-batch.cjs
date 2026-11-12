@@ -8,12 +8,16 @@
  * A control run then proves each distinct test green with every switch off. A switch the build
  * refuses is blamed from the compiler's file:line and moved to its own build, and the control
  * runs again. A test that is red with every switch off stops the batch with no verdict at all,
- * because it is red before any mistake. Then each entry's test runs with only its own switch on:
+ * because it is red before any mistake. A control run the machine killed (a compiler or a test a
+ * signal ended) stops it too, before it builds anything more: building each mutant alone on that
+ * machine would only be killed again, so the same command runs again once it has room. Then each entry's test runs with only its own switch on:
  * the build is done, so a red run is the test noticing. An entry no switch can hold (an
  * attribute line, a string, a const item, a switch that did not compile) takes a classic
  * in-place build of its own, and every other language runs its test once in place. When the host
  * names a session of its test wrapper (run-mutate-session.cjs), the other entries whose test goes
  * through that wrapper share one session per test command instead, after every in-place entry.
+ * Every test runs through the host's `mutate.run` wrapper when it names one, and a red run of a
+ * check the host lists reads caught when it printed its finding line (run-mutate-host.cjs).
  *
  * A clean tree only, every touched file restored in a finally, and signals held until then.
  * A held signal is read before every run, so the batch starts no run after it, and every entry
@@ -34,6 +38,7 @@ const { applySwitches, blame, planRust, runsCompiled } = require('./run-mutate-r
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
 const { reseal, sealOf } = require('./run-mutate-seal.cjs');
 const { runGroup, sessionGroups, sessionOf, unsealedVerdict } = require('./run-mutate-session.cjs');
+const { commandOf, hostOf } = require('./run-mutate-host.cjs');
 const { leftBehind, settle, snapshot } = require('./run-mutate-left.cjs');
 
 const { RunError } = lib;
@@ -75,17 +80,27 @@ async function signalled(session) {
   return signal ? `the batch stopped on ${signal}, so every entry still to run reads not run` : null;
 }
 
-/** Each distinct test once with every switch off: ok, the failed build's text, or a reason to stop. */
-async function control(session, switched, round) {
-  const tests = [...new Set(switched.map((e) => e.test))];
-  for (const [index, test] of tests.entries()) {
+/**
+ * Each distinct test once with every switch off: ok, the failed build's text, or a reason to stop,
+ * `killed` when the machine ended the run.
+ */
+async function control(session, switched, round, checks) {
+  const tests = [...new Map(switched.map((e) => [e.test, e.command])).entries()];
+  const files = [...new Set(switched.map((e) => e.abs))];
+  for (const [index, [test, command]] of tests.entries()) {
     const signal = await signalled(session);
     if (signal) return { signal };
-    const run = lib.runShell(OFF + test, session.tree, session.log(`control-${round}-${index + 1}`));
+    const run = lib.runShell(OFF + command, session.tree, session.log(`control-${round}-${index + 1}`));
     if (run.code === 0 && !run.signal) continue;
     const text = readLog(run.log);
-    const verdict = verdictOf(run, text, null);
+    const verdict = verdictOf(run, text, null, { files, test, checks });
     if (verdict.why === 'did not build') return { text };
+    if (/^(?:killed|ended on)\b/.test(verdict.why || '')) {
+      return {
+        killed: true,
+        stop: `the run of ${test} with every switch off reads ${verdict.why} (-> ${run.log}): the machine ended it, so the batch stopped before it built any mutant alone`,
+      };
+    }
     if (verdict.caught) {
       return { stop: `the test ${test} is red with every switch off (exit ${run.code} -> ${run.log}), so it is red before any mistake and no entry has a verdict` };
     }
@@ -94,12 +109,13 @@ async function control(session, switched, round) {
   return { ok: true };
 }
 
-function execute(session, e, prefix, label) {
-  const run = lib.runShell(prefix + e.test, session.tree, session.log(label));
-  return { ...verdictOf(run, readLog(run.log), e.abs), code: run.code, log: run.log, signal: run.signal };
+function execute(session, e, prefix, label, checks) {
+  const run = lib.runShell(prefix + e.command, session.tree, session.log(label));
+  return { ...verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks }), code: run.code, log: run.log, signal: run.signal };
 }
 
 async function runAll(session, sealed, entries, plans, groups) {
+  const { checks } = groups.host;
   const verdicts = new Map();
   let builds = 0;
   let switched = entries.filter((e) => plans.get(e.k).form === 'switch');
@@ -114,10 +130,10 @@ async function runAll(session, sealed, entries, plans, groups) {
       break;
     }
     builds += 1;
-    const result = await control(session, switched, builds);
+    const result = await control(session, switched, builds, checks);
     if (result.ok) break;
     if (result.signal) return { builds, verdicts, stopped: result.signal };
-    if (result.stop) return { builds, stopped: result.stop };
+    if (result.stop) return { builds, stopped: result.stop, killed: result.killed };
     const blamed = new Set(blame(result.text, switched));
     for (const k of blamed) plans.set(k, { form: 'classic', why: 'its switch did not compile' });
     switched = switched.filter((e) => !blamed.has(e.k));
@@ -125,7 +141,7 @@ async function runAll(session, sealed, entries, plans, groups) {
   for (const e of switched) {
     const signal = await signalled(session);
     if (signal) return { builds, verdicts, stopped: signal };
-    const verdict = execute(session, e, ON(e.k), `switch-${e.k}`);
+    const verdict = execute(session, e, ON(e.k), `switch-${e.k}`, checks);
     verdicts.set(e.k, verdict);
     if (verdict.signal) return { builds, verdicts, stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
@@ -137,14 +153,14 @@ async function runAll(session, sealed, entries, plans, groups) {
     session.write(e.rel, new Map([[e.n, line.slice(0, e.col) + e.replace + line.slice(e.col + e.find.length)]]));
     const failed = reseal(session, sealed, [e.rel], `own-${e.k}`);
     if (failed && failed.left) return { builds, verdicts, stopped: `the batch stopped, since ${failed.why}` };
-    const verdict = failed ? unsealedVerdict(failed) : execute(session, e, OFF, `own-${e.k}`);
+    const verdict = failed ? unsealedVerdict(failed) : execute(session, e, OFF, `own-${e.k}`, checks);
     session.putBack(e.rel);
     if (e.rust) builds += 1;
     verdicts.set(e.k, verdict);
     const what = failed ? 'reseal' : 'test';
     if (verdict.signal) return { builds, verdicts, stopped: `the ${what} of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
-  const hosting = { session, sealed, hosted: groups.hosted, verdicts, notes: [], sessions: 0, signalled };
+  const hosting = { session, sealed, hosted: groups.hosted, checks, verdicts, notes: [], sessions: 0, signalled };
   for (const [index, group] of groups.list.entries()) {
     const out = await runGroup(hosting, group, index + 1);
     if (out.stopped) return { builds, verdicts, stopped: out.stopped, sessions: hosting.sessions, notes: hosting.notes };
@@ -169,7 +185,8 @@ function lineOf(row) {
 
 function report(session, recovered, entries, plans, result) {
   if (!result.verdicts) {
-    return { exit: 2, payload: { stopped: result.stopped, builds: result.builds, restored: true }, out: [...recovered, result.stopped, 'every file is restored'] };
+    const again = result.killed ? ['run the same command again'] : [];
+    return { exit: 2, payload: { stopped: result.stopped, builds: result.builds, restored: true }, out: [...recovered, result.stopped, 'every file is restored', ...again] };
   }
   const rows = entries.map((e) => rowOf(e, plans.get(e.k), result.verdicts.get(e.k)));
   const rust = entries.filter((e) => e.rust);
@@ -213,10 +230,11 @@ async function batch(options) {
     throw new RunError(afterRecovery(recovered,
       `refusing to mutate a dirty tree: ${dirty.slice(0, 5).join(', ')} is uncommitted. Mutate once the tree is clean.`), 'DIRTY');
   }
-  const entries = readBatch(tree, file);
+  const host = hostOf(config);
+  const entries = readBatch(tree, file).map((e) => ({ ...e, command: commandOf(host, tree, e.test) }));
   const hosted = sessionOf(config);
   const plans = planAll(tree, entries, hosted);
-  const groups = { hosted, list: sessionGroups(hosted, entries, plans) };
+  const groups = { hosted, host, list: sessionGroups(hosted, entries, plans) };
   // What git calls changed before the first write: the batch file and the review being recorded.
   const before = snapshot(tree);
   const session = openSession(tree);

@@ -48,11 +48,13 @@ function validateSealed(config, file) {
   if (config.mutate === undefined) return;
   const bad = (key, what) => new RunError(`${key} in ${file} must be ${what}.`, 'BAD_CONFIG');
   const mutate = config.mutate;
-  if (!mutate || typeof mutate !== 'object' || Array.isArray(mutate)) throw bad('mutate', 'a map holding sealed, reseal_seconds and session');
-  const unknown = Object.keys(mutate).filter((key) => !['sealed', 'reseal_seconds', 'session'].includes(key));
-  if (unknown.length > 0) throw bad('mutate', `a map holding sealed, reseal_seconds and session only, not ${unknown.join(', ')}`);
+  const holding = 'a map holding sealed, reseal_seconds, session, run and checks';
+  if (!mutate || typeof mutate !== 'object' || Array.isArray(mutate)) throw bad('mutate', holding);
+  const unknown = Object.keys(mutate).filter((key) => !['sealed', 'reseal_seconds', 'session', 'run', 'checks'].includes(key));
+  if (unknown.length > 0) throw bad('mutate', `${holding} only, not ${unknown.join(', ')}`);
   // Required here: run-mutate-session.cjs loads this file.
   require('./run-mutate-session.cjs').validateSession(mutate, file);
+  require('./run-mutate-host.cjs').validateHost(mutate, file);
   const seconds = Number(mutate.reseal_seconds);
   if (mutate.reseal_seconds !== undefined && !(Number.isFinite(seconds) && seconds > 0)) {
     throw bad('mutate.reseal_seconds', 'a positive number of seconds');

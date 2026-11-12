@@ -13,6 +13,7 @@ const {
 const { VALUE, assertSealed, builds, fakeTest, git, reseals, sealConfig, sealTree } = require("./run-mutate-fixture.cjs");
 const { readConfig } = require("./run-lib.cjs");
 const { sessionOf } = require("./run-mutate-session.cjs");
+const { commandOf, hostOf } = require("./run-mutate-host.cjs");
 const { write } = require("./review-fixture.cjs");
 const { CONFIG, REVIEW, itemReview, mutantRepo, record } = require("./run-review-mutants-fixture.cjs");
 const { parseItemReview } = require("./run-review-file.cjs");
@@ -146,6 +147,13 @@ test("the mutate block config.example.yaml documents parses once it is uncomment
   const reached = hosted.match.exec("tools/remote-test.sh . node --test test/a.test.mjs");
   assert.equal(reached && reached.index, 0);
   assert.equal(hosted.match.exec("node --test test/a.test.mjs"), null);
+  const host = hostOf(config);
+  const command = commandOf(host, f.tree, "node --test test/a.test.mjs");
+  assert.equal(hosted.match.exec(command).index, 0, "the session reaches a bare test the wrapper wrapped");
+  assert.equal(commandOf(host, f.tree, "tools/remote-test.sh . node --test test/a.test.mjs"), "tools/remote-test.sh . node --test test/a.test.mjs");
+  assert.equal(host.checks.length, 1);
+  assert.ok(host.checks[0].match.test("npm run check:wire"));
+  assert.ok(host.checks[0].finding.test("WIRE MISMATCH: amount"));
 });
 
 test("a session block this runner cannot use fails at config load, naming the key and the file, and nothing runs", (t) => {
@@ -158,7 +166,7 @@ test("a session block this runner cannot use fails at config load, naming the ke
     [`mutate:\n${block.replace(/ {4}close: .*\n/, "")}`, /mutate\.session\.close in \S+ must be a non-empty string\./],
     [`mutate:\n${block.replace(/run: .*/, 'run: " "')}`, /mutate\.session\.run in \S+ must be a non-empty string\./],
     [`mutate:\n${sessionBlock({ match: "^(node" })}`, /mutate\.session\.match in \S+ must be a regex \(/],
-    ["mutate:\n  sessions: on\n", /mutate in \S+ must be a map holding sealed, reseal_seconds and session only, not sessions\./],
+    ["mutate:\n  sessions: on\n", /mutate in \S+ must be a map holding sealed, reseal_seconds, session, run and checks only, not sessions\./],
   ]) {
     const config = outsideConfig(f, body, "bad.yaml");
     const result = sessionBatch(f, entries, { config });
