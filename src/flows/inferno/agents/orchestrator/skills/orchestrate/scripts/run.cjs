@@ -90,11 +90,12 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs dispatch-log <intent-id> --tier oracle [--item <id>] --impact <grade> --complexity <grade> [--blocked <dispatch-id>] [--tree <dir>] route and log an oracle ask, print its route, model and dispatch id
   node run.cjs accept-dispatch <dispatch-id> --changed-paths <json-array> [--tree <dir>] freeze the result it reported
   node run.cjs grant <dispatch-id> --path <file> [--tree <dir>] add one file to a running dispatch's ownership, signed by the orchestrator
+  node run.cjs tools [--write <id,id>] [--tree <dir>] [--config <file>] the tools that fit the stack, one proposal per line; --write writes the named ones into the config
 
 Options
   --json            machine-readable output
   --tree <dir>      the worktree to operate in (default: the repository of the cwd)
-  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, mutate, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml);
+  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, mutate, integrate, doubles, real-app, cases, gate, green, slot, ship, teardown and tools: selected host config relative to the command's root (default .specs-inferno/config.yaml);
                     on an intent run branch, worktree, integrate, gate, green, ship and the lane accepts default to the config
                     claim, worktree, integrate or gate last recorded for that branch
   --base <branch>   integrate, doubles, gate, ship and teardown: the base branch to fold in (default: the config's base)
@@ -176,6 +177,7 @@ const COMMANDS = {
   'accept-dispatch': (args, options) =>
     intents.acceptDispatch(required(args[0], 'accept-dispatch <dispatch-id> --changed-paths <json-array>'), options),
   grant: (args, options) => require('./run-grant.cjs').grant(args[0], options),
+  tools: (args, options) => require('./run-tools.cjs').tools(options),
   // One accept per lane, so the `<lane> --accept` line gate --wait prints always names a real command.
   ...Object.fromEntries(LANES.map((lane) => [lane, (args, options) => accept(lane, options)])),
 };

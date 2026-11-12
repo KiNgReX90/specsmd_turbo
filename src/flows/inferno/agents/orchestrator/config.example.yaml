@@ -132,6 +132,9 @@ worktree:
 dispatch:
   constraints:                    # optional: lines pasted VERBATIM into every builder and tester dispatch (machine limits, wrappers, what may not run in parallel)
     - "Heavy commands (builds, test suites, cargo) run bare; a machine-wide guardrail wraps them. Exit 137 or 143 is the cap: run once more, then report."
+  # tools:                        # optional: the tools the roles and checks use, each with the version every machine of the host installs; `run.cjs tools` proposes the tools that fit the stack, `--write <id,id>` writes the accepted ones here and in verification.integrate and dispatch.constraints, and it prints a line for each listed tool this machine lacks
+  #   shellcheck: "0.10.0"
+  #   ast-grep: "0.39.0"
 
 # Delivery mode: how the orchestrator integrates and closes an intent.
 #   auto-close    (default) commit each item on the intent branch, then merge
