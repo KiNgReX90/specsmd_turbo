@@ -134,7 +134,7 @@ Finalize automatically once no work remains.
 
 1. Fold the base branch into the intent branch first (`git fetch origin <base>` then `git merge --no-edit origin/<base>`), resolving any conflict there so both goals survive. Then `run.cjs review --tree <path> --config .specs-inferno/config.codex.yaml` reviews the intent cold: exit 3 prints the reviewer dispatch; 2 sends each finding to its owner item's builder, then review again. A finding the user puts after the release leaves through `state-transition.cjs defer-finding --intent <intent-id> --entry <n> --to <file> --reason <why> --config .specs-inferno/config.codex.yaml`: do what it prints. Gate that folded tree once: `run.cjs gate --detach --tree <path> --config .specs-inferno/config.codex.yaml`, then `run.cjs gate --wait --tree <path> --config .specs-inferno/config.codex.yaml`. That list is the gate and it runs once per intent. Run a work-item `finalize_check` only for a scoped invariant the list does not cover. A run tests a binary only through the configured lanes the gate starts and waits on; nothing else in a run builds a binary for testing or dispatches a tester. Non-zero blocks close. Never de-parallelize the gate, regate to mask flake, or poll in a loop.
 
-   On exit 4, running or queued in the merge slot, call the same wait again.
+   On exit 4, running or queued in the merge slot, call the same wait again. Exit 5, from integrate or the gate, is no verdict, since the host ran nothing twice: run the printed step again and send nothing to the builder.
 
    A log line matching a lane's `red_line` turns the wait red at once, while the lane walks on. While a lane walks, a committed fix gates through `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml`.
 
