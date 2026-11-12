@@ -111,7 +111,7 @@ Also decide id, title, kind, complexity, acceptance criteria, `depends_on`, the 
 
 ### Four sections beside the manifest
 
-`delivers:` names the `SC-<n>` the item delivers. Edge Cases: a row per case. Out of Scope: what it does not build. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. An empty section reads `None.` The Description says what changes and why, never what the code does today.
+`delivers:` names the `SC-<n>` the item delivers. Edge Cases: a row per case. Out of Scope: what it does not build. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. An empty section reads `None.` The Description says what changes and why, Technical Notes the settled decisions, one line each, and neither what the code does.
 
 ### Contract rules
 
@@ -148,7 +148,7 @@ On a host with `integration/TEST-CASES.md`, the brief names the tester case ids 
 
 ### High-complexity decisions
 
-A high-complexity item carries its decisions under Technical Notes, one line each for the decision, the choice and the reason. No separate design file.
+A high-complexity item always carries its decisions under Technical Notes. No separate design file.
 
 ## Rendering the artifacts
 
