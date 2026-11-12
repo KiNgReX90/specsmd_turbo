@@ -73,7 +73,7 @@ Then integrate, in this order:
 
 1. Stage this item's files, never `git add -A`, and commit on the intent branch. The commit message carries the builder's `cases:` value as its `Cases:` line, which integrate checks. In `merge-request` mode the item lands through `inferno-item/{intent-id}/{item-id}` and a non-blocking merge request.
 2. `run.cjs review --item {item-id} --tree {path}`: the item's cold review, before integrate. Production code gets a second, quality dispatch: send both in one message, and the `then` line records both files under their reviewers' ids. A `next user` line ends that item's ladder: treat it as an oracle `user`, your recommendation in its two sentences. To mark a criterion a reviewer named unreachable by any mutant, add its `(gate: <name>)` in one commit that changes that spec alone, then record the review again.
-3. `run.cjs integrate --item {item-id} --tree {path}`, or `--items {a,b}` for a chain you dispatched as one. Exit 2: every red goes back, warm, to the builder whose item is on the tree, and the item's next commit closes it. A fold conflict is named and yours to resolve so both sides' goals survive.
+3. `run.cjs integrate --item {item-id} --tree {path}`, or `--items {a,b}` for a chain you dispatched as one. Exit 2: every red goes back, warm, to the builder whose item is on the tree, and the item's next commit closes it. Exit 5, from integrate or the gate, is no verdict, since the host ran nothing twice: run the printed step again and send nothing to the builder. A fold conflict is named and yours to resolve so both sides' goals survive.
 4. Never complete an item by hand: `complete-item` refuses without integrate's proof.
 5. Run `run.cjs frontier` again and dispatch what it unblocked.
 
