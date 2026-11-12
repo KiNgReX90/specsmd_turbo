@@ -20,7 +20,9 @@ const { lanesSince, startLanesOnly, startOneLane } = require('./run-lanes-only.c
 const supersede = require('./run-supersede.cjs');
 const { foldBlockers, refuseDirt } = require('./run-dirt.cjs');
 const { withMarks } = require('./run-gate-marks.cjs');
-const { closeLeft, inSession } = require('./run-check-session.cjs');
+const { checkRounds, closeLeft } = require('./run-check-session.cjs');
+const { noVerdictLine } = require('./run-check-refused.cjs');
+const { NO_VERDICT } = require('./run-exit.cjs');
 
 const { RunError } = lib;
 
@@ -108,6 +110,7 @@ function describe(results) {
     if (entry.result === 'skip') out.push(`SKIP ${entry.command} (no path in scope changed)`);
     else if (entry.result === 'green') out.push(`GREEN ${entry.seconds}s ${entry.command} (unchanged since ${entry.stamp})`);
     else if (entry.result === 'pass') out.push(`PASS ${entry.seconds}s ${entry.command}`);
+    else if (entry.result === 'refused') out.push(`NO VERDICT ${entry.command} -> ${entry.log}`, entry.line);
     else {
       out.push(`FAIL ${entry.seconds}s ${entry.command} -> ${entry.log}`);
       out.push(...lib.tail(entry.log, 5));
@@ -115,6 +118,9 @@ function describe(results) {
   }
   return out;
 }
+
+/** The last line of a gate whose commands the host's wrapper ran nothing for twice. */
+const gateNoVerdict = (tree, payload) => noVerdictLine('finalize', payload.no_verdict.length, payload.results.length, gateStartCall(tree));
 
 function gateCommands(tree, selected) {
   const config = lib.readConfig(tree, selected);
@@ -161,23 +167,31 @@ function gateNow(options) {
   const branch = lib.currentBranch(tree);
   const dir = path.join(lib.cacheDir(tree), branch, `gate-${lib.stamp()}`);
 
-  const results = [];
   // A failed command is red on its first failure: no rerun mints a proof. With
-  // verification.session the commands it reaches share one host session, closed there too.
-  const { value: failed, notes } = inSession(tree, config, dir, (shell) => {
+  // verification.session the commands it reaches share one host session, closed there too. A
+  // command the host's wrapper ran nothing for runs once more in a fresh session, and is no
+  // verdict after a second refusal (run-check-refused.cjs).
+  const checked = checkRounds(tree, config, dir, (check) => {
+    const ran = [];
     for (const [index, command] of commands.entries()) {
-      const result = proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), Boolean(options.force), shell);
-      results.push(result);
-      if (result.result === 'fail') return result;
+      const result = check(index, (shell) => proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), Boolean(options.force), shell));
+      ran.push(result);
+      if (result.result === 'fail') return { ran, failed: result };
     }
-    return null;
+    return { ran, failed: null };
   });
+  const { notes } = checked;
+  const { ran: results, failed } = checked.value;
   // The close's lines ride in the result too, so a detached gate's --wait prints them.
   const noted = notes.length > 0 ? { notes } : {};
   if (failed) {
     const out = [...shown, ...describe(results), ...notes];
     if (failed.moved) out.push('the code changed while the gate ran. Re-run the gate.');
     return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, ...noted }, out };
+  }
+  if (checked.refused.length > 0) {
+    const payload = { ok: false, tree, branch, folded: folded.length > 0, results, no_verdict: checked.refused.map((entry) => entry.command), ...noted };
+    return { exit: NO_VERDICT, payload, out: [...shown, ...describe(results), ...notes, gateNoVerdict(tree, payload)] };
   }
 
   if (proofs.scopeHash(tree) !== started ||
@@ -266,6 +280,7 @@ function finished(job) {
   if (result && Array.isArray(result.results)) {
     const out = [...describe(result.results), ...(Array.isArray(result.notes) ? result.notes : [])];
     if (result.ok) out.push(`green ${result.hash}`);
+    if (Array.isArray(result.no_verdict)) return { exit: NO_VERDICT, payload: result, out: [...out, gateNoVerdict(job.tree, result)] };
     return { exit: result.ok ? 0 : 2, payload: result, out };
   }
   return {

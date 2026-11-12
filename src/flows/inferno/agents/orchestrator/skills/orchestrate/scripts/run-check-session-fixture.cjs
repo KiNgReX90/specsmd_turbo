@@ -28,16 +28,19 @@ const sessionBlock = ({ drop = null, extra = '' } = {}) =>
 
 const list = (values) => values.map((value) => `    - ${value}\n`).join('');
 
+/** The line the fake wrapper prints when it ran nothing, as `verification.refused` reads it. */
+const REFUSED = "'^the wrapper refused$'";
+
 /**
- * A config with `finalize` and `integrate` lists, the session block when `session` is true, and
- * `scopes` as finalize_scopes.
+ * A config with `finalize` and `integrate` lists, the session block when `session` is true,
+ * `scopes` as finalize_scopes, and `refused` as verification.refused when it is set.
  */
-function configOf({ finalize = [LOCAL], integrate = [], session = true, scopes = {} } = {}) {
+function configOf({ finalize = [LOCAL], integrate = [], session = true, scopes = {}, refused = null } = {}) {
   const scoped = Object.entries(scopes);
   return 'delivery:\n  base_branch: main\nverification:\n' +
     `  finalize:\n${list(finalize)}` + (integrate.length ? `  integrate:\n${list(integrate)}` : '') +
     (scoped.length ? `  finalize_scopes:\n${scoped.map(([command, globs]) => `    "${command}": ${JSON.stringify(globs)}\n`).join('')}` : '') +
-    (session ? sessionBlock() : '');
+    (refused ? `  refused: ${refused}\n` : '') + (session ? sessionBlock() : '');
 }
 
 function git(tree, ...args) {
@@ -110,6 +113,6 @@ function counted(f) {
 }
 
 module.exports = {
-  BRANCH, LOCAL, NAMES, REMOTE_CHECKS, calls, commit, configOf, counted, hostTree, openRecords, proofs, run, sessionBlock, start,
+  BRANCH, LOCAL, NAMES, REFUSED, REMOTE_CHECKS, calls, commit, configOf, counted, hostTree, openRecords, proofs, run, sessionBlock, start,
   until, write,
 };
