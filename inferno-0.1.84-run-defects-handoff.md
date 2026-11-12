@@ -210,3 +210,23 @@ Read 2026-11-12 in the 0.1.85 source on this branch by the session that owns the
 ### How the host gets through
 
 An orchestrator that sees every check of an integrate or a gate fail with a REFUSED line under it runs the step again and sends nothing to its builder. The host's own direct landing gets the retry in its driver.
+
+## 8. A dispatch-log over several completed items joins their histories, and verify-item then refuses a peer that ran beside one of them
+
+Met 2026-11-12 on the app repo, at the fix of an intent review that touched six completed items. The code is the same in 0.1.85.
+
+### What happened
+
+- The orchestrator logged one dispatch for the fix with `--items` over the six items. `recordDispatch` (`S/run-dispatch.cjs:155-166`) put each item's last dispatch under `previous`, so the new record has six.
+- `lineage` (`S/run-dispatch.cjs:112-127`) follows every `previous`, so the fix's history is the six items' histories joined. `effective` (`:130-138`) claims every file any of them changed, and `layout` (`S/run-peers.cjs:125-136`) takes every attempt of all six as the item's own.
+- An accepted dispatch of a seventh item, outside the batch, had changed one test file. Of the six, one item owns and changed that file, and the seventh item's dispatch did not run beside it. It did run beside an attempt of another of the six, which neither owns nor touched the file.
+- Joined, the file is the batch's own and the seventh item's dispatch ran beside the batch, so `checkPeerChange` (`S/run-peers.cjs:107-118`) refused with DISPATCH_PROOF "dispatch ownership overlaps". Each of the six had verified clean on its own before the batch.
+
+### What the flow should do
+
+- Keep, per member of a joined history, which `previous` branch it came through. A peer's change to a file overlaps only when the peer ran beside an attempt of a branch that claims or owns that file. The batch's own attempt counts for every item it covers.
+- Tests: items A and B each hold an accepted dispatch, and a peer ran beside A's attempt and changed a file only B owns, after B's attempt ended. One dispatch-log over A and B, then `verify-item --items A,B`, passes. The same setup with the peer beside B's attempt is refused as today.
+
+### How the host gets through
+
+It runs `verify-item --items ... --since <the commit the batch started from>`, so the windows before the batch are not read again. Each item's own verify covered them when the item completed.
