@@ -31,7 +31,7 @@ What is left for these is on the host: it sets the new keys it needs (`mutate.ch
 
 ## 1b. DONE: six items of the build list, built as 0.1.85
 
-Built on this branch on 2026-11-12. `CHANGELOG.md` says what each one does.
+Built on this branch on 2026-11-12. `CHANGELOG.md` says what each one does. The first host installed it the same day with the shipped suite green there, and set `verification.session` and `mutate.session`.
 
 | Was order | What | Built in |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ Still owed from item 5: one recorded run of both arms in the pull request text. 
 
 Two notes for whoever builds:
 
-- `verification.session` has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The first host's wrapper has them since 2026-11-12, proven on both its test machines, and the host sets the key with its install of 0.1.85.
+- `verification.session` has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The first host's wrapper has them since 2026-11-12, proven on both its test machines, and the host set the key with its install of 0.1.85. Measured there on one machine: an integrate of three small checks went from 259 seconds to 54.
 - Item 6 is the only one that can make things worse without anyone seeing it, because a builder that searches longer still finishes. That is why it stays behind a number.
 
 ## 3. DONE: strike it
