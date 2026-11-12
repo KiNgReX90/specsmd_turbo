@@ -102,3 +102,54 @@ Any intent that ends in a step run from the default branch meets this: an instal
 ### How the host gets through
 
 Its intent reviewer judged the two halves again and took them out of the merge's criteria. The review still names both evidence paths as owed after the landing, and the session that ran the intent writes them on the default branch once the install has run. That cost one more review round, and the owed half now lives in prose that no command reads.
+
+## 4. Every fold of the base voids the intent review, and the reviewer is handed the whole base delta
+
+Met 2026-11-12 on the app repo. Reported as "the shared host config counts as intent code"; the cause is wider than that.
+
+### What happened
+
+- One intent recorded three clean intent reviews after its fix review. Each was owed for one reason: `the code changed since the review read it`, after a fold of the base.
+- The last of those ranges held 121 commits and 162 files, 97 of them outside the ledger directory. The intent had changed one of the 97. The reviewer was dispatched with the whole range and took about 15 minutes, each time before a gate.
+- The review binds the whole tree by content (`reviewCurrent`, `S/run-intent-owed.cjs:126-129`; `scopeHash` with no scope, `S/run-proofs.cjs:24-27`). The ledger directory is left out, so a host config under it voids nothing. Any other folded file does.
+- This is the documented rule: "without it any folded change voids the review" (`config.example.yaml`, the comment of `review.outside`).
+
+### Why it costs more than it protects
+
+- On a host where several intents and direct builds land in an hour, the base moves between every review and its gate. Each gate attempt then owes a review round, and a review can be voided again while it is being written.
+- The reviewer reads work that was reviewed and gated in its own intent. What it could add is how that work meets this intent, and it is handed 162 files to find it in.
+- The protection is one-sided as it stands: the intent that lands first is never read against the one that lands second. The gate's commands on the folded tree are what prove the two together, for both.
+
+### What a host can do today
+
+`review.outside: ["**"]`. Measured on 0.1.84 with `outsideHash` on a throwaway repository: a fold that changes or adds files the intent never touched keeps the hash, a fold that changes a file the intent changed gives a new one, and so does the intent's own change. The key's comment calls it a glob of a knowledge base, so a host that reads only the comment does not find this.
+
+### What the flow should do
+
+- Say in the comment of `review.outside` and in the docs that `["**"]` binds the review to the files the intent changed, and hold it with a test of those three cases. Weigh making it the default.
+- When a fold did touch one of those files, the dispatch of the delta review names them, and the reviewer reads the base's change to those files and what calls them, not the whole base delta.
+- Tests: with the key, a fold of a file the intent never touched leaves `review` current and the gate does not owe it. A fold that changes a file the intent changed owes the review and the dispatch names that file.
+
+### How the host gets through
+
+It sets `review.outside: ["**"]`.
+
+## 5. The frontier refuses a plan in which a later item needs a file an earlier item creates
+
+Met 2026-11-12 on the app repo, at the first `run.cjs frontier` of an intent.
+
+### What happened
+
+- The second item of the intent lists under `context.required` a module that the first item creates, and it names that item under `depends_on`.
+- `contractErrors` (`S/run-frontier.cjs:146-169`) checks that every `context.required` path and every `reads` path of every item exists on disk, before any dispatch and whatever the item waits on. The frontier answered INVALID for the whole intent, so the first item could not start either.
+- The planner had no way to hear it earlier: plan-lint does not make this check, and its definition tells it to cite what the builder must read.
+
+### What the flow should do
+
+- Skip the existence check for a path that an item this one depends on, directly or through others, lists under `ownership.editable`, for as long as that item is not completed. Once it is completed the check holds again, so a file it never created is still caught before the second item starts.
+- Run the same check in plan-lint, with the same exception, so a path nobody creates is refused at plan time.
+- Tests: a plan whose second item requires a file its first item owns and does not yet hold gives a frontier of the first item. The same plan without the `depends_on` is refused. After the first item completes without creating the file, the frontier refuses the second.
+
+### How the host gets through
+
+It takes the path out of the second item's `context.required` in a spec-only commit and puts it back in another one once the first item is integrated.
