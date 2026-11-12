@@ -111,6 +111,19 @@ test("work item template and planner body carry the wiring blocks", () => {
   }
 });
 
+// frontier prints the callers of what an item writes through, so every planner text and the
+// template carry the same optional `writes:` line, and the template renders one name per dash.
+test("work item template and every planner text carry the optional writes list", () => {
+  const texts = [agentPath, codexSkillFile("specsmd-inferno-planner", "references/procedure.md")];
+  const lines = texts.map((file) => fs.readFileSync(file, "utf8").split("\n").find((line) => line.startsWith("writes:")));
+  for (const [index, line] of lines.entries()) {
+    assert.ok(line, `${path.basename(texts[index])} carries a writes: line`);
+    assert.equal(line.replace(/\s+/g, " "), "writes: [save_item] # optional, functions written through");
+  }
+  const template = fs.readFileSync(templatePath, "utf8");
+  assert.match(template, /\{\{#if writes\}\}\nwrites:\n\{\{#each writes\}\}\n {4}- \{\{this\}\}\n\{\{\/each\}\}\n\{\{\/if\}\}/);
+});
+
 function wired(wiring) {
   return {
     id: "item-4",
