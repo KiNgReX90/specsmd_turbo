@@ -1,0 +1,9 @@
+# INFERNO config of the invented Acme Shop consumer that evals/planner-ab plans against on Claude Code.
+host: claude
+mode: production
+
+verification:
+  finalize:
+    - npm test
+  integrate:
+    - npm test
