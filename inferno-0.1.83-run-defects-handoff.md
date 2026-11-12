@@ -306,3 +306,28 @@ Seen 2026-11-11 on the app repo, intent `the-support-period-the-user-information
 ### How the host got through
 
 The record stands with seven criteria owed to the intent review. The orchestrators now tell every reviewer to start each mutant's test with the wrapper.
+
+## 11. A mutant whose test is a check, not a test runner, can never read caught, and nothing tells the reviewer
+
+Seen twice on 2026-11-11 on the app repo, on 0.1.83: item `doc-a-typed-law-carries-its-publication-reference` (criterion 6, test `npm run check:wire`) and item `sup-the-end-date-counts-from-the-first-covered-unit` (criterion 10, test `node scripts/clause-article-map.mjs`).
+
+### What happens
+
+The reviewer names a check script as the mutant's test. The check goes red on the mutant, exit 1, with its own line that names the fault. The runner records `caught: none`, why "no test summary reports a failure (exit 1)", and the criterion waits for the intent review, where the same test gives the same answer.
+
+### Why
+
+- This is the verdict rule working as written: a red run is caught only when it printed a test runner's summary with a failure count, so that a wrapper that refused or a missing binary never reads as caught (`S/run-mutate-verdict.cjs:5-15`, `:86-89`). A contract check or a lint prints no such summary.
+- The reviewer is not told. Its text says "`test` runs only the tests that should notice" (`src/flows/inferno/agents/reviewer/agent.md:20`) and nothing about what the runner can read. The answer the flow does have for such a criterion, the gate mark, is in the orchestrator's text only.
+- So each such proposal costs one mutant run for no verdict and one criterion pushed to the intent review, and it repeats there.
+
+### What the flow should do
+
+- The reviewer's rule says in one clause what a mutant's test must be: a test runner's command, whose summary counts a failure. A criterion that only a check proves is named to the orchestrator for a gate mark, with no mutant proposed.
+- Or a host names its checks: a key under `mutate` that lists command patterns with the line each prints on a finding, and a red run of such a command that prints that line reads caught. A wrapper error prints no such line, so the rule that guards against it holds.
+- The refusal line names the way out: for "no test summary reports a failure" on a command that is no known runner, it says that a check cannot prove a mutant and names the gate mark.
+- Tests: a mutant whose test is a listed check that prints its finding line reads caught. The same command ended by a wrapper error reads no verdict.
+
+### How the host got through
+
+For a check that a gate command runs, the orchestrator ends the criterion's line with `(gate: <that finalize command>)` in a commit that changes the spec alone, and the criterion owes no mutant. For any other check the reviewer names a runner test that covers the same line.
