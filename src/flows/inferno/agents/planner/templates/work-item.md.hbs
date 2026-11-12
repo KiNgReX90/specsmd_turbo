@@ -107,6 +107,13 @@ reads:
       stale: {{this.stale}}
 {{/each}}
 {{/if}}
+{{!-- writes: the functions the change writes through; run.cjs frontier prints every caller file the item does not cite as a candidate line --}}
+{{#if writes}}
+writes:
+{{#each writes}}
+    - {{this}}
+{{/each}}
+{{/if}}
 {{#if provides}}
 provides:
 {{#each provides}}

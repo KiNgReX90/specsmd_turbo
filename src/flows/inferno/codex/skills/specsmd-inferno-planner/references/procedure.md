@@ -93,6 +93,7 @@ reads:                # optional
     source: the backend command, store row or event behind the value
     when: every moment the surface reads it again
     stale: what the user sees on screen if it never reads again
+writes: [save_item]   # optional, functions written through
 provides:             # optional, kind command, table or event
   - kind: command
     name: save_item
@@ -125,7 +126,7 @@ Also decide id, title, kind, complexity, acceptance criteria, `depends_on`, the 
 
 Split an item that spans more than two concerns, needs substantially more than six context files, or is unlikely to finish in one bounded stretch. Merge adjacent low or medium items in a strictly serial same-tree chain when splitting adds cold starts without enabling parallelism. High-complexity items remain standalone.
 
-An item boundary preserves every existing invariant, so the tests, allowlists, goldens and docs an invariant needs travel in the item with the source change they follow.
+An item boundary preserves every existing invariant, so the tests, allowlists, goldens and docs an invariant needs travel with the source change.
 
 ### Blast radius is measured
 

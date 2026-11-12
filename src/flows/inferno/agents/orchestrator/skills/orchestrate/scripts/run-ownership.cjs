@@ -204,7 +204,12 @@ function candidates(tree, items, open) {
   return { found, skipped };
 }
 
+/** A caller of a function the item writes through (run-writes.cjs) says what it calls and where. */
 function line(entry) {
+  if (entry.calls) {
+    const owner = entry.ownedBy ? ` owned-by ${entry.ownedBy}` : '';
+    return `candidate ${entry.item} ${entry.path}${owner} calls ${entry.calls} (line ${entry.line})`;
+  }
   return entry.ownedBy
     ? `candidate ${entry.item} ${entry.path} owned-by ${entry.ownedBy} via ${entry.via}`
     : `candidate ${entry.item} ${entry.path} references ${entry.owned} via ${entry.via}`;

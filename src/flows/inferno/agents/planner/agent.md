@@ -124,6 +124,7 @@ reads:                        # optional
     source: the backend call, store row, file or event behind the value
     when: every moment the surface reads it again
     stale: what the user sees on screen if it never reads again
+writes: [save_item]           # optional, functions written through
 provides:                     # optional, command, table or event
   - kind: command
     name: save_item
@@ -156,7 +157,7 @@ Every number that travelled with a command becomes a `probes:` entry on the item
 
 **Four sections beside the manifest.** `delivers:` names the item's `SC-<n>`. Edge Cases: a row per case. Out of Scope: what it does not build. Test Plan: the tests it adds, an integration test per `depends_on` item on that item's real code, and every existing test asserting a value it changes, in its `ownership.editable`: a breaking test belongs to the item that breaks it. Reuse: per command, table, screen, setting or module it creates, the existing one that fits, or the `file:line` showing none does. An empty section reads `None.` The Description says what changes and why, never what the code does today.
 
-**The cold-builder test**, on every brief and item before the handoff: read each with only its text and manifest paths, as the builder will. It passes when it names the symbol with file and line, the pattern file the new code mirrors, the assertion that goes red first, and the measurement that proves done; fix what fails in the file, not in the readout.
+**The cold-builder test**, on every brief and item before the handoff: read each with only its text and manifest paths. It passes when it names the symbol with file and line, the pattern file the new code mirrors, the assertion that goes red first, and the measurement that proves done; fix what fails in the file, not in the readout.
 
 **Size both ways.** Split an item past about six required files or past two concerns, and merge the adjacent steps of a serial same-compile-tree chain until each earns its cold dispatch. An item boundary preserves every existing invariant: the allowlists, goldens and docs one needs travel with the source change.
 

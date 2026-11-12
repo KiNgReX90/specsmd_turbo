@@ -16,6 +16,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const scheduler = require('./team-scheduler.cjs');
 const ownership = require('./run-ownership.cjs');
+const writes = require('./run-writes.cjs');
 const probes = require('./run-probes.cjs');
 const { wiringErrors } = require('./run-wiring.cjs');
 const { isComplete, isDeferred } = require('./state-transition.cjs');
@@ -97,6 +98,8 @@ function loadItems(tree, intent) {
         context: manifest.context || {},
         ownership: manifest.ownership || {},
         reads: manifest.reads,
+        writes: manifest.writes,
+        design_contract: manifest.design_contract,
         provides: manifest.provides,
         consumes: manifest.consumes,
         probes: manifest.probes,
@@ -149,6 +152,7 @@ function contractErrors(tree, items) {
     errors.push(...scheduler.validateWorkItem(item).errors);
     errors.push(...probes.shapeErrors(item.id, item.probes));
     errors.push(...probes.diagnosisErrors(item));
+    errors.push(...writes.writesErrors(item.id, item.writes));
     for (const entry of item.context.required || []) {
       const target = entry && entry.path;
       if (target && !fs.existsSync(path.join(tree, target))) {
@@ -265,8 +269,9 @@ function frontier(intentId, options) {
   for (const item of waiting) out.push(`waiting ${item.id} on ${item.depends_on.map(dependency).join(', ')}`);
   for (const pair of serialize) out.push(`serialize ${pair.items.join(' + ')} (shares ${pair.shared.join(', ')})`);
   for (const group2 of batch) out.push(`batch ${group2.join(',')}`);
-  // The ownership the planner missed: a file outside the item that names what the item owns.
-  const closure = ownership.candidates(tree, ready, items);
+  // The ownership the planner missed: a file outside the item that names what the item owns,
+  // and a caller the item does not cite of a function it writes through.
+  const closure = writes.addCallers(tree, ready, items, ownership.candidates(tree, ready, items));
   out.push(...ownership.candidateLines(closure));
   out.push(...stale.map((error) => `INVALID ${error}`));
   if (out.length === 0) out.push('no item left in this intent');

@@ -284,10 +284,10 @@ ${rows(spec.tests || ["src/board/tile.test.ts"])}
 ownership:
   editable:
 ${spec.editable.map((entry) => `    - ${entry}`).join("\n")}
-${spec.probes ? probeRows(spec.probes) : ""}${diagnosis}
+${(spec.reads || []).length ? `reads:\n${spec.reads.map((entry) => `    - path: ${entry}\n      source: the row behind ${entry}\n      when: on every open\n      stale: the old balance stays on screen`).join("\n")}\n` : ""}${(spec.design || []).length ? `design_contract:\n${rows(spec.design)}\n` : ""}${spec.writes ? `writes:\n${spec.writes.map((entry) => `    - ${entry}`).join("\n")}\n` : ""}${spec.probes ? probeRows(spec.probes) : ""}${diagnosis}
 ## Technical Notes
 
-(none)
+${spec.notes || "(none)"}
 `;
 }
 
@@ -409,14 +409,17 @@ function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
-/** A throwaway project tree, committed so `git grep` can see it, or without git at all. */
+/**
+ * A throwaway project tree, committed so `git grep` can see it, or without git at all. A suite
+ * with a plan of its own passes `sources`, `state` and `items` in place of this file's.
+ */
 function fixture(options = {}) {
   const dir = tempDir("inferno-frontier-");
   const root = path.join(dir, "app");
   fs.mkdirSync(root, { recursive: true });
-  for (const [rel, body] of Object.entries(SOURCES)) write(root, rel, body);
-  write(root, ".specs-inferno/state.yaml", STATE);
-  for (const [key, body] of Object.entries(ITEMS)) {
+  for (const [rel, body] of Object.entries(options.sources || SOURCES)) write(root, rel, body);
+  write(root, ".specs-inferno/state.yaml", options.state || STATE);
+  for (const [key, body] of Object.entries(options.items || ITEMS)) {
     const [intent, id] = key.split("/");
     write(root, `.specs-inferno/intents/${intent}/work-items/${id}.md`, body);
   }
@@ -440,4 +443,4 @@ function run(fixtureTree, args) {
   return { code: result.status, out: result.stdout || "", err: result.stderr || "" };
 }
 
-module.exports = { fixture, run };
+module.exports = { fixture, item, run };
