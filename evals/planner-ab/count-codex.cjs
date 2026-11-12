@@ -6,7 +6,10 @@
  *
  * A model round ends in an `event_msg` of type `token_count`. Codex repeats that event when only
  * its rate limits moved, so a round is a token count whose `total_token_usage` moved, and its
- * tokens are that event's `last_token_usage`. A shell call is a `function_call` of a shell tool
+ * tokens are that event's `last_token_usage`. That value is the round's own, and the running total
+ * is a field of its own beside it, so summing it over the rounds reads no per-event value as a
+ * total: the mistake the Claude stream invites, where each line carries a message's start value,
+ * has no counterpart in these events. A shell call is a `function_call` of a shell tool
  * or a `local_shell_call`, once per call id. Codex batches several commands into one call, so
  * the subcommands of each are counted as well. The host's own wall time runs from the first
  * timestamp to the last.

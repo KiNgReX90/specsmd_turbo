@@ -8,8 +8,19 @@
  * inline"), so the one thread is the whole planner.
  *
  * Claude Code: `claude -p` with the planner as `--agent`, its stream-json output kept as the
- * transcript. Only project settings load, so this machine's hooks, plugins and own CLAUDE.md
- * stay out of the measurement, and nothing is persisted as a session.
+ * transcript, and nothing persisted as a session. What loads: the consumer's project settings
+ * and its own CLAUDE.md, with the sign-in of this machine. `--setting-sources project` keeps this
+ * machine's user settings out, and with them its hooks and plugins, but not the user's own
+ * instructions file: a host loads that file whatever the setting sources say (a measured run
+ * answered in the language it asks for). So the command also names that file in
+ * `claudeMdExcludes`, through `--settings`, which keeps it out and leaves the project's
+ * CLAUDE.md and the sign-in as they are (a probe answered without the file's language and still
+ * read the project's file). The file is `$CLAUDE_CONFIG_DIR/CLAUDE.md`, or `~/.claude/CLAUDE.md`.
+ *
+ * The build of a kept plan runs the installed orchestrator the same way, headless and on the
+ * same exclusion. The orchestrator is a command, not an agent, so `--agent` cannot start it: its
+ * slash command goes to stdin. The session is persisted, since a subagent's own output tokens
+ * are written only in the transcript the host stores of it.
  *
  * Codex: `codex exec --json` with the planner's model, effort and developer instructions from
  * its custom agent file. The JSON events carry no model round, so the transcript is the session
@@ -23,14 +34,32 @@ const path = require('node:path');
 
 const HOSTS = ['claude', 'codex'];
 const CLAUDE_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,TodoWrite';
+/** The tools a build calls: the orchestrator's (a subagent is an Agent call, its tool listed as Task) and its subagents'. */
+const BUILD_TOOLS = 'Bash,Read,Write,Edit,Grep,Glob,Agent,Task,Skill';
 
 /** The host config each host's frontier reads, as the planner texts name them. */
 const CONFIG = { claude: '.specs-inferno/config.yaml', codex: '.specs-inferno/config.codex.yaml' };
 
-function claudeArgv(pins) {
-  return ['claude', '-p', '--output-format', 'stream-json', '--verbose', '--setting-sources', 'project',
+/** The folder Claude Code keeps its user files in: its sessions and the user's own instructions. */
+function claudeHome(env = process.env) {
+  return env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+}
+
+/** The settings that keep the user's own instructions file out of a headless run. */
+function claudeSettings(env = process.env) {
+  return JSON.stringify({ claudeMdExcludes: [path.join(claudeHome(env), 'CLAUDE.md')] });
+}
+
+function claudeArgv(pins, env) {
+  return ['claude', '-p', '--output-format', 'stream-json', '--verbose', '--setting-sources', 'project', '--settings', claudeSettings(env),
     '--agent', pins.agent, '--model', pins.model, '--effort', pins.effort, '--permission-mode', 'acceptEdits',
     '--allowed-tools', CLAUDE_TOOLS, '--permission-prompts', 'none', '--no-session-persistence'];
+}
+
+/** The argv that builds a kept plan with the installed orchestrator, its slash command going to stdin. */
+function buildArgv(model, env = process.env) {
+  return ['claude', '-p', '--output-format', 'stream-json', '--verbose', '--setting-sources', 'project', '--settings', claudeSettings(env),
+    '--model', model, '--permission-mode', 'acceptEdits', '--allowed-tools', BUILD_TOOLS, '--permission-prompts', 'none'];
 }
 
 function codexArgv(pins, tree) {
@@ -40,8 +69,8 @@ function codexArgv(pins, tree) {
 }
 
 /** The argv that plans on `host` in `tree`, the statement going to its stdin. */
-function hostArgv(host, pins, tree) {
-  if (host === 'claude') return claudeArgv(pins.claude);
+function hostArgv(host, pins, tree, env = process.env) {
+  if (host === 'claude') return claudeArgv(pins.claude, env);
   if (host === 'codex') return codexArgv(pins.codex, tree);
   throw new Error(`no host ${host}: the hosts are ${HOSTS.join(', ')}`);
 }
@@ -108,4 +137,4 @@ function quote(argv) {
   return argv.map((arg) => (/^[A-Za-z0-9_./:=,@%+-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, "'\\''")}'`)).join(' ');
 }
 
-module.exports = { HOSTS, CONFIG, CODEX_HOLDS, hostArgv, frontierArgv, threadIdOf, findRollout, quote };
+module.exports = { HOSTS, CONFIG, CODEX_HOLDS, hostArgv, buildArgv, claudeHome, frontierArgv, threadIdOf, findRollout, quote };

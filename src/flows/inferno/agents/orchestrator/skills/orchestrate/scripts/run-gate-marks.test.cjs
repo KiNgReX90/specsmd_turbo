@@ -6,6 +6,7 @@ const { CONFIG, INTENT_TREE, git, intentReviewed, repo, run, worktree, write } =
 const { tempDir } = require("./test-temp.cjs");
 const { withMarks } = require("./run-gate-marks.cjs");
 const { caller } = require("./run-call.cjs");
+const { NO_VERDICT } = require("./run-exit.cjs");
 
 // The gate lists each criterion the plan marked with the command or lane that proves it, beside
 // the verdict this gate gave that command or lane. With no mark it prints nothing new.
@@ -121,4 +122,17 @@ test("run.cjs gate prints a marked criterion beside its command's verdict, befor
 
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /^PASS \d+s echo gate ran\nMARKED a-one:2 \(gate: echo gate ran\): PASS\ngreen [0-9a-f]+\n$/m);
+});
+
+test("a gate with no verdict names each mark whose command the host ran nothing for, and keeps its last line last", () => {
+  const root = tree({ "a-one": ["the size cap holds (gate: npm run size)"], "a-two": ["the check passes (gate: npm run check)"] });
+  const results = [{ command: "npm run check", result: "pass" }, { command: "npm run size", result: "refused" }];
+  const result = withMarks({ tree: root, intent: "alpha" }, gateResult(NO_VERDICT, results, { no_verdict: ["npm run size"] }));
+  assert.deepEqual(result.out, [
+    "PASS 1s npm run check",
+    "MARKED a-one:1 (gate: npm run size): NO VERDICT, the host ran nothing",
+    "MARKED a-two:1 (gate: npm run check): PASS",
+    "last line",
+  ]);
+  assert.equal(result.exit, NO_VERDICT);
 });

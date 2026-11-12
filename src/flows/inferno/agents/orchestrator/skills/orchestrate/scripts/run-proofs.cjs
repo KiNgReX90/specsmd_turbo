@@ -5,6 +5,7 @@ const path = require('path');
 const { createHash } = require('crypto');
 const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
+const { logSize, refusalIn, refusedOf } = require('./run-check-refused.cjs');
 
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -152,14 +153,20 @@ function readProof(proof) {
  * Only a successful command on unchanged inputs can mint a proof. `force` reruns a command
  * whose proof still holds, and revokes that proof first so a run that never finishes cannot
  * leave the old success standing. `shell` runs the command as lib.runShell does, which a host
- * session replaces (run-check-session.cjs); the proof is keyed the same either way.
+ * session replaces (run-check-session.cjs); the proof is keyed the same either way. A run that
+ * exits non-zero with the host's `verification.refused` line in what it wrote is `refused`: the
+ * wrapper ran nothing, so it is no verdict and no failure (run-check-refused.cjs).
  */
 function runCommand(tree, config, selected, command, log, force = false, shell = lib.runShell) {
   const proof = commandProof(tree, config, selected, command);
   const previous = readProof(proof);
   if (previous && !force) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
   fs.rmSync(proof.file, { force: true });
+  const refused = refusedOf(config);
+  const from = logSize(log);
   const run = shell(command, tree, log);
+  const line = run.code !== 0 && refused ? refusalIn(refused, log, from) : null;
+  if (line) return { command, result: 'refused', seconds: run.seconds, log: run.log, line };
   const moved = run.code === 0 && commandProof(tree, lib.readConfig(tree, selected), selected, command).file !== proof.file;
   if (run.code !== 0 || moved) {
     if (moved) fs.appendFileSync(log, '\nverification inputs changed while the command ran. Run it again.\n');
