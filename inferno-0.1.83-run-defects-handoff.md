@@ -387,3 +387,32 @@ Seen 2026-11-12 on the app repo, intent `every-machine-removes-what-finished-wor
 ### How the host got through
 
 It started one `dispatch-log --items a,b` for both items, as the refusal says.
+
+## 14. A product red on a lane with no `verdicts` key ends with no step, and nothing tells a host the key exists
+
+Seen 2026-11-12 on the app repo, intent `the-article-14-filings-are-due-on-time-and-complete`, at its final gate, on 0.1.83. Most of this is the host's to build. One line is the flow's.
+
+### What happens
+
+- The smoke lane walked one test red on the branch, green on the base, and green again on its second walk on the branch. Its own log says "so the red is intermittent". It exits 10.
+- `gate --wait` prints "RED lane smoke: product red (exit 10) -> `<log>`" with the log's tail, and no next step.
+- The flow has the step: `run.cjs smoke --accept-intermittent`, once the lane has written `{"red": [{"name", "base": "green", "again": "green"}]}` to the file its `verdicts` key names (`S/run-lanes-intermittent.cjs:3-13`). This host set no `verdicts` key, and its lane writes its verdicts in a shape of its own, so the path is closed without a word.
+
+### Why
+
+- `productRed` asks `intermittent.proven` and, on any refusal, returns the bare red line: `if (read.refusal) return { verdict: 'red', out }` (`S/run-lanes.cjs:201-210`). The refusal's reason, here that the lane names no verdicts file, is not printed.
+- The key reached hosts as one commented line of `config.example.yaml`. The install says nothing about it, as it said nothing about `mutate.sealed` before 0.1.83.
+
+### What the flow should do
+
+- A product red whose lane sets no `verdicts` key prints one more line: an intermittent red can be accepted once the lane writes its red tests to the file `verification.<lane>.verdicts` names, with the shape in one line.
+- A product red whose verdicts file was read and refused prints why: which test was not green on the base or on the second walk.
+- The install prints the same kind of line it prints for a missing `mutate` block when a configured lane has no `verdicts` key.
+
+### What is the host's
+
+Its lane proves an intermittent red already and prints it. It has to write those tests to a file in the flow's shape and name that file in its config. That is host work in its lane harness and is not asked of the flow.
+
+### How the host got through
+
+It walks the lane again. The host's journey ledger holds every journey that was green, so the second run walks the one red journey.
