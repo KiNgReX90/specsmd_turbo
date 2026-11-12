@@ -22,11 +22,11 @@ const { intentOf } = require('./run-worktrees.cjs');
 const { parseIntentReview } = require('./run-intent-review-file.cjs');
 const { proofOwed } = require('./run-review-aside.cjs');
 const { itemProofs } = require('./run-mutant-coverage.cjs');
-const { intentReviewCall, scanCall } = require('./run-call.cjs');
+const { intentRecordCall, intentReviewCall, scanCall } = require('./run-call.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { reviewOutside } = require('./run-config-gates.cjs');
 const { foldBound, isLedger, ownFiles } = require('./run-intent-fold.cjs');
-const { reviewPath } = require('./run-review-file.cjs');
+const { reviewPath, sentBack } = require('./run-review-file.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
 const { deferredItems } = require('./state-defer.cjs');
 const { evidenceExists, openAfterShip } = require('./run-after-ship.cjs');
@@ -134,7 +134,9 @@ function reviewCurrent(tree, config, review) {
 
 /**
  * The review as it holds for the tree: `owed` lists every reason it does not, empty when a
- * recorded review reads clean for the current content.
+ * recorded review reads clean for the current content. A recorded file the review refuses now is
+ * `refused`: it goes back to its reviewer, and the record call is what runs next, never the call
+ * that read it.
  */
 function intentReviewState(tree, config, intentId) {
   const rel = intentReviewPath(tree, intentId);
@@ -152,7 +154,7 @@ function intentReviewState(tree, config, intentId) {
     review = parseFor(tree, rel, intentId, true);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
-    return { rel, review: null, owed: [...owed, error.message] };
+    return { rel, review: null, refused: Boolean(error.refused), owed: [...owed, sentBack(error, intentRecordCall(tree))] };
   }
   if (!reviewCurrent(tree, config, review)) {
     owed.push(`the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`);
@@ -179,7 +181,7 @@ function gateRefusal(tree, config, intentId, before, shown) {
     if (!fold) out.push(`${from}; the reviewer reads the base delta from there`);
     else out.push(fold.bound.length ? `${from} and changed what the review binds: ${fold.bound.join(' ')}` : `${from} and changed no file the review binds`);
   }
-  out.push(`run ${intentReviewCall(tree)} first, then gate again`);
+  out.push(`run ${state.refused ? intentRecordCall(tree) : intentReviewCall(tree)} first, then gate again`);
   return { exit: 3, payload: { ok: false, tree, owed: ['review'], reasons: state.owed, folded: moved }, out };
 }
 

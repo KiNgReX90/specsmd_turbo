@@ -19,7 +19,7 @@ const { NO_SAYS, saysProblem } = require('./run-criterion-says.cjs');
 const { RunError } = lib;
 
 const ITEM_KEYS = ['item', 'verdict', 'files', 'findings', 'mutants', 'pins'];
-/** What run.cjs adds when it records a review. A reviewer that writes them is refused. */
+/** What run.cjs adds when it records a review. A reviewer that writes them is refused, save the runner's own (runnerKeys). */
 const RECORDED_KEYS = ['tree', 'commit', 'reviewer'];
 /**
  * A reviewer's agent id as the host returns it: the id on Claude, the task path such as
@@ -85,11 +85,49 @@ function reviewerId(value, call) {
 /** The reviewer a recorded review names, or null for a record written before reviewers were. */
 const recordedReviewer = (doc) => (typeof doc.reviewer === 'string' && AGENT_ID.test(doc.reviewer) ? doc.reviewer : null);
 
+const SEND_BACK = 'send this back to the reviewer that wrote the file';
+
+/** The refusal of a review file. At its record "the same command" is the record, which runs again once its reviewer answered. */
 function bad(rel, problem) {
-  return new RunError(`${rel}: ${problem}. send this back to the reviewer that wrote the file, then run the same command again.`, 'BAD_REVIEW', 2);
+  const error = new RunError(`${rel}: ${problem}. ${SEND_BACK}, then run the same command again.`, 'BAD_REVIEW', 2);
+  error.refused = `${rel}: ${problem}`;
+  return error;
 }
 
+/**
+ * A refusal of a recorded review read outside its record, by the gate or the ship: it goes back to
+ * its reviewer and `call` records it. Any other error keeps its message.
+ */
+const sentBack = (error, call) => (error.refused ? `${error.refused}. ${SEND_BACK}, then run ${call} to record it.` : error.message);
+
 const isMap = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * The keys of `keys` the runner wrote into `rel` when it last recorded it that `doc`, the file as
+ * it stands, still holds with the value the committed file holds. A recorded file sent back to its
+ * reviewer and edited in place keeps them: they are the runner's own, read past and written anew.
+ * Any other value, or such a key in a file never recorded, is the reviewer's, and refused.
+ */
+function runnerKeys(tree, rel, doc, keys) {
+  // The runner writes one-line values only: a list or a map read twice is never the same value.
+  const held = keys.filter((key) => doc[key] !== undefined);
+  if (held.length === 0) return [];
+  const body = lib.git(tree, ['show', `HEAD:${rel.split(path.sep).join('/')}`], { tolerate: true });
+  let committed = null;
+  try {
+    committed = body === null ? null : lib.parseYaml(body);
+  } catch (error) {
+    committed = null;
+  }
+  return isMap(committed) ? held.filter((key) => committed[key] === doc[key]) : [];
+}
+
+/** The text of the pending `rel` without the runner's own keys (runnerKeys), which its record writes anew. */
+function withoutRunnerKeys(tree, rel, keys) {
+  const text = fs.readFileSync(path.join(tree, rel), 'utf8');
+  const own = runnerKeys(tree, rel, readDoc(tree, rel), keys);
+  return own.length === 0 ? text : text.split('\n').filter((line) => !own.some((key) => line.startsWith(`${key}:`))).join('\n');
+}
 
 /** A value as a refusal names it: the text, or the shape that is no text. */
 function reads(value) {
@@ -180,8 +218,9 @@ function readDoc(tree, rel) {
 function parseItemReview(tree, rel, itemId, { recorded }) {
   const doc = readDoc(tree, rel);
   if (!isMap(doc)) throw bad(rel, `an item review is a map of ${ITEM_KEYS.join(', ')}`);
+  const own = recorded ? RECORDED_KEYS : runnerKeys(tree, rel, doc, RECORDED_KEYS);
   for (const key of Object.keys(doc)) {
-    if (ITEM_KEYS.includes(key) || (recorded && RECORDED_KEYS.includes(key))) continue;
+    if (ITEM_KEYS.includes(key) || own.includes(key)) continue;
     if (RECORDED_KEYS.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
     throw bad(rel, `unknown key ${key}: an item review holds ${ITEM_KEYS.join(', ')} only`);
   }
@@ -385,6 +424,6 @@ function verdictParts(rel, doc, findingKeys, optional = []) {
 
 module.exports = {
   FINDING_KEYS, ITEM_KEYS, ITEM_MUTANT_KEYS, ITEM_PIN_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, commentMarker, entries, isMap, itemCriterion, mutantsOf,
-  parseItemReview, pinsOf, proposalsOf, readDoc, recordedReviewer, refuseComments, refuseNew, relativePath, reviewPath, reviewerId, sameMutant, samePin,
-  verdictParts, weightOf, withSays,
+  parseItemReview, pinsOf, proposalsOf, readDoc, recordedReviewer, refuseComments, refuseNew, relativePath, reviewPath, reviewerId, runnerKeys, sameMutant, samePin, sentBack,
+  verdictParts, weightOf, withSays, withoutRunnerKeys,
 };

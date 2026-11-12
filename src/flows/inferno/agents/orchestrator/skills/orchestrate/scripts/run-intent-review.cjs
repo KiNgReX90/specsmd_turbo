@@ -22,6 +22,7 @@ const gate = require('./run-gate.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { hostActor, realAppLine, reviewerLines } = require('./run-review.cjs');
 const { reviewerId } = require('./run-review-file.cjs');
+const { unrecorded } = require('./run-intent-review-file.cjs');
 const owed = require('./run-intent-owed.cjs');
 const { gateStartCall, intentRecordCall, intentReviewCall, itemReviewCall, scanCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
@@ -142,10 +143,11 @@ async function record(tree, context, commit, restored) {
   const ran = await intentMutants(tree, context);
   const review = owed.parseFor(tree, rel, intent, false);
   const abs = path.join(tree, rel);
-  const text = fs.readFileSync(abs, 'utf8');
+  // A recorded file sent back to its reviewer still holds what the last record wrote, written anew here.
+  const text = unrecorded(tree, rel);
   const outside = owed.outsideHash(tree, context.config);
   const kept = outside === null ? '' : `tree_outside: ${outside}\n`;
-  fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${proofs.scopeHash(tree)}\n${kept}commit: ${commit}\nreviewer: ${reviewer}\n`);
+  fs.writeFileSync(abs, `${text}${text.endsWith('\n') ? '' : '\n'}tree: ${proofs.scopeHash(tree)}\n${kept}commit: ${commit}\nreviewer: ${reviewer}\n`);
   lib.git(tree, ['add', '--', rel]);
   lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent}): intent review ${review.verdict}`, '--', rel]);
   const result = verdict(tree, context, review, `intent review ${review.verdict}, recorded at ${short(tree, commit)}`);

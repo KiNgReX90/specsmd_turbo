@@ -26,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
-const { bad, boundFiles, entries, isMap, parseItemReview, readDoc, recordedReviewer, reviewPath, verdictParts, RECORDED_KEYS } =
+const { bad, boundFiles, entries, isMap, parseItemReview, readDoc, recordedReviewer, reviewPath, runnerKeys, verdictParts, RECORDED_KEYS } =
   require('./run-review-file.cjs');
 const { deltaProblem, previousReview } = require('./run-review-delta.cjs');
 const { itemRecordCall } = require('./run-call.cjs');
@@ -209,8 +209,10 @@ function qualityReviewerId(value, call) {
 function parseQualityReview(tree, rel, itemId, { recorded }) {
   const doc = readDoc(tree, rel);
   if (!isMap(doc)) throw bad(rel, `a quality review is a map of ${QUALITY_KEYS.join(', ')}`);
+  // A recorded file sent back and edited in place keeps the runner's keys, which its record writes anew (run-review-file.cjs).
+  const own = recorded ? RECORDED_KEYS : runnerKeys(tree, rel, doc, RECORDED_KEYS);
   for (const key of Object.keys(doc)) {
-    if (QUALITY_KEYS.includes(key) || (recorded && RECORDED_KEYS.includes(key))) continue;
+    if (QUALITY_KEYS.includes(key) || own.includes(key)) continue;
     if (RECORDED_KEYS.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
     throw bad(rel, `unknown key ${key}: a quality review holds ${QUALITY_KEYS.join(', ')} only`);
   }

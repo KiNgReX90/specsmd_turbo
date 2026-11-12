@@ -12,7 +12,7 @@
  */
 
 const {
-  FINDING_KEYS, RECORDED_KEYS, bad, entries, isMap, pinsOf, readDoc, recordedReviewer, relativePath, verdictParts,
+  FINDING_KEYS, RECORDED_KEYS, bad, entries, isMap, pinsOf, readDoc, recordedReviewer, relativePath, runnerKeys, verdictParts, withoutRunnerKeys,
 } = require('./run-review-file.cjs');
 const { gapRefusal, mutantGaps } = require('./run-mutant-coverage.cjs');
 const { SAME_INTENT, deltaProblem } = require('./run-review-delta.cjs');
@@ -80,15 +80,18 @@ function scannerOf(rel, doc, scanIds) {
 /**
  * Read and validate the intent review. `items` are the ids of the intent's work items,
  * `scanIds` the ids of the collected scan's lines (none when no scan ran). `recorded` is
- * true for a file run.cjs already recorded, which carries the tree and commit it added.
+ * true for a file run.cjs already recorded, which carries the tree and commit it added; a file
+ * being recorded may still carry them as the runner wrote them, when it was sent back.
  * `proofs` holds what each item owes in mutants or pins (run-mutant-coverage.cjs itemProofs). A
  * pin's text is checked against the tree when the review is recorded (run-review-mutants.cjs).
  */
 function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] }) {
   const doc = readDoc(tree, rel);
   if (!isMap(doc)) throw bad(rel, `an intent review is a map of ${INTENT_KEYS.join(', ')}`);
+  // A recorded file sent back and edited in place keeps the runner's keys, which its record writes anew (run-review-file.cjs).
+  const own = recorded ? INTENT_RECORDED : runnerKeys(tree, rel, doc, INTENT_RECORDED);
   for (const key of Object.keys(doc)) {
-    if (INTENT_KEYS.includes(key) || (recorded && INTENT_RECORDED.includes(key))) continue;
+    if (INTENT_KEYS.includes(key) || own.includes(key)) continue;
     if (INTENT_RECORDED.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
     throw bad(rel, `unknown key ${key}: an intent review holds ${INTENT_KEYS.join(', ')} only`);
   }
@@ -118,4 +121,7 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
   };
 }
 
-module.exports = { CRITERION_KEYS, INTENT_KEYS, SCANNER_KEYS, parseIntentReview };
+/** The pending intent review's text without the keys the runner wrote at its last record, which this record writes anew. */
+const unrecorded = (tree, rel) => withoutRunnerKeys(tree, rel, INTENT_RECORDED);
+
+module.exports = { CRITERION_KEYS, INTENT_KEYS, SCANNER_KEYS, parseIntentReview, unrecorded };
