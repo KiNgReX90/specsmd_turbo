@@ -27,6 +27,7 @@ const WORDS = {
   green: 'GREEN, unchanged since its last pass',
   skip: 'SKIP, no path in its scope changed',
   fail: 'FAIL',
+  refused: 'NO VERDICT, the host ran nothing',
 };
 
 /** Every marked criterion of the intent's items, numbered as the item numbers it. */
