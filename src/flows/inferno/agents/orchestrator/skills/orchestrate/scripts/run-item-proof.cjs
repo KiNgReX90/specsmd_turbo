@@ -35,7 +35,8 @@
  *                    that existed at `from` and the item modified or deleted, a new one never,
  *                    and every line the diff adds to a test file, new ones included, that
  *                    switches a test off, as { file, line, text }, `line` 1-based in the new
- *                    file. A switch-off fails verify-item. Null when `diff` is.
+ *                    file, but for a line a fold of the base added (run-fold.cjs), which is the
+ *                    base's. A switch-off fails verify-item. Null when `diff` is.
  *   real_app         only on a host that sets `real_app.prove`: { command, journeys, exit,
  *                    seconds, counts, tail, log } of its run over the journeys the diff changed,
  *                    whose red fails verify-item, or null when the diff changed none
@@ -51,6 +52,7 @@ const { spawnSync } = require('child_process');
 
 const lib = require('./run-lib.cjs');
 const { attribute } = require('./run-attribute.cjs');
+const { baseLines, foldRanges } = require('./run-fold.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { changedPaths, treeOf } = require('./run-gate.cjs');
 const { isSwitchOff, isTestFile, parseAddedLines } = require('./run-test-files.cjs');
@@ -265,8 +267,11 @@ function diffHash(tree, from, files) {
   return withScratchIndex(tree, files, (git) => hashOf(git, from, files));
 }
 
-/** The item's diff and the tests it changed, both from one scratch index. */
-function readDiff(tree, from, files) {
+/**
+ * The item's diff and the tests it changed, both from one scratch index. A line one of the fold
+ * `ranges` added to a test file (run-fold.cjs) is the base's and switches nothing off for the item.
+ */
+function readDiff(tree, from, files, ranges = []) {
   return withScratchIndex(tree, files, (git) => {
     const tests = files.filter((file) => isTestFile(file));
     const status = new Map();
@@ -280,8 +285,10 @@ function readDiff(tree, from, files) {
       if (letter === 'M' || letter === 'T') changed.modified.push(file);
       if (letter === 'D') changed.deleted.push(file);
       if (!letter || letter === 'D') continue;
-      for (const added of parseAddedLines(git([...DIFF, '-U0', from, '--', literal(file)]))) {
-        if (isSwitchOff(added.text, file)) changed.switched_off.push({ file, line: added.line, text: added.text.trim() });
+      const off = parseAddedLines(git([...DIFF, '-U0', from, '--', literal(file)])).filter((added) => isSwitchOff(added.text, file));
+      const base = off.length > 0 && ranges.length > 0 ? baseLines(git, ranges, file) : new Set();
+      for (const added of off.filter((entry) => !base.has(entry.line))) {
+        changed.switched_off.push({ file, line: added.line, text: added.text.trim() });
       }
     }
     return { diff: { from, paths: files, sha256: hashOf(git, from, files) }, tests_changed: changed };
@@ -346,8 +353,8 @@ function verifyItem(itemId, options) {
   // and an item the runner before signed records dispatched is checked the old way.
   const out = [];
   const config = lib.readConfig(tree, options.config);
-  let attribution = options.since ? null
-    : attribute(tree, items, { ...options, base: options.base || resolveBase(config, null, tree) });
+  const base = options.base || resolveBase(config, null, tree);
+  let attribution = options.since ? null : attribute(tree, items, { ...options, base });
   if (attribution && attribution.legacy) {
     out.push(`no signed dispatch for ${attribution.legacy.join(', ')}: checked since HEAD as the runner before signed records did`);
     attribution = null;
@@ -394,7 +401,8 @@ function verifyItem(itemId, options) {
   // The proof: what ran, and the item's diff since the same baseline the ownership was read from.
   const from = lib.git(tree, ['rev-parse', '--verify', '--quiet', `${since}^{commit}`], { tolerate: true });
   const claimed = new Set(attributed.flatMap((entry) => entry.changed || []));
-  const read = from ? readDiff(tree, from, itemFiles(tree, from, editable, claimed)) : { diff: null, tests_changed: null };
+  const read = from ? readDiff(tree, from, itemFiles(tree, from, editable, claimed), foldRanges(tree, from, base))
+    : { diff: null, tests_changed: null };
   const switchedOff = read.tests_changed ? read.tests_changed.switched_off : [];
   if (switchedOff.length > 0) failed = true;
   for (const entry of switchedOff) out.push(`switched off: ${entry.file}:${entry.line}: ${entry.text}`);
