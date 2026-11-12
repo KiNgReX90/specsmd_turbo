@@ -11,6 +11,7 @@ const { stageFlow } = require('./install/stage');
 const { applyInstall, InstallError } = require('./install/transaction');
 const { sourceCommit } = require('./install/lock');
 const { mutateLine, verdictsLine } = require('./install/host-config');
+const { installedBefore, sessionLine } = require('./install/session');
 
 // Use theme from CLIUtils for consistent styling
 const { theme } = CLIUtils;
@@ -210,6 +211,7 @@ async function installFlow(flowKey, toolKeys, options = {}) {
   const flowPath = path.join(__dirname, '..', 'flows', FLOWS[flowKey].path);
   const version = require('../package.json').version;
   const staged = await stageFlow(flowPath, flowKey, toolKeys, root);
+  const reinstall = installedBefore(root, flowKey);
 
   const manifest = {
     flow: flowKey,
@@ -235,6 +237,8 @@ async function installFlow(flowKey, toolKeys, options = {}) {
   if (mutate) console.log(theme.warning(`  ${mutate}`));
   const verdicts = verdictsLine(root, flowKey);
   if (verdicts) console.log(theme.warning(`  ${verdicts}`));
+  const session = sessionLine(reinstall, staged.files.keys());
+  if (session) console.log(theme.warning(`  ${session}`));
   return count;
 }
 

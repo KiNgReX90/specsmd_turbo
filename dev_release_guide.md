@@ -121,6 +121,21 @@ evals/install-eval.sh <tarball>
 evals/budget-eval.sh <tarball> --consumer evals/fixtures/acme-shop
 ```
 
+A change to one host's planner text (the Claude `agents/planner/agent.md` or the Codex
+`procedure.md`) is measured on the other host with the planner A/B eval before it is ported. The
+eval plans one fixed statement at one fixed commit of an invented consumer with both texts, on
+Claude Code and on Codex, two runs per arm, and prints per run the model rounds, shell calls and
+their subcommands, output tokens, wall time, work items and the frontier result. A patch is the
+changed arm, made from the edited tree or applied to it; `--dry` prints every command and runs none.
+A real run costs eight planner runs, so it waits for the owner's word:
+
+```bash
+git diff > /tmp/planner-change.patch
+node evals/planner-ab/planner-ab.cjs run --dry --b /tmp/planner-change.patch --out /tmp/planner-ab
+node evals/planner-ab/planner-ab.cjs run --b /tmp/planner-change.patch --out /tmp/planner-ab
+node evals/planner-ab/planner-ab.cjs count /tmp/planner-ab
+```
+
 ```bash
 git checkout main
 git merge dev
