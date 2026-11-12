@@ -24,7 +24,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const writer = require('./state-transition.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
-const { bad, parseItemReview, reviewPath, reviewerId } = require('./run-review-file.cjs');
+const { RECORDED_KEYS, bad, parseItemReview, reviewPath, reviewerId, withoutRunnerKeys } = require('./run-review-file.cjs');
 const { REINSTALL, completedBeforeReviewRule, reviewLands, reviewRuleSince } = require('./state-review.cjs');
 const { integrateCall, itemRecordCall, itemReviewCall, realAppCall, verifyItemCall } = require('./run-call.cjs');
 const { realAppPaths } = require('./run-real-app.cjs');
@@ -240,8 +240,9 @@ async function record(tree, context, ledger) {
   });
   for (const [file, id] of signed) {
     const abs = path.join(tree, file);
-    const text = fs.readFileSync(abs, 'utf8');
-    fs.appendFileSync(abs, `${text.endsWith('\n') ? '' : '\n'}tree: ${hash}\ncommit: ${commit}\nreviewer: ${id}\n`);
+    // A recorded file sent back to its reviewer still holds what the last record wrote, written anew here.
+    const text = withoutRunnerKeys(tree, file, RECORDED_KEYS);
+    fs.writeFileSync(abs, `${text}${text.endsWith('\n') ? '' : '\n'}tree: ${hash}\ncommit: ${commit}\nreviewer: ${id}\n`);
   }
   const paths = [path.join(lib.SPECS_DIR, 'state.yaml'), ...signed.map(([file]) => file)];
   lib.git(tree, ['add', '--', ...paths]);
