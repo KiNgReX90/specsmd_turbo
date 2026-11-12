@@ -166,7 +166,7 @@ test("a session block this runner cannot use fails at config load, naming the ke
     [`mutate:\n${block.replace(/ {4}close: .*\n/, "")}`, /mutate\.session\.close in \S+ must be a non-empty string\./],
     [`mutate:\n${block.replace(/run: .*/, 'run: " "')}`, /mutate\.session\.run in \S+ must be a non-empty string\./],
     [`mutate:\n${sessionBlock({ match: "^(node" })}`, /mutate\.session\.match in \S+ must be a regex \(/],
-    ["mutate:\n  sessions: on\n", /mutate in \S+ must be a map holding sealed, reseal_seconds, session, run and checks only, not sessions\./],
+    ["mutate:\n  sessions: on\n", /mutate in \S+ must be a map holding sealed, reseal_seconds, session, run, wrapped and checks only, not sessions\./],
   ]) {
     const config = outsideConfig(f, body, "bad.yaml");
     const result = sessionBatch(f, entries, { config });
