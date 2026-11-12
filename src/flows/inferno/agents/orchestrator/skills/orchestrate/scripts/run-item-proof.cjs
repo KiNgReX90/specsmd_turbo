@@ -24,7 +24,8 @@
  *                    maven), else null; `tail` is the last 40 lines, ANSI codes removed; the
  *                    full output stays in `log` and never in the proof
  *   diff             { from, paths, sha256 }: the item's diff is every path changed since the
- *                    baseline `from` (a full sha) that the item owns or its dispatch claimed,
+ *                    baseline `from` (a full sha) that the item owns or a dispatch of it claimed
+ *                    or was granted (`dispatchClaims` in run-review-span.cjs),
  *                    never one under `.specs-inferno/`, sorted; sha256 hashes `git diff --full-index --binary --no-renames
  *                    --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/
  *                    <from> -- <paths>` as the tree stands, new files included. Once the item
@@ -57,6 +58,7 @@ const { resolveBase } = require('./run-intents.cjs');
 const { changedPaths, treeOf } = require('./run-gate.cjs');
 const { isSwitchOff, isTestFile, parseAddedLines } = require('./run-test-files.cjs');
 const { owedProof, proveItem } = require('./run-real-app-prove.cjs');
+const { dispatchClaims } = require('./run-review-span.cjs');
 
 const { RunError } = lib;
 
@@ -113,7 +115,9 @@ function headDiffHash(tree, from, files) {
  * The proof of `item` as its review would read it, at HEAD, where the review reads the item.
  * `current` when it was taken over the item's paths as HEAD holds them: its baseline is a
  * commit, no path the proven items own changed since that baseline outside the proof's paths,
- * and the diff from it to HEAD over those paths hashes as the proof's. `stale` for a proof of
+ * and the diff from it to HEAD over those paths hashes as the proof's. An item owns the paths its
+ * spec lists and those a dispatch of it claimed or was granted (`dispatchClaims`), the set its
+ * review reads, so a commit on a granted file after the proof makes it stale. `stale` for a proof of
  * any other state, and `none` when there is no proof or it holds no diff. A path of the ledger
  * (`inLedger`) is in neither the proof nor this comparison. `items` are the items
  * the proof checked as one unit, and `paths` the proof's, cut to the item's own for a batch.
@@ -136,14 +140,16 @@ function proofAtHead(tree, intent, item, config = null) {
   const { items, diff: { from, paths } } = proof;
   const stale = { state: 'stale', file, items };
   if (!lib.git(tree, ['rev-parse', '--verify', '--quiet', `${from}^{commit}`], { tolerate: true })) return stale;
-  const owned = items.flatMap(editable);
+  // Each item's files as its review reads them: its spec's, and every path a dispatch of it claimed or was granted.
+  const files = (id) => [...editable(id), ...dispatchClaims(tree, intent, id)];
+  const owned = items.flatMap(files);
   const changed = lib.gitLines(tree, ['diff', '--name-only', '--no-renames', from, 'HEAD'], { tolerate: true })
     .filter((entry) => !inLedger(entry) && lib.ownedBy(entry, owned, tree));
   if (changed.some((entry) => !paths.includes(entry))) return stale;
   if (headDiffHash(tree, from, paths) !== proof.diff.sha256) return stale;
   const why = owedProof(tree, host, proof, file, () => []);
   if (why) return { ...stale, why };
-  const own = items.length > 1 ? paths.filter((entry) => lib.ownedBy(entry, editable(item), tree)) : paths;
+  const own = items.length > 1 ? paths.filter((entry) => lib.ownedBy(entry, files(item), tree)) : paths;
   return { state: 'current', file, items, from, paths: own };
 }
 
@@ -297,7 +303,7 @@ function readDiff(tree, from, files, ranges = []) {
 
 /**
  * The paths of the item's diff: changed since the baseline, owned by the reviewed items or
- * claimed by their dispatches, never the ledger's.
+ * claimed by or granted to their dispatches, never the ledger's.
  */
 function itemFiles(tree, since, editable, claimed) {
   return changedPaths(tree, since)
@@ -400,7 +406,9 @@ function verifyItem(itemId, options) {
 
   // The proof: what ran, and the item's diff since the same baseline the ownership was read from.
   const from = lib.git(tree, ['rev-parse', '--verify', '--quiet', `${since}^{commit}`], { tolerate: true });
-  const claimed = new Set(attributed.flatMap((entry) => entry.changed || []));
+  // Every path a dispatch of the items claimed or was granted, the set proofAtHead reads, so a fresh proof is current.
+  const claimed = new Set([...attributed.flatMap((entry) => entry.changed || []),
+    ...items.flatMap((entry) => dispatchClaims(tree, entry.intent, entry.id))]);
   const read = from ? readDiff(tree, from, itemFiles(tree, from, editable, claimed), foldRanges(tree, from, base))
     : { diff: null, tests_changed: null };
   const switchedOff = read.tests_changed ? read.tests_changed.switched_off : [];
