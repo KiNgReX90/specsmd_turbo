@@ -31,6 +31,7 @@ const { bad, boundFiles, entries, isMap, parseItemReview, readDoc, recordedRevie
 const { deltaProblem, previousReview } = require('./run-review-delta.cjs');
 const { itemRecordCall } = require('./run-call.cjs');
 const { standardsFor } = require('./run-standards.cjs');
+const { changedSince, itemFiles } = require('./run-review-span.cjs');
 
 const { RunError } = lib;
 
@@ -97,7 +98,7 @@ function changedPaths(tree, from, editable) {
  * clean one too, since the fix is production code only this lens judges for soundness.
  */
 function qualityOwed(tree, context, fork) {
-  return qualityLens(context.item.kind, changedPaths(tree, fork, context.editable)) ||
+  return qualityLens(context.item.kind, changedPaths(tree, fork, itemFiles(context))) ||
     fs.existsSync(path.join(tree, context.qualityRel));
 }
 
@@ -171,13 +172,11 @@ function lensesWaiting(tree, context, { fork, dispatch }) {
   const missing = dispatched.filter((lens) => !context.isPending(fileOf(lens)));
   if (missing.length === 0) return null;
   const recorded = item.review ? [rel, qualityRel].map((file) => previousReview(tree, file)).filter(Boolean) : [];
-  let span = { from: fork(), paths: context.editable };
+  let span = { from: fork(), paths: itemFiles(context) };
   if (recorded.length > 0) {
     const from = recorded[0].commit.trim();
     const listed = recorded.flatMap((doc) => (Array.isArray(doc.files) ? doc.files : []));
-    const since = lib.gitLines(tree, ['diff', '--name-only', `${from}..HEAD`], { tolerate: true })
-      .filter((file) => lib.ownedBy(file, context.editable) || listed.includes(file));
-    span = { from, paths: [...new Set([...listed, ...since])] };
+    span = { from, paths: [...new Set([...listed, ...changedSince(tree, context, from, listed)])] };
   }
   const files = missing.map(fileOf);
   return {
