@@ -123,24 +123,29 @@ function relativePath(rel, file, what) {
 
 /**
  * The files a review binds: paths inside the tree and outside the ledger, and for a fresh file,
- * one being recorded, present on disk. A recorded review keeps a path that left the tree since:
- * a file deleted or renamed after its review is a file that changed, so the review's hash no
- * longer holds and the review reads as stale (itemReviewCurrent), never as a malformed file.
+ * one being recorded, present on disk. A listed path under the ledger, such as a host config the
+ * item owns and changed, is left out: the proof holds none (inLedger in run-item-proof.cjs), so
+ * the review binds the same set, and a list of ledger paths alone binds nothing and is refused.
+ * A recorded review keeps a path that left the tree since: a file deleted or renamed after its
+ * review is a file that changed, so the review's hash no longer holds and the review reads as
+ * stale (itemReviewCurrent), never as a malformed file.
  */
 function boundFiles(tree, rel, doc, { recorded = false } = {}) {
-  const files = listOf(rel, doc, 'files');
-  if (files.length === 0) throw bad(rel, 'files must list every file the review read for this item');
-  for (const file of files) {
+  const listed = listOf(rel, doc, 'files');
+  const empty = () => bad(rel, 'files must list every file the review read for this item');
+  if (listed.length === 0) throw empty();
+  const files = [];
+  for (const file of listed) {
     if (typeof file !== 'string' || file.trim() === '') throw bad(rel, 'files holds paths only');
     const normal = relativePath(rel, file, 'files');
-    if (normal === lib.SPECS_DIR || normal.startsWith(`${lib.SPECS_DIR}/`)) {
-      throw bad(rel, `files lists ${file}; the ledger is never part of the code a review binds`);
-    }
+    if (normal === lib.SPECS_DIR || normal.startsWith(`${lib.SPECS_DIR}/`)) continue;
     if (!recorded && !fs.existsSync(path.join(tree, normal))) {
       throw bad(rel, `files lists ${file}, which is not in the tree; list only files the tree holds, never one the change deleted`);
     }
+    files.push(normal);
   }
-  return [...new Set(files.map((file) => path.posix.normalize(file)))];
+  if (files.length === 0) throw empty();
+  return [...new Set(files)];
 }
 
 /** A review file as data; a YAML error goes back to the reviewer like any other. */
