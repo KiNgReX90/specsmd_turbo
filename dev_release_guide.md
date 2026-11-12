@@ -125,15 +125,23 @@ A change to one host's planner text (the Claude `agents/planner/agent.md` or the
 `procedure.md`) is measured on the other host with the planner A/B eval before it is ported. The
 eval plans one fixed statement at one fixed commit of an invented consumer with both texts, on
 Claude Code and on Codex, two runs per arm, and prints per run the model rounds, shell calls and
-their subcommands, output tokens, wall time, work items and the frontier result. A patch is the
-changed arm, made from the edited tree or applied to it; `--dry` prints every command and runs none.
-A real run costs eight planner runs, so it waits for the owner's word:
+their subcommands, output tokens, cost, wall time, work items and the frontier result. A patch is
+the changed arm, made from the edited tree or applied to it; `--dry` prints every command and runs
+none. A host run loads the consumer's project settings and its own CLAUDE.md, and keeps this
+machine's hooks, plugins and the user's own instructions file out. `build` then builds the plan one
+kept Claude run left with the installed orchestrator, the same command for every arm, and `count`
+of that build prints its wall time, cost, output tokens and subagents by role, and per work item
+the builder's rounds, output tokens and wall time for the first build and each correction, and the
+red integrate steps; a Codex build is not built yet. A real run costs eight planner runs and a
+build costs more, so each waits for the owner's word:
 
 ```bash
 git diff > /tmp/planner-change.patch
 node evals/planner-ab/planner-ab.cjs run --dry --b /tmp/planner-change.patch --out /tmp/planner-ab
 node evals/planner-ab/planner-ab.cjs run --b /tmp/planner-change.patch --out /tmp/planner-ab
 node evals/planner-ab/planner-ab.cjs count /tmp/planner-ab
+node evals/planner-ab/planner-ab.cjs build --dry --run /tmp/planner-ab/runs/B-claude-1 --out /tmp/planner-ab-build-B
+node evals/planner-ab/planner-ab.cjs build --run /tmp/planner-ab/runs/B-claude-1 --out /tmp/planner-ab-build-B
 ```
 
 ```bash

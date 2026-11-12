@@ -22,19 +22,29 @@ const write = (file, text) => {
 };
 const jsonl = (entries) => entries.map((entry) => (typeof entry === 'string' ? entry : JSON.stringify(entry))).join('\n') + '\n';
 
-/** A Claude stream of `rounds` messages, each with one Bash call of two subcommands and `output` tokens. */
-function claudeStream(rounds, output) {
+/**
+ * A Claude stream of `rounds` messages, each with one Bash call of two subcommands and `output`
+ * tokens, its result line holding the totals: each line carries only what its message started with.
+ */
+function claudeStream(rounds, output, { finished = true } = {}) {
   const lines = [{ type: 'system', subtype: 'init', session_id: 's', model: 'claude-opus-5-5' }];
   for (let n = 1; n <= rounds; n += 1) {
     const message = (content) => ({
       type: 'assistant',
-      message: { id: `msg_${n}`, model: 'claude-opus-5-5', content: [content], usage: { input_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: output } },
+      message: { id: `msg_${n}`, model: 'claude-opus-5-5', content: [content], usage: { input_tokens: 1, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 1 } },
       parent_tool_use_id: null,
     });
     lines.push(message({ type: 'text', text: 'looking' }));
     lines.push(message({ type: 'tool_use', id: `toolu_${n}`, name: 'Bash', input: { command: 'ls && pwd' } }));
   }
-  lines.push({ type: 'result', subtype: 'success', duration_ms: 1000, session_id: 's' });
+  const total = rounds * output;
+  if (finished) {
+    lines.push({
+      type: 'result', subtype: 'success', duration_ms: 1000, num_turns: rounds, session_id: 's', total_cost_usd: total / 10000,
+      usage: { input_tokens: rounds, output_tokens: total },
+      modelUsage: { 'claude-opus-5-5': { inputTokens: rounds, outputTokens: total, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: total / 10000 } },
+    });
+  }
   return jsonl(lines);
 }
 
@@ -136,9 +146,27 @@ test('each arm on each host gets its mean, from the runs that counted', () => {
   const { means } = countRuns(recorded());
   const mean = (arm, host) => means.find((entry) => entry.arm === arm && entry.host === host);
   assert.deepEqual({ ...mean('A', 'claude') }, {
-    arm: 'A', host: 'claude', counted: 2, rounds: 4, shellCalls: 4, shellSubcommands: 8, output: 4000, wallMs: 150000, items: 4, clean: 1,
+    arm: 'A', host: 'claude', counted: 2, rounds: 4, shellCalls: 4, shellSubcommands: 8, output: 4000, costUsd: 0.4, wallMs: 150000, items: 4, clean: 1,
   });
   assert.equal(mean('B', 'codex').counted, 1);
+  assert.equal(mean('A', 'codex').costUsd, null, 'a host that names no cost has no mean cost, not a zero');
+});
+
+test('a Claude run whose stream has no result line is unfinished: it says so and has no totals, never a zero', () => {
+  const out = tempDir('planner-ab-unfinished-');
+  write(path.join(out, 'ab.json'), JSON.stringify({ statementSha: 'f'.repeat(40), consumerSha: SHA, runs: 2, arms: { A: { label: 'a' }, B: { label: 'b' } } }));
+  recordRun(out, { arm: 'A', host: 'claude', run: 1, rounds: 3, output: 1000, wallMs: 120000, items: ['a'], frontier: clean });
+  recordRun(out, { arm: 'A', host: 'claude', run: 2, rounds: 4, output: 1000, wallMs: 60000, items: ['a'], frontier: clean, transcript: claudeStream(4, 1000, { finished: false }) });
+  const result = countRuns(out);
+  const unfinished = row(result, 'A-claude-2');
+  assert.equal(unfinished.output, null);
+  assert.equal(unfinished.costUsd, null);
+  assert.equal(unfinished.rounds, 4);
+  assert.match(unfinished.notes, /unfinished: the stream has no result line, so it has no totals/);
+  const mean = result.means.find((entry) => entry.arm === 'A' && entry.host === 'claude');
+  assert.equal(mean.output, 3000, 'the mean output is of the runs that have a total');
+  const text = spawnSync(process.execPath, [CLI, 'count', out], { encoding: 'utf8' }).stdout;
+  assert.match(text, /^\| A claude 2 \| 4 \| 4 \| 8 \| no total \| - \| 1\.0 min \| 1 \| clean \| unfinished: /m);
 });
 
 test('the table prints a row per run and per mean, and recounting writes nothing', () => {
@@ -150,9 +178,10 @@ test('the table prints a row per run and per mean, and recounting writes nothing
   assert.match(text, /consumer a1b2c3d4e5f6, statement ffffffffffff, 2 runs per arm/);
   assert.match(text, /A: src as installed/);
   assert.match(text, /B: src with thinner-items\.patch/);
-  assert.match(text, /^\| Run \| Model rounds \| Shell calls \| Subcommands \| Output tokens \| Wall \| Items \| Frontier \| Notes \|$/m);
-  assert.match(text, /^\| A claude 1 \| 3 \| 3 \| 6 \| 3k \| 2\.0 min \| 3 \| clean \|  \|$/m);
-  assert.match(text, /^\| A claude mean \| 4 \| 4 \| 8 \| 4k \| 2\.5 min \| 4 \| 1 of 2 clean \|  \|$/m);
+  assert.match(text, /^\| Run \| Model rounds \| Shell calls \| Subcommands \| Output tokens \| Cost \| Wall \| Items \| Frontier \| Notes \|$/m);
+  assert.match(text, /^\| A claude 1 \| 3 \| 3 \| 6 \| 3k \| 0\.30 USD \| 2\.0 min \| 3 \| clean \|  \|$/m);
+  assert.match(text, /^\| A claude mean \| 4 \| 4 \| 8 \| 4k \| 0\.40 USD \| 2\.5 min \| 4 \| 1 of 2 clean \|  \|$/m);
+  assert.match(text, /^\| A codex 1 \| 4 \| 4 \| 12 \| 1k \| - \| 5\.0 min \| 2 \| refused: /m);
   assert.match(text, /^\| B codex 2 \| error: transcript\.jsonl line 2: /m);
   assert.deepEqual(fs.readdirSync(out, { recursive: true }).sort(), before);
   const json = spawnSync(process.execPath, [CLI, 'count', out, '--json'], { encoding: 'utf8' });
