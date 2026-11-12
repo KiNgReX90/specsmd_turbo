@@ -37,6 +37,8 @@ const RECORD = '.intermittent';
 const MAX_EARLIER = 2;
 const EXCEPTION = /^exception: (\S+) intermittent (\{.*\})\s*$/;
 const FIX = 'Fixes-intermittent:';
+/** The verdicts file's shape, in the one line a lane without the key and a body without a red test print. */
+const SHAPE = '{"red": [{"name": "<test>", "base": "green", "again": "green"}]}';
 
 const filled = (text) => typeof text === 'string' && text.trim().length > 0;
 
@@ -50,7 +52,7 @@ function usage(name, options) {
 /** The red tests a verdicts body lists when each was green on the base and on a second walk, else why it proves nothing. */
 function intermittentTests(body) {
   const red = body && Array.isArray(body.red) ? body.red : [];
-  if (red.length === 0) return { refusal: 'no red test listed as {"red": [{"name", "base", "again"}]}' };
+  if (red.length === 0) return { refusal: `no red test listed as ${SHAPE}` };
   if (red.some((entry) => !entry || !filled(entry.name))) return { refusal: 'a red test without a name' };
   const real = red.filter((entry) => entry.base !== 'green' || entry.again !== 'green');
   if (real.length > 0) {
@@ -88,6 +90,18 @@ function proven(tree, lane, last, proof) {
   }
   const read = intermittentTests(body);
   return read.refusal ? { code: 'NOT_PROVEN', refusal: `${read.refusal} in ${file}` } : { ...read, file };
+}
+
+/**
+ * The line a product red not proven intermittent ends on: for a lane without the key, how it gets
+ * an accept; for one whose verdicts were refused, why.
+ */
+function unproven(lane, read) {
+  if (!lane.verdicts) {
+    return `an intermittent red can be accepted once the lane writes its red tests to the file verification.${lane.name}.verdicts names, ` +
+      `as ${SHAPE}, one entry per red test with its walk on the base and its second walk on the branch`;
+  }
+  return `no intermittent accept: ${read.refusal}`;
 }
 
 /** The intermittent accept for exactly this proof's inputs and the run it accepted, or null. */
@@ -196,4 +210,4 @@ function shipExceptions(primary, base, held) {
   });
 }
 
-module.exports = { accept, intermittentTests, proven, readAccepted, repeats, shipExceptions, usage };
+module.exports = { SHAPE, accept, intermittentTests, proven, readAccepted, repeats, shipExceptions, unproven, usage };
