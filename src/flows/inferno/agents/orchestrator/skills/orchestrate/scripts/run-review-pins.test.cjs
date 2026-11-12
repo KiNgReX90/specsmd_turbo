@@ -28,8 +28,10 @@ const COPY = {
 const SCAN = '.specs-inferno/intents/alpha/scan.yaml';
 const shown = (result) => result.out + result.err;
 
+/** A pin as a reviewer writes it; an item review's repeats its criterion's opening words under says. */
 function pin(criterion, { file = 'src/notice.html', test: pinTest = 'checks/notice.test.cjs', text = SENTENCE } = {}) {
-  return `  - criterion: ${criterion}\n    file: ${file}\n    test: ${pinTest}\n    text: "${text}"\n`;
+  const says = A_ONE[Number(criterion) - 1];
+  return `  - criterion: ${criterion}\n${says ? `    says: ${says}\n` : ''}    file: ${file}\n    test: ${pinTest}\n    text: "${text}"\n`;
 }
 
 /** Criterion 1 by a mutant its test catches, criterion 2 by a pin. */
@@ -46,7 +48,7 @@ test('a criterion held by a checked pin owes no mutant: the item review records 
   assert.equal(result.code, 0, shown(result));
   assert.deepEqual(runs(fixture), ['checks/one.expect'], 'only the mutant ran; the pin was read');
   const review = parseItemReview(fixture.root, REVIEW, 'a-one', { recorded: true });
-  assert.deepEqual(review.pins, [{ criterion: '2', file: 'src/notice.html', test: 'checks/notice.test.cjs', text: SENTENCE }]);
+  assert.deepEqual(review.pins, [{ criterion: '2', says: 'a2 reads two', file: 'src/notice.html', test: 'checks/notice.test.cjs', text: SENTENCE }]);
   assert.deepEqual(mutantGaps(itemProofs(fixture.root, 'alpha', ['a-one']), []), []);
 });
 
@@ -132,7 +134,7 @@ test('a delta review carries the pins over, refuses a new one, and drops one who
   write(fixture.root, REVIEW, itemReview(''));
   const carried = record(fixture);
   assert.equal(carried.code, 0, shown(carried));
-  assert.match(read(fixture.root, REVIEW), /pins:\n {2}- criterion: 2\n {4}file: src\/notice\.html\n/);
+  assert.match(read(fixture.root, REVIEW), /pins:\n {2}- criterion: 2\n {4}says: a2 reads two\n {4}file: src\/notice\.html\n/);
 
   write(fixture.root, 'src/a.ts', 'export const a = 1; // named twice\nexport const a2 = 2;\n');
   write(fixture.root, 'src/notice.html', '<p>Gift cards expire after a year.</p>\n');

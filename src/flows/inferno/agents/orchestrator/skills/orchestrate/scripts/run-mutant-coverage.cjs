@@ -16,6 +16,11 @@
  * A criterion whose line ends in a gate mark, `(gate: <name>)`, owes neither: the gate proves it
  * (run-criterion-marks.cjs). It keeps its number, so every recorded mutant names what it named,
  * unless its mark came after the item's first review outside a commit of its spec alone.
+ *
+ * An item mutant the intent review moved, under `moved`, counts for the criterion it was moved to
+ * and no longer for the one its item review recorded (run-mutant-moves.cjs): a review recorded
+ * before its entries repeated their criterion's words may have numbered them wrong. An entry that
+ * repeats them, under `says`, was checked when it was recorded and is never moved.
  */
 
 const fs = require('fs');
@@ -35,37 +40,71 @@ function acceptanceCriteria(content) {
     .map((match) => match[1]);
 }
 
+/** The review file at `parts` under the intent's folder, live or archived, as data; null when there is none. */
+function reviewDoc(tree, intentId, parts) {
+  for (const base of [['intents'], ['archive', 'intents']]) {
+    const file = path.join(tree, lib.SPECS_DIR, ...base, intentId, ...parts);
+    if (!fs.existsSync(file)) continue;
+    try {
+      return lib.parseYaml(fs.readFileSync(file, 'utf8'));
+    } catch (error) {
+      return null;
+    }
+  }
+  return null;
+}
+
 /** Every `key` entry (mutants or pins) an item review recorded; none when it has no review file yet. */
 function recorded(tree, intentId, itemId, key) {
-  for (const base of [['intents'], ['archive', 'intents']]) {
-    const file = path.join(tree, lib.SPECS_DIR, ...base, intentId, 'reviews', `${itemId}.yaml`);
-    if (!fs.existsSync(file)) continue;
-    let doc;
-    try {
-      doc = lib.parseYaml(fs.readFileSync(file, 'utf8'));
-    } catch (error) {
-      return [];
-    }
-    return doc && Array.isArray(doc[key]) ? doc[key].filter((entry) => entry && typeof entry === 'object') : [];
-  }
-  return [];
+  const doc = reviewDoc(tree, intentId, ['reviews', `${itemId}.yaml`]);
+  return doc && Array.isArray(doc[key]) ? doc[key].filter((entry) => entry && typeof entry === 'object') : [];
 }
 
 const recordedMutants = (tree, intentId, itemId) => recorded(tree, intentId, itemId, 'mutants');
 
-/** The caught mutants an item review recorded. */
-const itemMutants = (tree, intentId, itemId) => recordedMutants(tree, intentId, itemId).filter((entry) => entry.caught === 'yes');
+const NAMED = /^([^:\s]+):(\d+)$/;
 
-/** The proposals an item review recorded that never ran, each with the item that owes it. */
-const owedProposals = (tree, intentId, ids) => ids.flatMap((id) => recordedMutants(tree, intentId, id)
-  .filter((entry) => entry.caught === undefined && typeof entry.find === 'string')
-  .map((entry) => ({ item: id, entry })));
+/** The moves the intent review holds, as `{ item, from, to }` with both numbers 1-based; a malformed entry moves nothing. */
+function intentMoves(tree, intentId) {
+  const doc = reviewDoc(tree, intentId, ['review.yaml']);
+  const moved = doc && Array.isArray(doc.moved) ? doc.moved : [];
+  return moved.flatMap((entry) => {
+    const from = entry && NAMED.exec(String(entry.from));
+    const to = entry && NAMED.exec(String(entry.criterion));
+    return from && to && from[1] === to[1] ? [{ item: from[1], from: Number(from[2]), to: Number(to[2]) }] : [];
+  });
+}
+
+/**
+ * The item review's mutants of `itemId` with every move applied: an entry its item review recorded
+ * under a moved number, without `says`, reads the number it was moved to. `criteria` lets a released
+ * flow's free-text name match as it does when it counts.
+ */
+function movedMutants(tree, intentId, itemId, criteria, moves = intentMoves(tree, intentId)) {
+  const own = moves.filter((one) => one.item === itemId);
+  return recordedMutants(tree, intentId, itemId).map((entry) => {
+    const one = entry.says === undefined && own.find((move) => names(entry, { id: itemId, criteria }, move.from - 1, true));
+    return one ? { ...entry, criterion: String(one.to) } : entry;
+  });
+}
+
+/** The proposals an item review recorded that never ran, each with the item that owes it, under the number a move gave it. */
+const owedProposals = (tree, intentId, ids) => {
+  const moves = intentMoves(tree, intentId);
+  return ids.flatMap((id) => movedMutants(tree, intentId, id, criteriaOf(tree, intentId, id), moves)
+    .filter((entry) => entry.caught === undefined && typeof entry.find === 'string')
+    .map((entry) => ({ item: id, entry })));
+};
+
+/** The acceptance criteria of an item, in order. */
+const criteriaOf = (tree, intentId, itemId) => acceptanceCriteria(fs.readFileSync(lib.readItemSpec(tree, intentId, itemId).file, 'utf8'));
 
 /**
  * What each item of the intent needs: its criteria, how its tests prove them, its manifest's test
  * paths, its own caught mutants, its own pins that still stand, and its marks that count for nothing.
  */
 function itemProofs(tree, intentId, ids) {
+  const moves = intentMoves(tree, intentId);
   return ids.map((id) => {
     const spec = lib.readItemSpec(tree, intentId, id);
     const tests = testPaths(spec);
@@ -76,7 +115,7 @@ function itemProofs(tree, intentId, ids) {
       late: lateMarks(tree, intentId, id, spec.file, criteria),
       tested: tests.length > 0,
       tests,
-      mutants: itemMutants(tree, intentId, id),
+      mutants: movedMutants(tree, intentId, id, criteria, moves).filter((entry) => entry.caught === 'yes'),
       pins: recorded(tree, intentId, id, 'pins').filter((pin) => pinProblem(tree, pin, { item: id, tests }) === null),
     };
   });
@@ -125,4 +164,6 @@ const gapRefusal = (gaps) => `verdict clean while ${gaps.join('; ')}. Propose on
   'its criterion written <item>:<n>, or a pin under pins where its test pins reader-facing copy verbatim; ' +
   'the runner runs or checks each when it records this file';
 
-module.exports = { acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals };
+module.exports = {
+  NAMED, acceptanceCriteria, criteriaOf, gapRefusal, intentMoves, itemProofs, mutantGaps, names, owedProposals, recordedMutants,
+};

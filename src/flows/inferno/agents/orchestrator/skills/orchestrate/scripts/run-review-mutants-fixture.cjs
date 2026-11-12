@@ -66,9 +66,14 @@ function mutantRepo(options = {}) {
   return fixture;
 }
 
-/** A proposal as the reviewer writes it under `mutants`. */
-function proposal(criterion, { file = 'src/a.ts', line = 1, find = 'a = 1', replace = 'a = 7', expect = 'checks/one.expect' } = {}) {
-  return `  - criterion: ${criterion}\n    file: ${file}\n    line: ${line}\n    find: "${find}"\n    replace: "${replace}"\n` +
+/**
+ * A proposal as the reviewer writes it under `mutants`. A first item review repeats its criterion's
+ * opening words under `says`: by default those of a-one's criterion at that number, none for an
+ * intent review's `<item>:<n>`; `says: null` leaves the key out.
+ */
+function proposal(criterion, { file = 'src/a.ts', line = 1, find = 'a = 1', replace = 'a = 7', expect = 'checks/one.expect', says } = {}) {
+  const said = says === undefined ? A_ONE[Number(criterion) - 1] : says;
+  return `  - criterion: ${criterion}\n${said ? `    says: ${said}\n` : ''}    file: ${file}\n    line: ${line}\n    find: "${find}"\n    replace: "${replace}"\n` +
     `    test: node checks/has.cjs ${expect} ../runs.log\n`;
 }
 

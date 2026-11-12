@@ -30,6 +30,8 @@ const { integrateCall, itemRecordCall, itemReviewCall, realAppCall, verifyItemCa
 const { realAppPaths } = require('./run-real-app.cjs');
 const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
 const { itemMutants } = require('./run-review-mutants.cjs');
+const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
+const { criteriaLines } = require('./run-criterion-says.cjs');
 const { dirtyFiles } = require('./run-dirt.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
 const ladder = require('./run-review-ladder.cjs');
@@ -149,7 +151,8 @@ function lensDispatch(tree, context, which, span, proof) {
   const start = own ? proof.from : whole ? forkPoint(tree, config, intent) : span.from;
   const read = own ? proof.paths : whole ? itemFiles(context) : span.paths;
   const range = `${short(tree, start)}..${short(tree, 'HEAD')}`;
-  const spec = path.relative(tree, lib.readItemSpec(tree, intent.id, item.id).file);
+  const specFile = lib.readItemSpec(tree, intent.id, item.id).file;
+  const spec = path.relative(tree, specFile);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
   const ranged = rangeLines(tree, context, which, range, read);
   const gone = previous ? goneFiles(tree, read) : [];
@@ -166,6 +169,8 @@ function lensDispatch(tree, context, which, span, proof) {
       ...(named ? [`  proof ${named}`] : []),
       ...realAppLine(tree, config, range, item.id),
       `  spec ${spec}`,
+      // A first review numbers its mutants and pins by these, and repeats their words (run-criterion-says.cjs).
+      ...(item.review ? [] : criteriaLines(acceptanceCriteria(fs.readFileSync(specFile, 'utf8')))),
       `  brief ${brief}`,
       `  write ${rel}`,
     ]),

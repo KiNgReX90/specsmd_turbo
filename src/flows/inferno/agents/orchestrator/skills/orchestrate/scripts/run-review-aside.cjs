@@ -4,7 +4,7 @@
  * The two lists of an intent review whose entries are set aside.
  *
  * `withdrawn` holds a mutant its reviewer proposed by mistake, such as one that changes a line no
- * test can read: the entry as it was recorded, plus `reason`. The intent reviewer writes it. The
+ * test can read: the entry as it was recorded, its `says` included when it has one, plus `reason`. The intent reviewer writes it. The
  * runner stops running it and writes no finding for it, and it never counts for its criterion, so
  * a withdrawal never closes a gap: a clean review still needs another caught mutant or a checked pin.
  *
@@ -37,7 +37,7 @@ const sameWherever = (a, b) => sameMutant({ ...a, file: b.file }, b);
 
 /** The withdrawn mutants of a review: each a mutant as recorded, plus reason. */
 function withdrawnOf(rel, doc) {
-  return entries(rel, doc, 'withdrawn', [...MUTANT_KEYS, 'reason'], ['caught', 'why'], ['replace']).map((entry, index) => {
+  return entries(rel, doc, 'withdrawn', [...MUTANT_KEYS, 'reason'], ['says', 'caught', 'why'], ['replace']).map((entry, index) => {
     if (typeof entry.replace !== 'string') throw bad(rel, `withdrawn entry ${index + 1} has no replace: copy the mutant as recorded, then add reason`);
     return entry;
   });

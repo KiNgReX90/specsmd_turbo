@@ -15,7 +15,7 @@ const { readConfig } = require("./run-lib.cjs");
 const { sessionOf } = require("./run-mutate-session.cjs");
 const { commandOf, hostOf } = require("./run-mutate-host.cjs");
 const { write } = require("./review-fixture.cjs");
-const { CONFIG, REVIEW, itemReview, mutantRepo, record } = require("./run-review-mutants-fixture.cjs");
+const { A_ONE, CONFIG, REVIEW, itemReview, mutantRepo, record } = require("./run-review-mutants-fixture.cjs");
 const { parseItemReview } = require("./run-review-file.cjs");
 
 const CONFIG_SESSION = `mutate:\n${sessionBlock()}`;
@@ -182,7 +182,7 @@ test("a session block this runner cannot use fails at config load, naming the ke
 // config the review was given, so a host's session reaches it, and the rows read as without one.
 const PROPOSALS = itemReview(["1:1:a = 1:a = 7", "2:2:a2 = 2:a2 = 8"].map((spec) => {
   const [criterion, line, find, replace] = spec.split(":");
-  return `  - criterion: ${criterion}\n    file: src/a.ts\n    line: ${line}\n    find: "${find}"\n    replace: "${replace}"\n` +
+  return `  - criterion: ${criterion}\n    says: ${A_ONE[criterion - 1]}\n    file: src/a.ts\n    line: ${line}\n    find: "${find}"\n    replace: "${replace}"\n` +
     "    test: node remote.cjs direct node checks/has.cjs checks/one.expect\n";
 }).join("").replace(/^/, "mutants:\n"));
 
