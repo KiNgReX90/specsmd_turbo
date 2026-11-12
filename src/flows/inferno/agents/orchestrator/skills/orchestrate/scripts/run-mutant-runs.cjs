@@ -6,9 +6,15 @@
  * runs said.
  *
  * An entry runs only where the batch may run: nothing uncommitted on the tree but the review files
- * the record signs (both lenses of an item, or the one intent review), and no other mutate alive.
- * Otherwise none runs and each stays owed, because a mistake planted beside a sibling's uncommitted
- * work could reach it and a test run there reads that work. Every guard of the batch holds: the
+ * the record signs (both lenses of an item, or the one intent review) and another item's pending
+ * review files, and no other mutate alive. Otherwise none runs and each stays owed, because a
+ * mistake planted beside a sibling's uncommitted work could reach it and a test run there reads
+ * that work. A review file is no test's input and no mutant's target, and the batch never writes
+ * it. A sibling may still write during the batch: a verdict stands when the files the batch broke
+ * and the paths its reseal changed are back, and any other path that moved is printed as a
+ * warning (run-mutate-left.cjs). A path nobody else's work explains is the test command's own,
+ * and with no other dispatch open, or in a file the item owns or the host seals, it records
+ * nothing, as before. Every guard of the batch holds: the
  * journal, the restore on every exit, the signals held until the files are back
  * (run-mutate-batch.cjs). A line that moved since its entry was written is found again by its
  * text when that text marks exactly one line of the file; once its file holds the text nowhere, it
@@ -24,6 +30,8 @@ const lib = require('./run-lib.cjs');
 const { batch } = require('./run-mutate-batch.cjs');
 const { committedFile, readBatch } = require('./run-mutate-entries.cjs');
 const { journalPath } = require('./run-mutate-journal.cjs');
+const { notices, reviewedBy } = require('./run-mutate-left.cjs');
+const { sealOf } = require('./run-mutate-seal.cjs');
 const { MUTANT_KEYS, bad, isMap } = require('./run-review-file.cjs');
 
 const { RunError } = lib;
@@ -43,18 +51,44 @@ function changedFiles(tree) {
 }
 
 /**
- * Whether a mutant may run on the tree now, beside the review files `signs` this record signs:
- * `{ why }` when it may not, else `{ pending }`, the paths the batch is to allow. Git names a new
- * directory instead of the files in it, so that name is allowed once every file under it proved
- * to be one of `signs`.
+ * Whether a mutant may run on the tree now, beside the review files `signs` this record signs and
+ * another item's pending review files: `{ why }` when it may not, else `{ pending }`, the paths
+ * the batch is to allow. Git names a new directory instead of the files in it, so that name is
+ * allowed once every file under it proved to be one of those.
  */
 function busy(tree, signs) {
-  const dirty = changedFiles(tree).filter((file) => !signs.includes(file));
+  const own = signs.map(reviewedBy).filter(Boolean);
+  const allowed = (file) => signs.includes(file) || (reviewedBy(file) !== null && !own.includes(reviewedBy(file)));
+  const changed = changedFiles(tree);
+  const dirty = changed.filter((file) => !allowed(file));
   if (dirty.length > 0) return { why: `the tree holds uncommitted work in ${dirty.slice(0, 3).join(', ')}` };
   // Every caller restored a dead run's leftover first, so a journal still there is a live mutate's.
   if (fs.existsSync(journalPath(tree))) return { why: 'another mutate is running on the tree' };
-  const under = (dir) => dir.endsWith('/') && signs.some((rel) => rel.startsWith(dir));
-  return { pending: lib.dirtyPaths(tree).filter((file) => signs.includes(file) || under(file)) };
+  const under = (dir) => dir.endsWith('/') && changed.some((rel) => rel.startsWith(dir));
+  return { pending: lib.dirtyPaths(tree).filter((file) => allowed(file) || under(file)) };
+}
+
+/**
+ * The paths among a batch's `left` that are its own for certain: a file it broke, a path the host
+ * seals, or a file the item under review owns, which no sibling writes.
+ */
+function ownLeft(tree, payload, { runnable, configFile, rel }) {
+  const broken = new Set([...runnable.map((entry) => entry.file), ...(payload.entries || []).map((row) => row.file)]);
+  const sealed = sealOf(lib.readConfig(tree, configFile)).entries.flatMap((entry) => entry.paths);
+  const match = /^[^/]+\/intents\/([^/]+)\/reviews\/([^/]+)\.yaml$/.exec(rel.split(path.sep).join('/'));
+  const editable = match ? editableOf(tree, match[1], match[2]) : [];
+  return (payload.left || []).filter((file) => broken.has(file) || lib.matchesAny(file, sealed) || lib.ownedBy(file, editable, tree));
+}
+
+/** The item's editable paths, none when its spec cannot be read. */
+function editableOf(tree, intentId, itemId) {
+  try {
+    const { manifest } = lib.readItemSpec(tree, intentId, itemId);
+    return (manifest && manifest.ownership && manifest.ownership.editable) || [];
+  } catch (error) {
+    if (error instanceof RunError) return [];
+    throw error;
+  }
 }
 
 /** The entries as the batch reads them, written beside the batch's own logs, outside the tree. */
@@ -137,8 +171,9 @@ const verdictOf = (row) => (row.caught === null ? { caught: 'none', why: row.why
  * and the file and line it ran on. `signs` are the review files this record signs, `rel` alone
  * unless named; `elsewhere` lists the files `locate` may follow a moved line into. On a busy tree
  * nothing runs and each entry loses any verdict it had, so it reads owed. Returns `{ busy }` or
- * `{ ran, builds }`. A batch that could not put a file back, or that stopped before every entry
- * had its run, records nothing: it throws.
+ * `{ ran, builds, warned }`, `warned` the lines on paths another item's work may have moved. A
+ * batch that could not put back a file of its own, or that stopped before every entry had its
+ * run, records nothing: it throws.
  */
 async function runEntries(tree, toRun, { configFile, rel, signs = [rel], elsewhere }) {
   const clear = (entry) => {
@@ -169,8 +204,11 @@ async function runEntries(tree, toRun, { configFile, rel, signs = [rel], elsewhe
     fs.rmSync(file, { force: true });
   }
   const { payload } = result;
-  if (payload.restored === false) {
-    throw new RunError(`the runner's mutants could not put every file back: ${result.out.join('; ')}. Nothing is recorded`, 'MUTATE_RESTORE', 2);
+  const own = payload.restored === false ? ownLeft(tree, payload, { runnable, configFile, rel }) : [];
+  // `beside` set: every path left may be another dispatch's work; without it, each is the batch's own.
+  if (payload.restored === false && (payload.failed || !payload.beside || own.length > 0)) {
+    const mine = own.length > 0 && payload.beside ? `${listed(own)} ${own.length === 1 ? 'is' : 'are'} the batch's own and not back; ` : '';
+    throw new RunError(`the runner's mutants could not put every file back: ${mine}${result.out.join('; ')}. Nothing is recorded`, 'MUTATE_RESTORE', 2);
   }
   if (payload.stopped && /red with every switch off|control run of/.test(payload.stopped)) {
     throw bad(rel, `the runner's mutants stopped, every file is back and nothing is recorded: ${payload.stopped}. ` +
@@ -181,8 +219,10 @@ async function runEntries(tree, toRun, { configFile, rel, signs = [rel], elsewhe
       'MUTATE_STOPPED', 2);
   }
   runnable.forEach((entry, index) => Object.assign(entry, verdictOf(payload.entries[index]), { ran: true }));
-  return { ran: runnable.length, builds: payload.builds };
+  return { ran: runnable.length, builds: payload.builds, warned: notices(payload) };
 }
+
+const listed = (items) => items.slice(0, 5).join(', ') + (items.length > 5 ? ` and ${items.length - 5} more` : '');
 
 /** The lines that say what a run did, at most one per entry without a verdict. */
 function ranLines(result, entries, owes) {
@@ -197,7 +237,7 @@ function ranLines(result, entries, owes) {
   for (const entry of tried.filter((item) => item.caught === 'none')) {
     out.push(`MUTANT ${entry.criterion} no verdict: ${entry.why}; ${owes(entry)}`);
   }
-  return out;
+  return [...out, ...(result.warned || [])];
 }
 
 /** The finding a surviving mutant is: its test stays green when its line changes. */
