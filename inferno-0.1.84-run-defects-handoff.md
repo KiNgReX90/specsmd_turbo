@@ -101,4 +101,4 @@ Any intent that ends in a step run from the default branch meets this: an instal
 
 ### How the host gets through
 
-It writes the evidence file before the merge with a first line that says the proof is owed after the landing and names the command, lands, runs the command, and replaces the file's text with the real output in a commit on the default branch.
+Its intent reviewer judged the two halves again and took them out of the merge's criteria. The review still names both evidence paths as owed after the landing, and the session that ran the intent writes them on the default branch once the install has run. That cost one more review round, and the owed half now lives in prose that no command reads.
