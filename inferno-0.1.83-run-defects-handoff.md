@@ -273,3 +273,36 @@ Seen 2026-11-12 on the app repo, intent `a-lane-run-needs-no-hands-and-a-wrong-t
 ### How the host got through
 
 The batch writes its verdicts to a file beside its logs (`mutate-batch-<stamp>-mutants.yaml` in the tree's cache folder). The host put those ten verdicts into the review file and recorded again.
+
+## 10. A Rust build that the machine killed reads as a mutant that does not build, and a host cannot say where mutant tests run
+
+Seen 2026-11-11 on the app repo, intent `the-support-period-the-user-information-and-the-printed-dossier-are-right`, item `sup-the-end-date-counts-from-the-first-covered-unit`, on 0.1.83. Two gaps met in one record.
+
+### What happens
+
+- The contract reviewer proposed nine mutants. Six carry a bare `cargo test --manifest-path src-tauri/Cargo.toml <name>` as their test.
+- `run.cjs review --item` ran the batch on the machine the orchestrator runs on. On this host that machine is short of memory and its tests are sent to other machines through a wrapper. The out-of-memory guard killed the compilers.
+- The record printed "mutants: 9 ran, 2 caught, 0 survived, 7 without a verdict", with "no verdict: did not build" for all six Rust mutants, and recorded the review clean. Six criteria now wait for the intent review.
+- The logs show what broke. The control run, with every switch off, ends on `sccache: Compiler killed by signal 15` and `error: could not compile` for a dependency crate (`tauri-utils`). Each of the six runs that followed ends the same way on `gtk` or `gio`. No mutant touched those crates.
+
+### Why, the kill
+
+- `verdictOf` reads a kill from the exit codes 130, 137 and 143 and from cargo's `(signal: N, SIG...` line of a killed test binary (`S/run-mutate-verdict.cjs:28`, `:78-84`). A compiler that a signal ended makes cargo exit 101 with `error: could not compile`, which `rustBuildFailed` reads as a failed build (`:43-45`, `:85`).
+- A control run that "did not build" is taken as proof that one of the switched mutants breaks the build: `if (verdict.why === 'did not build') return { text }` (`S/run-mutate-batch.cjs:88`). The batch then builds each mutant alone. On a machine that just killed a build for memory, that is six more full builds.
+
+### Why, the place
+
+- The test of a mutant is the command the reviewer wrote, run in place. `mutate.session` only groups commands that already start with the host's wrapper (`S/run-mutate-session.cjs`, `match`). A command that does not match "runs in place as before".
+- A host has no key that says where a mutant's test runs, and no text that reaches every reviewer: `dispatch.constraints` goes to builders only. So the rule lives in each orchestrator's brief, and a reviewer that leaves the wrapper out runs a full Rust build beside the orchestrator.
+- Until 0.1.83 an item with two lenses ran no mutant at the item, so this stayed out of sight. It now runs on every item review.
+
+### What the flow should do
+
+- A build that a signal ended is a kill, not a failed build. `verdictOf` reads `killed by signal` in a compiler line the way it reads a killed test binary, and a `could not compile` of a crate other than the one a mutated file belongs to is never the mutant's doing.
+- A control run that was killed stops the batch with `MUTATE_STOPPED` and "run the same command again". It does not start the one build per mutant.
+- A host key under `mutate` holds the wrapper every mutant test runs through, with the tree and the test as its two parts, for example `mutate.run: "bash <wrapper> auto {tree} {test}"`. A reviewer then writes the bare test, the host decides the machine, and `mutate.session` can match on the same key. A host text for reviewer dispatches (`review.constraints`) would cover it by recall only, so the key is the better of the two.
+- Tests: a control log that holds `Compiler killed by signal 15` above `error: could not compile` stops the batch and builds nothing more. With `mutate.run` set, a bare `cargo test x` runs through the wrapper, and a test that already starts with the wrapper is not wrapped twice.
+
+### How the host got through
+
+The record stands with seven criteria owed to the intent review. The orchestrators now tell every reviewer to start each mutant's test with the wrapper.
