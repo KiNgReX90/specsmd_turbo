@@ -362,3 +362,28 @@ Seen 2026-11-12 on the app repo, intent `the-declaration-of-conformity-is-comple
 ### How the host got through
 
 It ran `verify-item --since <the fold's merge commit>`, so the baseline starts after the fold, behind an empty `dispatch-log` and its accept. That is safe only for an item whose review on record already read its work from before the fold: check that the review range the runner prints still starts at or before the item's first commit, and name the item's earlier files in the brief when it does not.
+
+## 13. A grant takes a file another dispatch changed beside it, and verify-item then refuses for good
+
+Seen 2026-11-12 on the app repo, intent `every-machine-removes-what-finished-work-left-behind`, on 0.1.83. It shares its end with section 8 and has its own beginning.
+
+### What happens
+
+- An item's builder needed `scripts/machines/reaper-kind-git-trees.mjs`, a file outside its ownership. The orchestrator granted it with `run.cjs grant` (grant `56707739`). The grant was accepted.
+- Another item's dispatch (`e113646b`), accepted meanwhile, had changed that file inside this item's window.
+- `run.cjs verify-item` refused: "dispatch ownership overlaps at scripts/machines/reaper-kind-git-trees.mjs with dispatch e113646b...: a serial chain one builder builds takes one dispatch-log for all its items, with --items a,b". No later step can clear it, because the other dispatch's change stays on the item's timeline.
+
+### Why
+
+- `grant` checks the path's form, that it is not the ledger's and not a directory, and that the dispatch is started and not accepted (`treePath` and `grantable`, `S/run-grant.cjs:62-98`). It reads no other dispatch.
+- `verify-item` reads them all, and refuses a file the item claims that another dispatch changed since the item's first baseline (`checkPeerChange`, `S/run-peers.cjs:82-92`, reached from `S/run-attribute.cjs:108`).
+- So the grant succeeds, the builder builds on it, and the refusal comes after the work.
+
+### What the flow should do
+
+- `grant` runs the check `verify-item` will run: when a dispatch of another item, open or accepted since this item's first baseline, owns or changed the path, the grant is refused with that dispatch named and the two ways on: one `dispatch-log --items a,b` for both items, or the change waits until the other item is integrated and this item is dispatched again.
+- Tests: a grant of a path another open dispatch owns is refused. A grant of a path an accepted dispatch changed inside the item's window is refused. A grant of a path nobody else touched is accepted as today.
+
+### How the host got through
+
+It started one `dispatch-log --items a,b` for both items, as the refusal says.
