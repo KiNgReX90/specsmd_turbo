@@ -232,8 +232,19 @@ test("every planner text tells the planner to fill the four sections and number 
       assert.ok(text.includes(token), `${path.basename(file)} names ${token}`);
     }
     assert.match(text, /a breaking test belongs to the item that breaks it/, path.basename(file));
-    assert.match(text, /never what the code does today/, path.basename(file));
+    assert.match(text, /Technical Notes the settled decisions, one line each, and neither what the code does/, path.basename(file));
   }
+});
+
+// A builder opens every manifest path before it edits, so an item that also explains that code
+// is read twice: the template says what the two prose sections hold, and a note is one line.
+test("work item template keeps the description and the technical notes to what a builder cannot read in the code", () => {
+  const template = fs.readFileSync(templatePath, "utf8");
+  const slot = (heading) => template.split(`## ${heading}\n\n`)[1].split("\n## ")[0];
+
+  assert.match(slot("Description"), /^\{\{!-- description: what changes and why, .*Never what the code does: the builder opens every manifest path before it edits/);
+  assert.match(slot("Technical Notes"), /^\{\{!-- technical_notes: one line per settled decision \(the decision, the choice, the reason\).*a high item always carries its decisions\. Never what the code does --\}\}\n/);
+  assert.match(slot("Technical Notes"), /\{\{#each technical_notes\}\}\n- \{\{this\}\}\n\{\{\/each\}\}/, "one dash line per note");
 });
 
 test("the contract reviewer checks each edge-case row and every builder builds the rows and the test plan", () => {

@@ -15,6 +15,7 @@ created: {{created}}
 
 ## Description
 
+{{!-- description: what changes and why, its first paragraph saying what the item is for. Never what the code does: the builder opens every manifest path before it edits, so that prose is read twice --}}
 {{description}}
 
 ## Acceptance Criteria
@@ -157,8 +158,11 @@ finalize_check: {{finalize_check}}
 
 ## Technical Notes
 
+{{!-- technical_notes: one line per settled decision (the decision, the choice, the reason) and per ordering a builder cannot see, such as compile serialization; a high item always carries its decisions. Never what the code does --}}
 {{#if technical_notes}}
-{{technical_notes}}
+{{#each technical_notes}}
+- {{this}}
+{{/each}}
 {{else}}
 (none)
 {{/if}}
