@@ -18,4 +18,13 @@ function exitAfter(stream, code) {
   stream.write('', () => process.exit(code));
 }
 
-module.exports = { exitAfter };
+/**
+ * The exit of an integrate or a gate that reached no verdict: the host's wrapper ran nothing for a
+ * check twice (`verification.refused`, run-check-refused.cjs). It is none of the runner's other
+ * codes: 2 sends the builder after a red, 3 owes a step first, and 4 asks for the same call again,
+ * which on a finished gate --wait would read the same result forever. Here the step itself runs
+ * again, and nothing goes to a builder.
+ */
+const NO_VERDICT = 5;
+
+module.exports = { NO_VERDICT, exitAfter };

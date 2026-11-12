@@ -14,8 +14,10 @@
  * the build is done, so a red run is the test noticing. An entry no switch can hold (an
  * attribute line, a string, a const item, a switch that did not compile) takes a classic
  * in-place build of its own, and every other language runs its test once in place. When the host
- * names a session of its test wrapper (run-mutate-session.cjs), the other entries whose test goes
- * through that wrapper share one session per test command instead, after every in-place entry.
+ * names a session of its test wrapper (run-mutate-session.cjs), every entry whose test goes through
+ * that wrapper runs in one session of it for the whole batch instead: the control and the switched
+ * runs of the shared build, each entry on a build of its own in its turn, then the other entries,
+ * after every entry that runs in place.
  * Every test runs through the host's `mutate.run` wrapper when it names one, and a red run of a
  * check the host lists reads caught when it printed its finding line (run-mutate-host.cjs).
  *
@@ -37,7 +39,9 @@ const { readBatch } = require('./run-mutate-entries.cjs');
 const { applySwitches, blame, planRust, runsCompiled } = require('./run-mutate-rust.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
 const { reseal, sealOf } = require('./run-mutate-seal.cjs');
-const { runGroup, sessionGroups, sessionOf, unsealedVerdict } = require('./run-mutate-session.cjs');
+const {
+  closeOnce, hostSession, inSession, noVerdict, openOnce, runIn, sessionOf, sessionTests, syncBack, syncBuild, unsealedVerdict,
+} = require('./run-mutate-session.cjs');
 const { commandOf, hostOf } = require('./run-mutate-host.cjs');
 const { leftBehind, settle, snapshot } = require('./run-mutate-left.cjs');
 
@@ -80,18 +84,26 @@ async function signalled(session) {
   return signal ? `the batch stopped on ${signal}, so every entry still to run reads not run` : null;
 }
 
+/** Run entry `e`'s test behind `prefix`: in the session when it serves `e`, null when it serves `e` but reads no verdict now. */
+function runOf(hs, e, prefix, label) {
+  if (!hs.tests.has(e.k)) return lib.runShell(prefix + e.command, hs.session.tree, hs.session.log(label));
+  return noVerdict(hs) ? null : runIn(hs, e, prefix, label);
+}
+
 /**
  * Each distinct test once with every switch off: ok, the failed build's text, or a reason to stop,
  * `killed` when the machine ended the run.
  */
-async function control(session, switched, round, checks) {
-  const tests = [...new Map(switched.map((e) => [e.test, e.command])).entries()];
+async function control(hs, switched, round) {
+  const { session, checks } = hs;
+  const tests = [...new Map(switched.map((e) => [e.test, e])).values()];
   const files = [...new Set(switched.map((e) => e.abs))];
-  for (const [index, [test, command]] of tests.entries()) {
+  for (const [index, e] of tests.entries()) {
     const signal = await signalled(session);
     if (signal) return { signal };
-    const run = lib.runShell(OFF + command, session.tree, session.log(`control-${round}-${index + 1}`));
-    if (run.code === 0 && !run.signal) continue;
+    const run = runOf(hs, e, OFF, `control-${round}-${index + 1}`);
+    if (!run || (run.code === 0 && !run.signal)) continue;
+    const { test } = e;
     const text = readLog(run.log);
     const verdict = verdictOf(run, text, null, { files, test, checks });
     if (verdict.why === 'did not build') return { text };
@@ -109,63 +121,113 @@ async function control(session, switched, round, checks) {
   return { ok: true };
 }
 
-function execute(session, e, prefix, label, checks) {
-  const run = lib.runShell(prefix + e.command, session.tree, session.log(label));
-  return { ...verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks }), code: run.code, log: run.log, signal: run.signal };
+function execute(hs, e, prefix, label) {
+  const run = runOf(hs, e, prefix, label);
+  if (!run) return { caught: null, ...noVerdict(hs) };
+  return { ...verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks }), code: run.code, log: run.log, signal: run.signal };
 }
 
-async function runAll(session, sealed, entries, plans, groups) {
-  const { checks } = groups.host;
-  const verdicts = new Map();
-  let builds = 0;
+/**
+ * The switched Rust entries on one shared build. When the session serves one of them it opens
+ * first, on a whole tree, and gets every path a build changed once per build and back once after.
+ */
+async function runSwitched(hs, entries, plans, state) {
+  const { session, sealed, verdicts } = hs;
   let switched = entries.filter((e) => plans.get(e.k).form === 'switch');
+  const served = () => switched.some((e) => hs.tests.has(e.k));
+  if (served()) {
+    const signal = await signalled(session);
+    if (signal) return { stopped: signal };
+    const opened = openOnce(hs);
+    if (opened.stopped) return opened;
+  }
   let written = new Set();
+  const touched = new Set();
   while (switched.length > 0) {
     written = writeSwitches(session, switched, plans, written);
-    const failed = reseal(session, sealed, [...written], `build-${builds + 1}`);
+    for (const rel of written) touched.add(rel);
+    const failed = reseal(session, sealed, [...written], `build-${state.builds + 1}`);
     if (failed) {
       for (const e of switched) verdicts.set(e.k, unsealedVerdict(failed));
-      if (failed.signal) return { builds, verdicts, stopped: `the reseal of the switched entries ended on ${failed.signal}, so the batch stopped` };
+      if (failed.signal) return { stopped: `the reseal of the switched entries ended on ${failed.signal}, so the batch stopped` };
       switched = [];
       break;
     }
-    builds += 1;
-    const result = await control(session, switched, builds, checks);
+    for (const record of session.seal.paths) touched.add(record.file);
+    const synced = served() ? syncBuild(hs, [...touched], `send-build-${state.builds + 1}`) : {};
+    if (synced.stopped) return synced;
+    // A build every test of which the session serves while it reads no verdict is never run.
+    const idle = noVerdict(hs) && switched.every((e) => hs.tests.has(e.k));
+    const result = await control(hs, switched, state.builds + 1);
+    if (!idle) state.builds += 1;
     if (result.ok) break;
-    if (result.signal) return { builds, verdicts, stopped: result.signal };
-    if (result.stop) return { builds, stopped: result.stop, killed: result.killed };
+    if (result.signal) return { stopped: result.signal };
+    if (result.stop) return { stopped: result.stop, killed: result.killed, bare: true };
     const blamed = new Set(blame(result.text, switched));
     for (const k of blamed) plans.set(k, { form: 'classic', why: 'its switch did not compile' });
     switched = switched.filter((e) => !blamed.has(e.k));
   }
   for (const e of switched) {
     const signal = await signalled(session);
-    if (signal) return { builds, verdicts, stopped: signal };
-    const verdict = execute(session, e, ON(e.k), `switch-${e.k}`, checks);
+    if (signal) return { stopped: signal };
+    const verdict = execute(hs, e, ON(e.k), `switch-${e.k}`);
     verdicts.set(e.k, verdict);
-    if (verdict.signal) return { builds, verdicts, stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
+    if (verdict.signal) return { stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
   for (const rel of written) session.putBack(rel);
+  return syncBack(hs, [...touched]);
+}
+
+/** Every entry on a build or a run of its own: in place, or in the session when it serves the entry. */
+async function runOwn(hs, entries, plans, state) {
+  const { session, sealed, verdicts, checks } = hs;
   for (const e of entries.filter((item) => plans.get(item.k).form === 'classic')) {
+    if (hs.tests.has(e.k)) {
+      const out = await inSession(hs, e, OFF);
+      if (e.rust && out.ran) state.builds += 1;
+      if (out.stopped) return out;
+      continue;
+    }
     const signal = await signalled(session);
-    if (signal) return { builds, verdicts, stopped: signal };
+    if (signal) return { stopped: signal };
     const line = session.original(e.rel).split('\n')[e.n - 1];
     session.write(e.rel, new Map([[e.n, line.slice(0, e.col) + e.replace + line.slice(e.col + e.find.length)]]));
     const failed = reseal(session, sealed, [e.rel], `own-${e.k}`);
-    if (failed && failed.left) return { builds, verdicts, stopped: `the batch stopped, since ${failed.why}` };
-    const verdict = failed ? unsealedVerdict(failed) : execute(session, e, OFF, `own-${e.k}`, checks);
+    if (failed && failed.left) return { stopped: `the batch stopped, since ${failed.why}` };
+    const verdict = failed ? unsealedVerdict(failed) : execute(hs, e, OFF, `own-${e.k}`);
     session.putBack(e.rel);
-    if (e.rust) builds += 1;
+    if (e.rust) state.builds += 1;
     verdicts.set(e.k, verdict);
     const what = failed ? 'reseal' : 'test';
-    if (verdict.signal) return { builds, verdicts, stopped: `the ${what} of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
+    if (verdict.signal) return { stopped: `the ${what} of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
-  const hosting = { session, sealed, hosted: groups.hosted, checks, verdicts, notes: [], sessions: 0, signalled };
-  for (const [index, group] of groups.list.entries()) {
-    const out = await runGroup(hosting, group, index + 1);
-    if (out.stopped) return { builds, verdicts, stopped: out.stopped, sessions: hosting.sessions, notes: hosting.notes };
+  for (const e of entries.filter((item) => plans.get(item.k).form === 'session')) {
+    const out = await inSession(hs, e);
+    if (out.stopped) return out;
   }
-  return { builds, verdicts, sessions: hosting.sessions, notes: hosting.notes };
+  return {};
+}
+
+/**
+ * The switched entries, then every entry on its own; the host's one session closes after the last
+ * entry it serves, on every exit. A stop that comes `bare` leaves every entry with no verdict.
+ */
+async function runAll(session, sealed, entries, plans, groups) {
+  const verdicts = new Map();
+  const hs = hostSession({ session, sealed, hosted: groups.hosted, tests: groups.tests, checks: groups.host.checks, verdicts, signalled });
+  const state = { builds: 0 };
+  let out = {};
+  try {
+    out = await runSwitched(hs, entries, plans, state);
+    if (!out.stopped) out = await runOwn(hs, entries, plans, state);
+  } finally {
+    const closed = closeOnce(hs);
+    if (closed.stopped && !out.stopped) out = closed;
+  }
+  return {
+    builds: state.builds, verdicts: out.bare ? undefined : verdicts, stopped: out.stopped, killed: out.killed,
+    sessions: hs.sessions, notes: hs.notes, served: hs.tests,
+  };
 }
 
 const yamlText = (text) => `"${String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
@@ -186,18 +248,26 @@ function lineOf(row) {
 function report(session, recovered, entries, plans, result) {
   if (!result.verdicts) {
     const again = result.killed ? ['run the same command again'] : [];
-    return { exit: 2, payload: { stopped: result.stopped, builds: result.builds, restored: true }, out: [...recovered, result.stopped, 'every file is restored', ...again] };
+    const notes = result.notes || [];
+    return {
+      exit: 2, payload: { stopped: result.stopped, builds: result.builds, restored: true, ...(notes.length > 0 ? { notes } : {}) },
+      out: [...recovered, result.stopped, ...notes, 'every file is restored', ...again],
+    };
   }
   const rows = entries.map((e) => rowOf(e, plans.get(e.k), result.verdicts.get(e.k)));
   const rust = entries.filter((e) => e.rust);
   const switched = rust.filter((e) => plans.get(e.k).form === 'switch').length;
   const hosted = rows.filter((row) => row.form === 'session');
   const others = entries.length - rust.length - hosted.length;
-  const shared = plural(new Set(hosted.map((row) => row.test)).size, 'session', 'sessions');
+  const served = rust.filter((e) => result.served && result.served.has(e.k)).length;
+  const sharing = [
+    served > 0 ? plural(served, 'Rust entry', 'Rust entries') : '',
+    hosted.length > 0 ? plural(hosted.length, 'other entry', 'other entries') : '',
+  ].filter(Boolean).join(' and ');
   const counted = `${plural(result.builds, 'build', 'builds')} for ${plural(rust.length, 'Rust entry', 'Rust entries')} ` +
     `(${switched} switched, ${rust.length - switched} on a build of their own)` +
     (others > 0 ? `; ${plural(others, 'other entry', 'other entries')} ran a test once in place` : '') +
-    (hosted.length > 0 ? `; ${plural(hosted.length, 'other entry', 'other entries')} shared ${shared} of the host's wrapper` : '');
+    (result.sessions > 0 && sharing ? `; ${sharing} shared ${plural(result.sessions, 'session', 'sessions')} of the host's wrapper` : '');
   const notes = result.notes || [];
   const paste = rows.filter((row) => row.caught !== null)
     .flatMap((row) => [`  - criterion: ${yamlText(row.criterion)}`, `    test: ${yamlText(row.test)}`, `    caught: ${row.caught ? 'yes' : 'no'}`]);
@@ -210,7 +280,7 @@ function report(session, recovered, entries, plans, result) {
     exit: result.stopped ? 2 : 0,
     payload: {
       builds: result.builds, rust: rust.length, switched, entries: rows, paste: file, restored: true, stopped: result.stopped,
-      ...(hosted.length > 0 ? { sessions: result.sessions } : {}), ...(notes.length > 0 ? { notes } : {}),
+      ...(result.sessions > 0 ? { sessions: result.sessions } : {}), ...(notes.length > 0 ? { notes } : {}),
     },
     out,
   };
@@ -234,7 +304,7 @@ async function batch(options) {
   const entries = readBatch(tree, file).map((e) => ({ ...e, command: commandOf(host, tree, e.test) }));
   const hosted = sessionOf(config);
   const plans = planAll(tree, entries, hosted);
-  const groups = { hosted, host, list: sessionGroups(hosted, entries, plans) };
+  const groups = { hosted, host, tests: sessionTests(hosted, entries, plans) };
   // What git calls changed before the first write: the batch file and the review being recorded.
   const before = snapshot(tree);
   const session = openSession(tree);

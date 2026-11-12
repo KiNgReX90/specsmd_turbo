@@ -71,8 +71,11 @@ function patch(root, from = 'effort: xhigh', to = 'effort: high') {
   return file;
 }
 
+/** An invented user folder, so the instructions file the command keeps out is the same on every machine. */
+const HOME = '/acme/home/.claude';
+
 function dry(args) {
-  const result = spawnSync(process.execPath, [CLI, 'run', '--dry', ...args], { encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [CLI, 'run', '--dry', ...args], { encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: HOME } });
   return { code: result.status, out: result.stdout || '', err: result.stderr || '' };
 }
 
@@ -95,7 +98,8 @@ test('each host command runs the installed planner on its pins, the statement on
   const result = dry(['--source', src, '--b', patch(root), '--out', out]);
   const [a, b, codexA] = hostLines(result.out);
   const stdin = `< ${STATEMENT}`;
-  assert.equal(a, 'claude -p --output-format stream-json --verbose --setting-sources project --agent specsmd-inferno-planner ' +
+  assert.equal(a, 'claude -p --output-format stream-json --verbose --setting-sources project ' +
+    `--settings '{"claudeMdExcludes":["${HOME}/CLAUDE.md"]}' --agent specsmd-inferno-planner ` +
     '--model claude-opus-5-5 --effort xhigh --permission-mode acceptEdits --allowed-tools Bash,Read,Write,Edit,Grep,Glob,TodoWrite ' +
     `--permission-prompts none --no-session-persistence > ${path.join(out, 'runs', 'A-claude-1', 'transcript.jsonl')} ${stdin}`);
   assert.match(b, /--effort high /, 'the patched arm runs on the pin its patch sets');

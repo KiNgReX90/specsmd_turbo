@@ -126,10 +126,22 @@ function lineage(tree, record) {
   return [...seen.values()];
 }
 
+/**
+ * The first attempt of a lineage. A dispatch over several completed items joins their histories,
+ * each with a first attempt of its own: the earliest of them is the baseline, so the reading of
+ * the joined history never depends on the order of the ids it was joined from.
+ */
+function firstAttempt(members) {
+  const roots = members.filter((entry) => !(entry.previous || []).length);
+  const sequenced = roots.length > 1 && roots.every((entry) => Number.isInteger((entry.beforeSnapshot || {}).seq));
+  if (sequenced) return roots.reduce((first, entry) => (entry.beforeSnapshot.seq < first.beforeSnapshot.seq ? entry : first));
+  return roots[roots.length - 1] || members[members.length - 1];
+}
+
 /** A record as verification reads it: the first attempt's baseline and every accepted or carried file. */
 function effective(tree, record) {
   const members = lineage(tree, record);
-  const root = [...members].reverse().find((entry) => !(entry.previous || []).length) || members[members.length - 1];
+  const root = firstAttempt(members);
   const claimed = new Set();
   for (const entry of members.filter((member) => member.phase === 'accepted')) {
     for (const file of [...claimedPaths(entry), ...exactPaths(entry.completion.carried || [])]) claimed.add(file);

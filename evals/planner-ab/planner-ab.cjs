@@ -8,7 +8,9 @@
  *   node evals/planner-ab/planner-ab.cjs run --b <source tree | patch> --out <dir>
  *     [--source <src>] [--a <source tree | patch>] [--hosts claude,codex] [--runs 2]
  *     [--consumer <dir>] [--statement <file>] [--timeout-min 90] [--dry]
- *   node evals/planner-ab/planner-ab.cjs count <dir> [--json]
+ *   node evals/planner-ab/planner-ab.cjs build --run <dir>/runs/<run> --out <build dir>
+ *     [--intent <id>] [--model <model>] [--timeout-min 180] [--dry]
+ *   node evals/planner-ab/planner-ab.cjs count <dir | build dir> [--json]
  *
  * Arm A is `--source` as it is (default: this repository's src/), or `--a`. Arm B is `--b`: a
  * second source tree, or a patch made with `git diff` from the repository root or from src/,
@@ -23,10 +25,18 @@
  * items planned and the frontier result, then each arm's mean on each host. It exits 1 when a
  * run could not be counted, 2 on a usage error.
  *
+ * `build` builds the plan one kept Claude run left with the installed orchestrator, headless,
+ * the same command for every arm (build.cjs), and ends with its count: the whole build's wall
+ * time, cost, output tokens and subagents by role, then per work item the builder's rounds,
+ * output tokens and wall time for the first build and each correction, the corrections and the
+ * red integrate steps (count-build.cjs). `count <build dir>` counts a kept build again.
+ * `build --dry` prints every step and writes nothing. A Codex build is not built yet.
+ *
  * The consumer is evals/planner-ab/consumer, an invented gift card shop with its own code,
  * tests, rules and host configs; the statement is evals/planner-ab/statement.md.
  */
 
+const fs = require('node:fs');
 const path = require('node:path');
 
 const { CONSUMER, SRC, STATEMENT } = require('./paths.cjs');
@@ -34,11 +44,15 @@ const { ArmError } = require('./arms.cjs');
 const { HOSTS } = require('./hosts.cjs');
 const { RunError, dryRun, realRun } = require('./run.cjs');
 const { CountError, countRuns, table } = require('./count.cjs');
+const { buildDry, buildReal } = require('./build.cjs');
+const { countBuild, buildTable } = require('./count-build.cjs');
+const { TranscriptError } = require('./count-claude.cjs');
 
 const USAGE = [
   'usage: planner-ab.cjs run --b <source tree | patch> --out <dir> [--source <src>] [--a <source tree | patch>]',
   '         [--hosts claude,codex] [--runs 2] [--consumer <dir>] [--statement <file>] [--timeout-min 90] [--dry]',
-  '       planner-ab.cjs count <dir> [--json]',
+  '       planner-ab.cjs build --run <kept run> --out <dir> [--intent <id>] [--model <model>] [--timeout-min 180] [--dry]',
+  '       planner-ab.cjs count <dir | build dir> [--json]',
 ].join('\n');
 
 class UsageError extends Error {}
@@ -74,6 +88,41 @@ function parseRun(argv) {
   return options;
 }
 
+const BUILD_VALUED = ['--run', '--out', '--intent', '--model', '--timeout-min'];
+
+function parseBuild(argv) {
+  const options = { timeoutMin: 180, dry: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    if (flag === '--dry') {
+      options.dry = true;
+      continue;
+    }
+    if (!BUILD_VALUED.includes(flag)) throw new UsageError(`${flag} is no option of build`);
+    const value = argv[index + 1];
+    if (value === undefined || value.startsWith('--')) throw new UsageError(`${flag} needs a value`);
+    index += 1;
+    if (flag === '--timeout-min') options.timeoutMin = Number(value);
+    else if (flag === '--run' || flag === '--out') options[flag.slice(2)] = path.resolve(value);
+    else options[flag.slice(2)] = value;
+  }
+  if (!options.run) throw new UsageError('--run is required: the folder of the kept planner run whose plan is built');
+  if (!options.out) throw new UsageError('--out is required: the folder the build is kept in');
+  if (!(options.timeoutMin > 0)) throw new UsageError('--timeout-min must be a positive number of minutes');
+  return options;
+}
+
+/** A kept build counted, or the planner runs of an eval folder. */
+function countFolder(dir) {
+  const meta = path.join(dir, 'meta.json');
+  if (!fs.existsSync(path.join(dir, 'ab.json')) && fs.existsSync(meta) && JSON.parse(fs.readFileSync(meta, 'utf8')).kind === 'build') {
+    const result = countBuild(dir);
+    return { result, text: buildTable(result), ok: result.whole.finished && result.exit === 0 };
+  }
+  const result = countRuns(dir);
+  return { result, text: table(result), ok: result.ok };
+}
+
 function main(argv) {
   const [command, ...rest] = argv;
   try {
@@ -88,16 +137,30 @@ function main(argv) {
       process.stdout.write(table(result));
       return result.ok ? 0 : 1;
     }
+    if (command === 'build') {
+      const options = parseBuild(rest);
+      if (options.dry) {
+        process.stdout.write(buildDry(options));
+        return 0;
+      }
+      const counted = countFolder(buildReal(options));
+      process.stdout.write(counted.text);
+      return counted.ok ? 0 : 1;
+    }
     if (command === 'count') {
       const json = rest.includes('--json');
       const dirs = rest.filter((arg) => arg !== '--json');
       if (dirs.length !== 1 || dirs[0].startsWith('--')) throw new UsageError('count takes one folder');
-      const result = countRuns(path.resolve(dirs[0]));
-      process.stdout.write(json ? `${JSON.stringify(result, null, 2)}\n` : table(result));
-      return result.ok ? 0 : 1;
+      const counted = countFolder(path.resolve(dirs[0]));
+      process.stdout.write(json ? `${JSON.stringify(counted.result, null, 2)}\n` : counted.text);
+      return counted.ok ? 0 : 1;
     }
-    throw new UsageError(command ? `${command} is no command: run or count` : 'name a command: run or count');
+    throw new UsageError(command ? `${command} is no command: run, build or count` : 'name a command: run, build or count');
   } catch (error) {
+    if (error instanceof TranscriptError) {
+      process.stderr.write(`${error.message}\n`);
+      return 1;
+    }
     if (![UsageError, ArmError, RunError, CountError].some((kind) => error instanceof kind)) throw error;
     process.stderr.write(`${error.message}\n${USAGE}\n`);
     return 2;

@@ -15,7 +15,8 @@
  *
  * Exit codes: 0 ok, 1 usage, 2 failure (details printed), 3 a step is owed first,
  * 4 gate still running, or queued behind another intent's ticket (gate --wait: call it again),
- * or a slot --take queued behind another holder (take again).
+ * or a slot --take queued behind another holder (take again), 5 no verdict: the host's wrapper ran
+ * nothing for a check of integrate or the gate twice (verification.refused), so the step runs again.
  */
 
 const path = require('path');
@@ -128,7 +129,7 @@ Options
   --by <who>        smoke|windows --accept-intermittent: the role that signs the accept
   --batch <file>    mutate: a JSON or YAML list of {criterion, file, line, find, replace, test}; find occurs once on that line
 
-Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder.`;
+Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder, 5 integrate or gate got no verdict, the host ran nothing twice: run the step again.`;
 
 function required(value, usage) {
   if (!value) throw new RunError(`usage: node run.cjs ${usage}`, 'BAD_ARGS', 1);

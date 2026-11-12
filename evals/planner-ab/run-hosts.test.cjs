@@ -33,7 +33,7 @@ if (host === 'claude') {
   const usage = { input_tokens: 5, cache_read_input_tokens: 0, cache_creation_input_tokens: 100, output_tokens: 40 };
   out({ type: 'assistant', message: { id: 'msg_1', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls src && cat CLAUDE.md' } }], usage }, parent_tool_use_id: null });
   out({ type: 'assistant', message: { id: 'msg_2', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'Triage: intent' }], usage }, parent_tool_use_id: null });
-  out({ type: 'result', subtype: 'success', duration_ms: 1200, session_id: 's' });
+  out({ type: 'result', subtype: 'success', duration_ms: 1200, num_turns: 2, session_id: 's', total_cost_usd: 0.02, usage: { input_tokens: 10, output_tokens: 80 }, modelUsage: { 'claude-opus-5-5': { inputTokens: 10, outputTokens: 80, cacheReadInputTokens: 0, cacheCreationInputTokens: 200, costUSD: 0.02 } } });
 } else {
   const id = '0190aaaa-bbbb-7ccc-8ddd-' + String(Date.now()).slice(-12).padStart(12, '0');
   const now = new Date();
@@ -63,8 +63,9 @@ function standIns() {
   const codexHome = path.join(root, 'codex-home');
   fs.mkdirSync(log);
   fs.mkdirSync(codexHome);
-  const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_LOG: log, CODEX_HOME: codexHome };
-  return { root, env, calls: () => fs.readFileSync(path.join(log, 'calls.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)) };
+  const claudeHome = path.join(root, 'claude-home');
+  const env = { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH}`, FAKE_LOG: log, CODEX_HOME: codexHome, CLAUDE_CONFIG_DIR: claudeHome };
+  return { root, env, claudeHome, calls: () => fs.readFileSync(path.join(log, 'calls.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)) };
 }
 
 const git = (cwd, args) => spawnSync('git', args, { cwd, encoding: 'utf8' }).stdout.trim();
@@ -80,6 +81,8 @@ test('every run plants the consumer, installs the arm, runs its host once and ke
   const statement = fs.readFileSync(STATEMENT, 'utf8').trim();
   for (const call of calls) assert.equal(call.stdin, statement);
   assert.ok(calls[0].args.includes('specsmd-inferno-planner'));
+  const settings = calls[0].args[calls[0].args.indexOf('--settings') + 1];
+  assert.deepEqual(JSON.parse(settings), { claudeMdExcludes: [path.join(hosts.claudeHome, 'CLAUDE.md')] }, 'the user\'s own instructions stay out');
   assert.ok(calls[2].args.includes('--cd'));
   for (const id of ['A-claude-1', 'B-claude-1', 'A-codex-1', 'B-codex-1', 'A-claude-2', 'B-claude-2', 'A-codex-2', 'B-codex-2']) {
     const dir = path.join(out, 'runs', id);
@@ -96,7 +99,7 @@ test('every run plants the consumer, installs the arm, runs its host once and ke
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'frontier.json'), 'utf8')), [], `${id} planned no intent`);
   }
   assert.match(result.stdout, /^\| A codex 1 \| 1 \| 1 \| 3 \| 30 \| /m);
-  assert.match(result.stdout, /^\| B claude 2 \| 2 \| 1 \| 2 \| 80 \| /m);
+  assert.match(result.stdout, /^\| B claude 2 \| 2 \| 1 \| 2 \| 80 \| 0\.02 USD \| /m);
   assert.match(result.stdout, /\| no intent planned \|/);
 
   const again = spawnSync(process.execPath, [CLI, 'run', '--source', SRC, '--b', SRC, '--out', out], { env: hosts.env, encoding: 'utf8' });

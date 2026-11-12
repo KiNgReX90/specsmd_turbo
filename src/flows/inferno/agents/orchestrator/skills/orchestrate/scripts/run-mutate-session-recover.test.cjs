@@ -130,7 +130,7 @@ test("a SIGTERM to the batch while a session runs its first mutant stops it befo
   assert.equal(journalOf(f), null);
 });
 
-test("a SIGTERM held during the last mutant of a session stops the batch before the next session opens", async (t) => {
+test("a SIGTERM held during a mutant stops the batch before the next one, whatever its test, and the one session closes", async (t) => {
   const f = sessionTree(t);
   const run = await held(t, f, "run@1=hold", [THREE[0], { ...THREE[1], test: wrapped(checks("beta = 2")) }]);
   run.child.kill("SIGTERM");
@@ -139,7 +139,7 @@ test("a SIGTERM held during the last mutant of a session stops the batch before 
   assert.equal(await run.done, 2, run.out());
   assert.match(run.out(), /^caught yes \| src\/m\.txt:1 \| AC1$/m);
   assert.match(run.out(), /^no verdict: not run \| src\/m\.txt:2 \| AC2$/m);
-  assert.deepEqual([calls(f, "open").length, calls(f, "close").length], [1, 1], "no second session opens after the signal");
+  assert.deepEqual([calls(f, "open").length, calls(f, "close").length, calls(f, "run").length], [1, 1, 1], "no run starts after the signal");
   assert.equal(readIn(f, "src/m.txt"), LINES);
   assert.equal(journalOf(f), null);
 });

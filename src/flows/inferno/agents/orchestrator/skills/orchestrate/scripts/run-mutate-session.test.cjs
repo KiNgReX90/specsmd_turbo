@@ -5,8 +5,8 @@ const path = require("node:path");
 
 // A host whose tests run through a wrapper that first syncs the tree to another machine and
 // waits there for a slot paid that sync and that wait once per mutant. With `mutate.session`
-// the mutants that share a test command share one session of the wrapper: one open, then per
-// mutant the changed file is sent, the test runs there, and the file is restored and sent back.
+// the mutants whose test goes through the wrapper share one session of it per batch: one open, then
+// per mutant the changed file is sent, its test runs there, and the file is restored and sent back.
 // A fake wrapper (run-mutate-session-fixture.cjs) logs every call and keeps a remote copy, so a
 // test counts the opens and sees which copy each run was judged on.
 
@@ -79,7 +79,7 @@ test("without mutate.session the batch is as today, byte for byte, and each test
   assertWhole(f);
 });
 
-test("a test command the match does not reach runs in place beside the sessions, one session per test command, rows in the order given", (t) => {
+test("a test command the match does not reach runs in place beside the session, which serves two test commands, rows in the order given", (t) => {
   const f = sessionTree(t);
   const other = wrapped(checks("beta = 2"));
   const result = sessionBatch(f, [
@@ -90,9 +90,9 @@ test("a test command the match does not reach runs in place beside the sessions,
   ], { config: outsideConfig(f, CONFIG) });
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /^caught yes \| src\/m\.txt:1 \| AC1\ncaught yes \| src\/m\.txt:2 \| AC2\ncaught yes \| src\/m\.txt:3 \| AC3\ncaught no \| src\/m\.txt:1 \| AC4\n/);
-  assert.match(result.out, /^0 builds for 0 Rust entries \(0 switched, 0 on a build of their own\); 1 other entry ran a test once in place; 3 other entries shared 2 sessions of the host's wrapper$/m);
-  assert.equal(count(f, "open"), 2);
-  assert.equal(count(f, "close"), 2);
+  assert.match(result.out, /^0 builds for 0 Rust entries \(0 switched, 0 on a build of their own\); 1 other entry ran a test once in place; 3 other entries shared 1 session of the host's wrapper$/m);
+  assert.equal(count(f, "open"), 1);
+  assert.equal(count(f, "close"), 1);
   assert.deepEqual(calls(f, "run").map((run) => run.held["src/m.txt"]), [HELD[0], HELD[2], mutated(1, "1", "5")]);
   assertWhole(f);
 });
@@ -134,21 +134,20 @@ test("a send of the mutant that fails reads no verdict for it, the file still go
   assertWhole(f);
 });
 
-test("a send back that fails stops its group: the mutant it held keeps its verdict, no later one is judged on that copy, and the next session runs", (t) => {
+test("a send back that fails stops the session: the mutant it held keeps its verdict, no later one is judged on that copy, whatever its test", (t) => {
   const f = sessionTree(t);
   const result = sessionBatch(f, [...THREE, { criterion: "AC4", file: "src/m.txt", line: 2, find: "2", replace: "6", test: wrapped(checks("beta = 2")) }],
     { config: outsideConfig(f, CONFIG), act: "send@2=fail", json: true });
   assert.equal(result.code, 0, result.out + result.err);
   const rows = result.payload.entries;
   assert.equal(rows[0].caught, true);
-  for (const row of rows.slice(1, 3)) {
+  for (const row of rows.slice(1)) {
     assert.equal(row.caught, null);
-    assert.match(row.why, /^the send of src\/m\.txt back into the session failed \(exit 3 -> \S+\.log\), so the session may still hold the mutant of entry 1 and its group stopped$/);
+    assert.match(row.why, /^the send of src\/m\.txt back into the session failed \(exit 3 -> \S+\.log\), so the session may still hold the mutant of entry 1 and the rest of the session stopped$/);
   }
-  assert.equal(rows[3].caught, true, "the next session opens a whole copy of its own");
-  assert.deepEqual(calls(f, "run").map((run) => run.held["src/m.txt"]), [HELD[0], mutated(2, "2", "6")]);
-  assert.equal(count(f, "open"), 2);
-  assert.equal(count(f, "close"), 2);
+  assert.deepEqual(calls(f, "run").map((run) => run.held["src/m.txt"]), [HELD[0]]);
+  assert.equal(count(f, "open"), 1);
+  assert.equal(count(f, "close"), 1);
   assertWhole(f);
 });
 
@@ -158,9 +157,9 @@ test("a close that fails is told after the rows, and the verdicts stand", (t) =>
   assert.equal(result.code, 0, result.out + result.err);
   assert.deepEqual(result.payload.entries.map((e) => e.caught), [true, false, true]);
   assert.equal(result.payload.notes.length, 1);
-  assert.match(result.payload.notes[0], /^the close of the session for node remote\.cjs direct .* failed \(exit 3 -> \S+\.log\); close it on the host$/);
+  assert.match(result.payload.notes[0], /^the close of the host session failed \(exit 3 -> \S+\.log\); close it on the host$/);
   const human = sessionBatch(f, THREE, { config: outsideConfig(f, CONFIG), act: "close@2=fail" });
-  assert.match(human.out, /shared 1 session of the host's wrapper\nthe close of the session for .* failed \(exit 3 -> \S+\.log\); close it on the host\npaste under mutants:/);
+  assert.match(human.out, /shared 1 session of the host's wrapper\nthe close of the host session failed \(exit 3 -> \S+\.log\); close it on the host\npaste under mutants:/);
   assertWhole(f);
 });
 
@@ -211,22 +210,27 @@ test("the session's open, send and close run bare, and only the test it runs goe
   assertWhole(f);
 });
 
-// A Rust entry never goes into a session, but its test may reach cargo through the wrapper: it is
-// switched then, so the batch builds once. One whose wrapped command only reads the source is built in place.
+// A Rust entry whose test reaches cargo through the wrapper is switched, so the batch builds once, in
+// the session. One whose wrapped command only reads the source is a mutant of its own there.
 const READS_SOURCE = "'use strict';\nconst ok = require('fs').readFileSync('src/lib.rs', 'utf8').includes(process.argv[2]);\n" +
   "console.log(ok ? '# pass 1' : '# fail 1');\nprocess.exit(ok ? 0 : 1);\n";
 
-test("a Rust entry whose test reaches cargo through the wrapper is switched, and one whose wrapped test reads the source is built in place", (t) => {
+test("a Rust entry whose test reaches cargo through the wrapper is switched, and one whose wrapped test reads the source runs on its own, both in the session", (t) => {
   const lib = "pub fn alpha() -> usize { ONE + TEN }\npub fn beta() -> usize { 2 }\n";
   const f = sessionTree(t, { "src/lib.rs": lib, "reads.cjs": READS_SOURCE });
   const result = sessionBatch(f, [
     { criterion: "AC1", file: "src/lib.rs", line: 1, find: "ONE", replace: "TWO", test: wrapped(fakeTest(f, "alpha", "ONE + TEN")) },
     { criterion: "AC2", file: "src/lib.rs", line: 2, find: "2", replace: "8", test: wrapped("node reads.cjs '{ 2 }'") },
-  ], { config: outsideConfig(f, CONFIG), json: true });
+  ], { config: outsideConfig(f, CONFIG), json: true, env: { FAKE_WATCH: "src/lib.rs" } });
   assert.equal(result.code, 0, result.out + result.err);
   assert.deepEqual(result.payload.entries.map((e) => [e.form, e.caught]), [["switch", true], ["classic", true]]);
   assert.equal(result.payload.switched, 1);
   assert.equal(result.payload.entries[1].own, "its test starts no cargo run, so it reads the source in place");
+  assert.deepEqual([calls(f, "open").length, calls(f, "close").length, calls(f, "direct").length], [1, 1, 0]);
+  const held = calls(f, "run").map((run) => run.held["src/lib.rs"]);
+  assert.equal(held.length, 3, "the control, the switched run, and the source reader");
+  assert.ok(held.slice(0, 2).every((text) => text.includes("INFERNO_MUTANT")), "the control and the switched run read the switches the build sent");
+  assert.equal(held[2], lib.replace("{ 2 }", "{ 8 }"), "the source reader reads its own mutant alone");
   assert.equal(readIn(f, "src/lib.rs"), lib);
   assert.equal(git(f.tree, "status", "--porcelain"), "");
 });

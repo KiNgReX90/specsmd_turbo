@@ -23,6 +23,13 @@ const said = (id, block, use, parent = null) => ({
   session_id: 'session-1',
   uuid: `${id}-${block.type}-${block.id || ''}`,
 });
+const model = (input, create, read, output, thinking, cost) => ({
+  inputTokens: input, outputTokens: output, cacheReadInputTokens: read, cacheCreationInputTokens: create, thinkingTokens: thinking, costUSD: cost,
+});
+const result = ({ turns, ms, use, thinking, models, cost }) => ({
+  type: 'result', subtype: 'success', is_error: false, duration_ms: ms, duration_api_ms: ms, num_turns: turns, result: 'Triage: intent',
+  session_id: 'session-1', total_cost_usd: cost, usage: { ...use, output_tokens_details: { thinking_tokens: thinking } }, modelUsage: models,
+});
 const bash = (id, command) => ({ type: 'tool_use', id, name: 'Bash', input: { command, description: 'look' } });
 const back = (id) => ({
   type: 'user',
@@ -51,18 +58,72 @@ const RUN = [
   back('toolu_3'),
   { type: 'system', subtype: 'compact_boundary', session_id: 'session-1', compact_metadata: { trigger: 'auto', pre_tokens: 160000 } },
   said('msg_04', { type: 'text', text: 'a side thread' }, usage(1, 0, 10, 7), 'toolu_9'),
-  { type: 'result', subtype: 'success', is_error: false, duration_ms: 61000, duration_api_ms: 50000, num_turns: 4, result: 'Triage: intent', session_id: 'session-1', total_cost_usd: 1.25, usage: usage(16, 2150, 4110, 217) },
+  result({ turns: 4, ms: 61000, use: usage(16, 2150, 4110, 2170), thinking: 1500, models: { 'claude-opus-5-5': model(16, 2150, 4110, 2170, 1500, 1.25) }, cost: 1.25 }),
 ];
 
-test('each API message counts once over its lines, each usage field at its largest', () => {
+test('each API message counts once over its lines as one model round', () => {
   const count = countClaude(transcript(RUN));
   assert.equal(count.rounds, 4);
   assert.equal(count.subagentRounds, 1);
-  assert.equal(count.output, 140 + 40 + 30 + 7);
-  assert.equal(count.input, 10 + 3 + 2 + 1);
-  assert.equal(count.cacheRead, 0 + 2000 + 2100 + 10);
-  assert.equal(count.cacheCreation, 2000 + 100 + 50 + 0);
   assert.deepEqual(count.models, ['claude-opus-5-5']);
+});
+
+test('the run\'s totals come from its result line, never from the start value each assistant line carries', () => {
+  const count = countClaude(transcript(RUN));
+  assert.notEqual(count.output, 140 + 40 + 30 + 7, 'the lines carry the value each message started with');
+  assert.equal(count.output, 2170);
+  assert.equal(count.thinking, 1500);
+  assert.equal(count.costUsd, 1.25);
+  assert.equal(count.turns, 4);
+  assert.equal(count.input, 16);
+  assert.equal(count.cacheRead, 4110);
+  assert.equal(count.cacheCreation, 2150);
+  assert.equal(count.resultLines, 1);
+});
+
+test('with several result lines the last one\'s modelUsage is the session total, summed over its models and never over the lines', () => {
+  const total = { 'claude-opus-5-5': model(500, 9000, 90000, 7000, 3000, 4.5), 'claude-haiku-5-5': model(20, 100, 1000, 300, 0, 0.06) };
+  const lines = [
+    ...RUN.slice(0, -1),
+    // A build writes one result line per turn, all of them when the session ends, each with the session's running total.
+    result({ turns: 20, ms: 700000, use: usage(40, 6000, 80000, 5000), thinking: 100, models: total, cost: 4.55 }),
+    result({ turns: 3, ms: 9000, use: usage(4, 600, 8000, 900), thinking: 50, models: total, cost: 4.55 }),
+  ];
+  const count = countClaude(transcript(lines));
+  assert.equal(count.output, 7300);
+  assert.equal(count.thinking, 3000);
+  assert.equal(count.costUsd, 4.55, 'the cost is the line\'s own total_cost_usd, not the sum of the models\' costUSD');
+  assert.equal(count.input, 520);
+  assert.equal(count.cacheRead, 91000);
+  assert.equal(count.cacheCreation, 9100);
+  assert.equal(count.turns, 23);
+  assert.equal(count.hostWallMs, 709000);
+  assert.equal(count.resultLines, 2);
+  assert.deepEqual(count.models, ['claude-haiku-5-5', 'claude-opus-5-5']);
+});
+
+test('a result line that names no total_cost_usd has no cost, never a zero', () => {
+  const [last] = RUN.slice(-1);
+  const { total_cost_usd: dropped, ...rest } = last;
+  assert.equal(dropped, 1.25);
+  assert.equal(countClaude(transcript([...RUN.slice(0, -1), rest])).costUsd, null);
+});
+
+test('a single result line with no modelUsage gives its own usage as the run\'s total', () => {
+  const lines = [...RUN.slice(0, -1), { type: 'result', subtype: 'success', duration_ms: 1000, num_turns: 2, total_cost_usd: 0.5, usage: { ...usage(1, 2, 3, 444), output_tokens_details: { thinking_tokens: 40 } } }];
+  const count = countClaude(transcript(lines));
+  assert.equal(count.output, 444);
+  assert.equal(count.thinking, 40);
+  assert.equal(count.costUsd, 0.5);
+});
+
+test('a result line that names no total fails loudly, never counted as zero', () => {
+  const bare = { type: 'result', subtype: 'success', duration_ms: 1000 };
+  assert.throws(() => countClaude(transcript([...RUN.slice(0, -1), bare])), /line 14: .*result line carries no usage/);
+  const turn = { ...bare, usage: usage(1, 0, 0, 5) };
+  assert.throws(() => countClaude(transcript([...RUN.slice(0, -1), turn, turn])), /line 15: .*no modelUsage/);
+  const broken = result({ turns: 1, ms: 1, use: usage(1, 0, 0, 5), thinking: 0, models: { 'claude-opus-5-5': { inputTokens: 1 } }, cost: 0 });
+  assert.throws(() => countClaude(transcript([...RUN.slice(0, -1), broken])), /line 14: .*claude-opus-5-5 .*outputTokens/);
 });
 
 test('a Bash call counts once by its id, and its subcommands are counted as well', () => {
@@ -79,11 +140,13 @@ test('the host wall time and the compactions are read from their own lines', () 
   assert.equal(count.finished, true);
 });
 
-test('a run that never wrote its result line has no host wall time and is not finished', () => {
+test('a run that never wrote its result line is unfinished and has no totals, never a zero', () => {
   const count = countClaude(transcript(RUN.slice(0, -1)));
   assert.equal(count.hostWallMs, null);
   assert.equal(count.finished, false);
   assert.equal(count.rounds, 4);
+  for (const key of ['output', 'thinking', 'costUsd', 'turns', 'input', 'cacheRead', 'cacheCreation']) assert.equal(count[key], null, key);
+  assert.equal(count.resultLines, 0);
 });
 
 test('a line the counter does not know fails loudly with its line number', () => {

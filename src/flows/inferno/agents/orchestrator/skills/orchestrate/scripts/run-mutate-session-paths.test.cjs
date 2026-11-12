@@ -50,7 +50,7 @@ function sealedSession(t) {
   return Object.assign(f, beside(f.tree));
 }
 
-test("a reseal that fails in a session reads no verdict and sends nothing, and the next session opens on a whole tree", (t) => {
+test("a reseal that fails in a session reads no verdict and sends nothing, and the next mutant runs on a whole copy", (t) => {
   const f = sealedSession(t);
   const config = outsideConfig(f, sealConfig(`node seal.cjs ${VALUE} --fail`, { extra: sessionBlock() }));
   const result = sessionBatch(f, [
@@ -64,7 +64,7 @@ test("a reseal that fails in a session reads no verdict and sends nothing, and t
   assert.equal(rows[1].caught, false);
   assert.deepEqual(calls(f, "send").map((send) => send.file), ["src/plain.txt", "src/plain.txt"]);
   assert.equal(calls(f, "run").length, 1);
-  assert.equal(calls(f, "open").length, 2);
+  assert.equal(calls(f, "open").length, 1);
   assertSealed(f);
 });
 
@@ -118,7 +118,7 @@ test("a seal that cannot go back before a session opens stops the batch with no 
 
 const LIB = "pub fn alpha() -> usize { ONE + TEN }\npub fn beta() -> usize { 2 }\n";
 
-test("Rust entries keep their shared build with the key set, even when their test goes through the wrapper", (t) => {
+test("Rust entries keep their shared build with the key set, and its runs join the batch's one session when their test goes through the wrapper", (t) => {
   const f = sessionTree(t, { "src/lib.rs": LIB });
   const shared = wrapped(checks("alpha = 1"));
   const result = sessionBatch(f, [
@@ -131,8 +131,9 @@ test("Rust entries keep their shared build with the key set, even when their tes
   assert.equal(builds(f), 1, "one build for the switched Rust entries");
   assert.equal(result.payload.builds, 1);
   assert.deepEqual(result.payload.entries.map((e) => [e.form, e.caught]), [["switch", true], ["switch", false], ["session", true], ["session", false]]);
-  assert.equal(calls(f, "direct").length, 4, "two control runs and two switched runs, each through the wrapper as given");
-  assert.equal(calls(f, "open").length, 1);
+  assert.equal(calls(f, "direct").length, 0);
+  assert.equal(calls(f, "run").length, 6, "two control runs and two switched runs, then the two other entries, all in the session");
+  assert.deepEqual([calls(f, "open").length, calls(f, "close").length], [1, 1]);
   assert.equal(git(f.tree, "status", "--porcelain"), "");
 });
 

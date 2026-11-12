@@ -72,12 +72,13 @@ function countRun(dir, ab) {
     const frontierFile = path.join(dir, 'frontier.json');
     const plan = planOf(path.join(dir, 'tree'));
     if (count.compactions) notes.push(`${count.compactions} compaction${count.compactions === 1 ? '' : 's'}`);
-    if (!count.finished) notes.push('transcript has no end');
+    if (!count.finished) notes.push(count.output === null ? 'unfinished: the stream has no result line, so it has no totals' : 'transcript has no end');
     Object.assign(row, {
       rounds: count.rounds,
       shellCalls: count.shellCalls,
       shellSubcommands: count.shellSubcommands,
       output: count.output,
+      costUsd: Number.isFinite(count.costUsd) ? count.costUsd : null,
       wallMs: Number.isFinite(meta.wallMs) ? meta.wallMs : count.hostWallMs,
       items: plan.reduce((sum, intent) => sum + intent.items, 0),
       intents: plan,
@@ -91,7 +92,7 @@ function countRun(dir, ab) {
   return row;
 }
 
-const NUMBERS = ['rounds', 'shellCalls', 'shellSubcommands', 'output', 'wallMs', 'items'];
+const NUMBERS = ['rounds', 'shellCalls', 'shellSubcommands', 'output', 'costUsd', 'wallMs', 'items'];
 
 function meansOf(runs) {
   const means = [];
@@ -102,9 +103,12 @@ function meansOf(runs) {
       if (all.length === 0) continue;
       const counted = all.filter((run) => !run.error);
       const mean = { arm, host, counted: counted.length };
+      // A run with no total for a number (an unfinished one, a host that names no cost) is left
+      // out of that number's mean, never counted as zero.
       for (const key of NUMBERS) {
-        const value = counted.length ? counted.reduce((sum, run) => sum + run[key], 0) / counted.length : 0;
-        mean[key] = Math.round(value * 10) / 10;
+        const values = counted.map((run) => run[key]).filter((value) => Number.isFinite(value));
+        const places = key === 'costUsd' ? 100 : 10;
+        mean[key] = values.length ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * places) / places : null;
       }
       mean.clean = counted.filter((run) => run.frontier === 'clean').length;
       means.push(mean);
@@ -135,7 +139,9 @@ function size(value) {
   return `${Math.round(value)}`;
 }
 
-const minutes = (ms) => `${(ms / 60000).toFixed(1)} min`;
+const minutes = (ms) => (Number.isFinite(ms) ? `${(ms / 60000).toFixed(1)} min` : '-');
+const tokens = (value) => (Number.isFinite(value) ? size(value) : 'no total');
+const money = (value) => (Number.isFinite(value) ? `${value.toFixed(2)} USD` : '-');
 const cells = (values) => `| ${values.join(' | ')} |`;
 
 function table(result) {
@@ -144,20 +150,20 @@ function table(result) {
     `Planner A/B: consumer ${String(ab.consumerSha || 'unknown').slice(0, 12)}, statement ${String(ab.statementSha || 'unknown').slice(0, 12)}, ${ab.runs} runs per arm`,
     ...Object.entries(ab.arms || {}).map(([arm, info]) => `${arm}: ${info.label}`),
     '',
-    cells(['Run', 'Model rounds', 'Shell calls', 'Subcommands', 'Output tokens', 'Wall', 'Items', 'Frontier', 'Notes']),
-    cells(Array(9).fill('---')),
+    cells(['Run', 'Model rounds', 'Shell calls', 'Subcommands', 'Output tokens', 'Cost', 'Wall', 'Items', 'Frontier', 'Notes']),
+    cells(Array(10).fill('---')),
   ];
   for (const run of result.runs) {
     const name = `${run.arm} ${run.host} ${run.run}`;
-    if (run.error) out.push(cells([name, `error: ${run.error}`, '', '', '', '', '', '', run.notes]));
+    if (run.error) out.push(cells([name, `error: ${run.error}`, '', '', '', '', '', '', '', run.notes]));
     else {
-      out.push(cells([name, run.rounds, run.shellCalls, run.shellSubcommands, size(run.output), minutes(run.wallMs), run.items,
-        run.frontier, run.notes]));
+      out.push(cells([name, run.rounds, run.shellCalls, run.shellSubcommands, tokens(run.output), money(run.costUsd), minutes(run.wallMs),
+        run.items, run.frontier, run.notes]));
     }
   }
   for (const mean of result.means) {
-    out.push(cells([`${mean.arm} ${mean.host} mean`, mean.rounds, mean.shellCalls, mean.shellSubcommands, size(mean.output),
-      minutes(mean.wallMs), mean.items, `${mean.clean} of ${mean.counted} clean`, '']));
+    out.push(cells([`${mean.arm} ${mean.host} mean`, mean.rounds, mean.shellCalls, mean.shellSubcommands, tokens(mean.output),
+      money(mean.costUsd), minutes(mean.wallMs), mean.items, `${mean.clean} of ${mean.counted} clean`, '']));
   }
   return `${out.join('\n')}\n`;
 }
