@@ -6,9 +6,10 @@
  * The review binds the whole tree by content (`proofs.scopeHash` with no scope), which leaves
  * out `.specs-inferno/`: a ledger commit, the review file itself and an archive move keep it
  * current, and any code change voids it, except a change to a `review.outside` kb that the
- * base synced and the intent never touched (outsideHash). The gate checks it after its fold, so it never proves
- * a tree the reviewer did not read, and green checks it before every merge, which is the one
- * call both hosts and a hand merge make.
+ * base synced and the intent never touched (outsideHash); `["**"]` binds it to the files the
+ * intent changed. The gate checks it after its fold, so it never proves a tree the reviewer did
+ * not read, and green checks it before every merge, which is the one call both hosts and a hand
+ * merge make.
  */
 
 const fs = require('fs');
@@ -24,6 +25,7 @@ const { itemProofs } = require('./run-mutant-coverage.cjs');
 const { intentReviewCall, scanCall } = require('./run-call.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { reviewOutside } = require('./run-config-gates.cjs');
+const { foldBound, isLedger, ownFiles } = require('./run-intent-fold.cjs');
 const { reviewPath } = require('./run-review-file.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
 const { deferredItems } = require('./state-defer.cjs');
@@ -93,39 +95,40 @@ function parseFor(tree, rel, intentId, recorded) {
 }
 
 /**
- * The tree hash that leaves out the kb the base synced, or null when `review.outside` is unset.
+ * The tree hashes that leave out the kb the base synced, or null when `review.outside` is unset.
  * A kb path is left out only while the branch holds the base's version of it: one that differs
  * from the merge base of the base or of origin's base, or is dirty, is the intent's own edit and
- * stays in, so a doubtful path voids the review rather than keeps it.
+ * stays in, so a doubtful path voids the review rather than keeps it. `["**"]` makes every path
+ * kb, which binds the review to the files the intent changed. The first hash is the one recorded;
+ * the second names the intent's ledger files too, as reviews recorded before that was fixed hashed them.
  */
-function outsideHash(tree, config) {
+function outsideHashes(tree, config) {
   const globs = reviewOutside(config || {});
   if (globs.length === 0) return null;
   const base = resolveBase(config, null, tree);
   // A base that is the tree's own branch moves with it, so no diff tells its kb edits from a sync.
-  if (base === lib.currentBranch(tree)) return null;
-  const refs = [base];
-  if (lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}`], { tolerate: true })) refs.push(`origin/${base}`);
-  const reads = [
-    ['diff', '--name-only', '--no-renames', '-z', 'HEAD'], ['ls-files', '--others', '--exclude-standard', '-z'],
-    ...refs.map((ref) => ['diff', '--name-only', '--no-renames', '-z', `${ref}...HEAD`]),
-  ];
-  const own = new Set();
-  for (const args of reads) {
-    const out = lib.git(tree, args, { tolerate: true });
-    if (out === null) return null; // a base it cannot diff leaves the kb in: the review is judged by the whole tree
-    for (const file of out.split('\0').filter(Boolean)) own.add(file);
-  }
+  const own = ownFiles(tree, base);
+  if (own === null) return null; // a base it cannot diff leaves the kb in: the review is judged by the whole tree
   // The intent's own kb paths are named too: a page it deleted is in no hash of the files that exist.
-  const kb = [...own].filter((file) => lib.matchesAny(file, globs)).sort();
+  // A ledger path is in no tree hash, so it is named in none either: the review's own record would void it.
+  const named = [...own].filter((file) => lib.matchesAny(file, globs)).sort();
   const hash = proofs.scopeHash(tree, null, { skip: (file) => lib.matchesAny(file, globs) && !own.has(file) });
-  return createHash('sha256').update(JSON.stringify([hash, kb])).digest('hex');
+  const digest = (names) => createHash('sha256').update(JSON.stringify([hash, names])).digest('hex');
+  return [digest(named.filter((file) => !isLedger(file))), digest(named)];
+}
+
+/** The hash `run.cjs review` records as tree_outside, or null when `review.outside` is unset. */
+function outsideHash(tree, config) {
+  const hashes = outsideHashes(tree, config);
+  return hashes && hashes[0];
 }
 
 /** The review reads the tree as it stands, whole or with the kb the base synced left out. */
 function reviewCurrent(tree, config, review) {
   if (review.tree === proofs.scopeHash(tree)) return true;
-  return typeof review.tree_outside === 'string' && review.tree_outside === outsideHash(tree, config);
+  if (typeof review.tree_outside !== 'string') return false;
+  const hashes = outsideHashes(tree, config);
+  return Boolean(hashes) && hashes.includes(review.tree_outside);
 }
 
 /**
@@ -169,7 +172,11 @@ function gateRefusal(tree, config, intentId, before, shown) {
   const out = [...shown, ...state.owed.map((reason) => `intent review owed: ${reason}`)];
   const moved = lib.git(tree, ['rev-parse', 'HEAD']) !== before;
   if (moved) {
-    out.push(`the fold moved the tree from ${lib.git(tree, ['rev-parse', '--short', before])}; the reviewer reads the base delta from there`);
+    const from = `the fold moved the tree from ${lib.git(tree, ['rev-parse', '--short', before])}`;
+    // Under review.outside the delta dispatch names what of the fold the review binds (run-intent-fold.cjs).
+    const fold = foldBound(tree, config, before, resolveBase(config, null, tree));
+    if (!fold) out.push(`${from}; the reviewer reads the base delta from there`);
+    else out.push(fold.bound.length ? `${from} and changed what the review binds: ${fold.bound.join(' ')}` : `${from} and changed no file the review binds`);
   }
   out.push(`run ${intentReviewCall(tree)} first, then gate again`);
   return { exit: 3, payload: { ok: false, tree, owed: ['review'], reasons: state.owed, folded: moved }, out };
