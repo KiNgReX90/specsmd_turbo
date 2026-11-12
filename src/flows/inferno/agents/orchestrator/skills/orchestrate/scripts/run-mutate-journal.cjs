@@ -331,4 +331,4 @@ function openSession(tree) {
   };
 }
 
-module.exports = { afterRecovery, holdSignals, journalPath, openSession, owner, recoverInterrupted, restore, sha };
+module.exports = { afterRecovery, alive, holdSignals, journalPath, openSession, owner, recoverInterrupted, restore, sha };

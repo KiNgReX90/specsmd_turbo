@@ -151,14 +151,15 @@ function readProof(proof) {
 /**
  * Only a successful command on unchanged inputs can mint a proof. `force` reruns a command
  * whose proof still holds, and revokes that proof first so a run that never finishes cannot
- * leave the old success standing.
+ * leave the old success standing. `shell` runs the command as lib.runShell does, which a host
+ * session replaces (run-check-session.cjs); the proof is keyed the same either way.
  */
-function runCommand(tree, config, selected, command, log, force = false) {
+function runCommand(tree, config, selected, command, log, force = false, shell = lib.runShell) {
   const proof = commandProof(tree, config, selected, command);
   const previous = readProof(proof);
   if (previous && !force) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
   fs.rmSync(proof.file, { force: true });
-  const run = lib.runShell(command, tree, log);
+  const run = shell(command, tree, log);
   const moved = run.code === 0 && commandProof(tree, lib.readConfig(tree, selected), selected, command).file !== proof.file;
   if (run.code !== 0 || moved) {
     if (moved) fs.appendFileSync(log, '\nverification inputs changed while the command ran. Run it again.\n');
