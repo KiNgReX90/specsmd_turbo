@@ -60,6 +60,11 @@ verification:
   finalize_scopes:                # optional: a listed command runs only when the diff since the merge base touches a matching path, an unlisted command always runs
     "cargo test --workspace": ["src-tauri/**", "Cargo.*"]
     "npm run test:e2e": ["src/**", "src-tauri/**", "e2e/**", "package.json", "package-lock.json", "playwright.config.*"]
+  # session:                      # optional: for checks that run through a wrapper which syncs the tree to another machine and waits there for a slot; the commands of one integrate, or of one gate's finalize list, that match reaches run back to back in one session of the wrapper, so the tree is synced and the slot taken once, not once per command, and each keeps its own proof as without the key; a command match does not reach runs here as before; the session opens at the first such command that runs, so skipped and still-green checks open nothing; each command runs in the tree under bash with INFERNO_TREE and INFERNO_SESSION, an empty directory of this session outside the tree for the wrapper's own state; a session that does not open fails every command it would run, and none of them runs; a --config file inherits it
+  #   match: '^tools/remote-test\.sh \S+ '    # a regex in single quotes that marks a command as going through the wrapper when it matches at its start; the rest of the command is the check the session runs
+  #   open: "tools/remote-test.sh open"        # copies the whole tree as it stands into a fresh session and takes the slot
+  #   run: "tools/remote-test.sh run"          # runs INFERNO_TEST, the check, in the session; its output and exit code are the check's
+  #   close: "tools/remote-test.sh close"      # gives the session and the slot up; it runs on every exit once open started, and in the next integrate or gate in the tree when a kill skipped it, so it exits 0 when nothing is open
   # Lanes, optional: gate --detach starts each lane whose scope the diff since the merge base touched, gate --wait waits
   # for it, and green owes the smoke lane while it is in scope. A --config file inherits each lane it does not set.
   # Exit contract of a lane command: 0 green, 10 product red, 11 instrument red, and any other code is instrument red.
@@ -114,7 +119,8 @@ wiring:                           # optional: per kind (command, table or event)
 #     send: "tools/remote-test.sh send"        # puts INFERNO_FILE, a path relative to the tree, into the session as the tree holds it now, and deletes it there when the tree no longer does
 #     run: "tools/remote-test.sh run"          # runs INFERNO_TEST in the session; its output and exit code are the test's
 #     close: "tools/remote-test.sh close"      # gives the session and the slot up; it runs on every exit once open started, and in the next step that reads the tree when a kill skipped it, so it exits 0 when nothing is open
-#   run: "tools/remote-test.sh {tree} {test}"   # optional: the wrapper every mutant test runs through, so a reviewer writes the bare test and the host decides the machine; {tree} and {test} each go in once as one single-quoted shell word, a test that already starts with the wrapper's own words runs as written, session.match reads the wrapped command, and the wrapper passes INFERNO_MUTANT on to the test
+#   run: "tools/remote-test.sh {tree} {test}"   # optional: the wrapper every mutant test runs through, so a reviewer writes the bare test and the host decides the machine; {tree} and {test} each go in once as one single-quoted shell word, a test that already starts with the wrapper's own words runs as written, session.match reads the wrapped command, and the wrapper passes INFERNO_MUTANT on to the test; {test} is one shell word, so the wrapper runs its last argument under a shell, and a wrapper that runs its arguments as a command line takes the key as "<wrapper> {tree} bash -c {test}"
+#   wrapped: '^(?:\w+=\S* +)*"?(?:~|/home/dev/acme-shop)/tools/remote-test\.sh"? '   # optional, beside run: a regex in single quotes of the other ways recorded tests already spell the wrapper (an environment prefix, its absolute path or its path under ~, in double quotes); a test it matches at its start, as the reviewer wrote it, runs as written beside one that starts with the wrapper's own words; without it only those words count
 #   checks:                       # optional: the host's checks (a contract script, a lint), which print no test runner's summary; a red run of a listed check that printed its finding line reads caught, and one that printed no such line (a wrapper error) reads no verdict
 #     - match: '^npm run check:wire\b'     # a regex in single quotes that marks a test command, as the reviewer wrote it, as this check
 #       finding: '^WIRE MISMATCH: '         # a regex in single quotes of the line the check prints on a finding
@@ -132,6 +138,9 @@ worktree:
 dispatch:
   constraints:                    # optional: lines pasted VERBATIM into every builder and tester dispatch (machine limits, wrappers, what may not run in parallel)
     - "Heavy commands (builds, test suites, cargo) run bare; a machine-wide guardrail wraps them. Exit 137 or 143 is the cap: run once more, then report."
+  # tools:                        # optional: the tools the roles and checks use, each with the version every machine of the host installs; `run.cjs tools` proposes the tools that fit the stack, `--write <id,id>` writes the accepted ones here and in verification.integrate and dispatch.constraints, and it prints a line for each listed tool this machine lacks
+  #   shellcheck: "0.10.0"
+  #   ast-grep: "0.39.0"
 
 # Delivery mode: how the orchestrator integrates and closes an intent.
 #   auto-close    (default) commit each item on the intent branch, then merge

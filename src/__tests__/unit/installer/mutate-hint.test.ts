@@ -6,7 +6,7 @@ const { mutateLine } = require('../../../lib/install/host-config');
 
 // The plan names the `mutate` keys in prose only, and a host that reinstalled left them out with
 // nothing to tell it so. The install now says it in one line when the host's config has no
-// `mutate` block: `mutate.sealed`, `mutate.session`, `mutate.run` and `mutate.checks`.
+// `mutate` block: `mutate.sealed`, `mutate.session`, `mutate.run`, `mutate.wrapped` and `mutate.checks`.
 describe.sequential('install mutate hint', { timeout: 30_000 }, () => {
   let box: ReturnType<typeof openSandbox>;
   let logs: string[];
@@ -24,7 +24,7 @@ describe.sequential('install mutate hint', { timeout: 30_000 }, () => {
 
   const hinted = () => logs.filter((line) => line.includes('mutate.sealed'));
 
-  it('prints one line naming mutate.sealed, mutate.session, mutate.run and mutate.checks for a host config with no mutate block', async () => {
+  it('prints one line naming mutate.sealed, mutate.session, mutate.run, mutate.wrapped and mutate.checks for a host config with no mutate block', async () => {
     write('.specs-inferno/config.yaml', 'mode: production\n');
 
     await installFlow('inferno', ['claude']);
@@ -34,8 +34,9 @@ describe.sequential('install mutate hint', { timeout: 30_000 }, () => {
     expect(hinted()[0]).toContain('mutate.session');
     expect(hinted()[0]).toMatch(/mutate\.sealed: the files your tests check against a seal/);
     expect(hinted()[0]).toMatch(/mutate\.run: the wrapper every mutant test runs through, with \{tree\} and \{test\}/);
+    expect(hinted()[0]).toMatch(/mutate\.wrapped: a regex of the other ways your recorded tests already spell that wrapper, so mutate\.run never wraps one twice/);
     expect(hinted()[0]).toMatch(/mutate\.checks: your checks that print no test runner's summary, each with the line it prints on a finding/);
-    expect(hinted()[0]).toMatch(/All four are in \.specsmd\/inferno\/agents\/orchestrator\/config\.example\.yaml\.$/);
+    expect(hinted()[0]).toMatch(/All five are in \.specsmd\/inferno\/agents\/orchestrator\/config\.example\.yaml\.$/);
   });
 
   it('prints the line for a host with no config at all', async () => {

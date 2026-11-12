@@ -20,6 +20,7 @@ const { lanesSince, startLanesOnly, startOneLane } = require('./run-lanes-only.c
 const supersede = require('./run-supersede.cjs');
 const { foldBlockers, refuseDirt } = require('./run-dirt.cjs');
 const { withMarks } = require('./run-gate-marks.cjs');
+const { closeLeft, inSession } = require('./run-check-session.cjs');
 
 const { RunError } = lib;
 
@@ -27,9 +28,19 @@ function treeOf(options) {
   return options.tree || lib.repoRoot(options.cwd);
 }
 
-/** Refuse a dirty tree, after restoring a mutant a killed `mutate` left; returns that restore's lines. */
+/**
+ * Refuse a dirty tree, after closing a host session a killed integrate or gate left open
+ * (run-check-session.cjs) and restoring a mutant a killed `mutate` left; returns what those did.
+ */
 function refuseDirty(tree) {
-  const restored = recoverInterrupted(tree);
+  const left = closeLeft(tree);
+  let restored;
+  try {
+    restored = [...left, ...recoverInterrupted(tree)];
+  } catch (error) {
+    if (error instanceof RunError) error.message = afterRecovery(left, error.message);
+    throw error;
+  }
   const dirty = lib.dirtyPaths(tree);
   if (dirty.length > 0) {
     throw new RunError(afterRecovery(restored,
@@ -151,27 +162,34 @@ function gateNow(options) {
   const dir = path.join(lib.cacheDir(tree), branch, `gate-${lib.stamp()}`);
 
   const results = [];
-  // A failed command is red on its first failure: no rerun mints a proof.
-  for (const [index, command] of commands.entries()) {
-    const result = proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), Boolean(options.force));
-    results.push(result);
-    if (result.result === 'fail') {
-      const out = [...shown, ...describe(results)];
-      if (result.moved) out.push('the code changed while the gate ran. Re-run the gate.');
-      return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results }, out };
+  // A failed command is red on its first failure: no rerun mints a proof. With
+  // verification.session the commands it reaches share one host session, closed there too.
+  const { value: failed, notes } = inSession(tree, config, dir, (shell) => {
+    for (const [index, command] of commands.entries()) {
+      const result = proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), Boolean(options.force), shell);
+      results.push(result);
+      if (result.result === 'fail') return result;
     }
+    return null;
+  });
+  // The close's lines ride in the result too, so a detached gate's --wait prints them.
+  const noted = notes.length > 0 ? { notes } : {};
+  if (failed) {
+    const out = [...shown, ...describe(results), ...notes];
+    if (failed.moved) out.push('the code changed while the gate ran. Re-run the gate.');
+    return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, ...noted }, out };
   }
 
   if (proofs.scopeHash(tree) !== started ||
       JSON.stringify(lib.readConfig(tree, options.config).verification) !== definition) {
-    const out = [...shown, ...describe(results), 'the code changed while the gate ran. Re-run the gate.'];
-    return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, moved: true }, out };
+    const out = [...shown, ...describe(results), ...notes, 'the code changed while the gate ran. Re-run the gate.'];
+    return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, moved: true, ...noted }, out };
   }
 
   return {
     exit: 0,
-    payload: { ok: true, tree, branch, folded: folded.length > 0, results, hash: codeHash },
-    out: [...shown, ...describe(results), `green ${codeHash}`],
+    payload: { ok: true, tree, branch, folded: folded.length > 0, results, hash: codeHash, ...noted },
+    out: [...shown, ...describe(results), ...notes, `green ${codeHash}`],
   };
 }
 
@@ -246,7 +264,7 @@ function gateDetach(options) {
 function finished(job) {
   const result = jobs.readJson(job.result);
   if (result && Array.isArray(result.results)) {
-    const out = describe(result.results);
+    const out = [...describe(result.results), ...(Array.isArray(result.notes) ? result.notes : [])];
     if (result.ok) out.push(`green ${result.hash}`);
     return { exit: result.ok ? 0 : 2, payload: result, out };
   }

@@ -30,6 +30,7 @@ const { owedReviews } = require('./run-review.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { landingSince, sinceCommit } = require('./run-since.cjs');
 const dirt = require('./run-dirt.cjs');
+const { closeLeft, inSession } = require('./run-check-session.cjs');
 
 const { RunError } = lib;
 
@@ -168,6 +169,18 @@ function checksRead(config, runs = () => true, e2e = Boolean(impact.section(conf
  */
 function integrate(options) {
   const tree = gate.treeOf(options);
+  // A host session a killed integrate or gate left open is closed first (run-check-session.cjs).
+  const left = closeLeft(tree);
+  try {
+    const result = integrateTree(tree, options);
+    return { ...result, out: [...left, ...result.out] };
+  } catch (error) {
+    if (error instanceof RunError) error.message = afterRecovery(left, error.message);
+    throw error;
+  }
+}
+
+function integrateTree(tree, options) {
   const { initial, landing } = readLanding(tree, options);
   const configured = checksRead(initial);
   const restored = recoverInterrupted(tree, { keepLive: (file) => !landing(file) && !dirt.reads(configured, file) });
@@ -261,18 +274,25 @@ function checkAndLand(tree, options, initial) {
   // first failure cost one orchestrator round trip and one builder correction per failing
   // command: an item that broke check, definitions and cargo paid three integrate runs and
   // three followups to learn what one run could have said.
-  for (const [index, command] of commands.entries()) {
-    if (!runs(command)) {
-      results.push({ command, result: 'skip' });
-      continue;
+  // With verification.session the commands it reaches run in one session of the host's wrapper,
+  // closed before anything is reported; the browser step runs only after every command passed.
+  const checked = inSession(tree, config, dir, (shell) => {
+    for (const [index, command] of commands.entries()) {
+      if (!runs(command)) {
+        results.push({ command, result: 'skip' });
+        continue;
+      }
+      results.push(proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), false, shell));
     }
-    results.push(proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`)));
-  }
+    if (results.some((entry) => entry.result === 'fail') || !(selection && selection.command)) return null;
+    return proofs.runCommand(tree, config, options.config, selection.command, path.join(dir, 'e2e.log'), false, shell);
+  });
   const failures = results.filter((entry) => entry.result === 'fail');
   if (failures.length > 0) {
     return red([
       ...lead,
       ...gate.describe(results),
+      ...checked.notes,
       `${failures.length} of ${commands.length} integrate command(s) failed; send every failure above to the builder in one correction.`,
     ]);
   }
@@ -284,14 +304,14 @@ function checkAndLand(tree, options, initial) {
     out.push(...gate.describe(results));
   }
 
-  if (selection && selection.command) {
-    const result = proofs.runCommand(tree, config, options.config, selection.command, path.join(dir, 'e2e.log'));
-    results.push(result);
+  if (checked.value) {
+    results.push(checked.value);
     out.push(...gate.describe(results.slice(-1)));
-    if (result.result === 'fail') return red(out);
+    if (checked.value.result === 'fail') return red([...out, ...checked.notes]);
   } else if (selection) {
     out.push(`SKIP e2e (${selection.reason})`);
   }
+  out.push(...checked.notes);
 
   if (proofs.scopeHash(tree, read) !== started ||
       JSON.stringify(lib.readConfig(tree, options.config).verification) !== definition) {
