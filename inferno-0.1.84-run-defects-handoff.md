@@ -74,3 +74,29 @@ The reviewer counts the lines itself. Its definition says "named by the criterio
 ### How the host gets through
 
 It cannot repair this item inside the flow, so its orchestrator records the four criteria in the intent's notes. From now on its orchestrators hand every first item review the criteria as a numbered list in the dispatch text.
+
+## 3. A criterion that can only be proven after the merge blocks the merge
+
+Met 2026-11-12 on the app repo, at the ship of an intent that installs a timer on each machine.
+
+### What happened
+
+- Two success criteria of the brief each have a half that only exists after the landing. The timer runs the new script from the default branch's checkout, so "the timer reads active on each machine" and "a dry pass after the timer's first real pass removes nothing" can be read only once the code is on that branch. The brief says so itself, under its steps for after the landing.
+- The intent reviewer mapped both halves as `proof: external` with an evidence path, which is what its definition offers for a proof a person or another machine gives.
+- `mergeOwed` (`S/run-intent-owed.cjs:212-228`) lists every external criterion whose evidence file is missing as `evidence owed`, and `green` (`S/run-gate.cjs:332-346`) then exits 3. The ship stops on a proof that only the ship makes possible.
+- `criteriaOf` (`S/run-intent-review-file.cjs:28-40`) knows three proofs: `test`, `code` and `external`. None says "after the merge".
+
+### Why it matters
+
+Any intent that ends in a step run from the default branch meets this: an installed service, a scheduled job, a deploy, a migration read back on the live copy. The honest map of such a criterion has no spelling, so the host either leaves the half out of the review or writes a file that is not evidence yet.
+
+### What the flow should do
+
+- A fourth proof, such as `after_ship`, with `where` holding the command and `evidence` the path. `mergeOwed` does not wait for it. The ship prints one line per entry as its last output, `owed after ship: <command> -> <path>`, and the state entry of the shipped intent keeps the list until each path exists.
+- The planner marks it at plan time: a success criterion whose instrument runs after the landing says so in the brief, and plan-lint refuses an `after_ship` proof for a criterion the brief does not mark. That keeps the kind from becoming a way around an evidence file that could have been made before the merge.
+- A read command for what is still owed, so a later session finds it: the intents list prints the shipped intents with an open `after_ship` path.
+- Tests: a review with one `after_ship` entry and no file is green and the ship prints the owed line. The same entry spelled `external` is refused as today. An `after_ship` entry for a criterion the brief does not mark is refused.
+
+### How the host gets through
+
+It writes the evidence file before the merge with a first line that says the proof is owed after the landing and names the command, lands, runs the command, and replaces the file's text with the real output in a commit on the default branch.
