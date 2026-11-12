@@ -6,7 +6,8 @@
  * The same contract as the item review in run-review-file.cjs: only the keys below, every
  * entry complete, and the verdict held to what the file found. On top of that, every finding
  * names the work item that owns its fix, every scan line gets an answer, and a criterion only
- * a person or another machine can prove names the evidence the merge waits for. Its entries set
+ * a person or another machine can prove names the evidence the merge waits for, and one only the
+ * landing makes provable names the path the ship lists as owed (run-after-ship.cjs). Its entries set
  * aside, `withdrawn` mutants and `deferred` findings, are held in run-review-aside.cjs.
  */
 
@@ -16,27 +17,47 @@ const {
 const { gapRefusal, mutantGaps } = require('./run-mutant-coverage.cjs');
 const { SAME_INTENT, deltaProblem } = require('./run-review-delta.cjs');
 const { answered, deferredOf, withdrawnOf } = require('./run-review-aside.cjs');
+const { briefMarks, criterionId } = require('./run-after-ship.cjs');
 
 const INTENT_KEYS = ['verdict', 'criteria', 'findings', 'scanner', 'mutants', 'pins', 'withdrawn', 'deferred'];
 /** An intent review also records the hash that leaves out the kb the base synced (review.outside). */
 const INTENT_RECORDED = [...RECORDED_KEYS, 'tree_outside'];
 const CRITERION_KEYS = ['criterion', 'proof', 'where'];
-const PROOFS = ['test', 'code', 'external'];
+const PROOFS = ['test', 'code', 'external', 'after_ship'];
+/** The proofs that name an evidence path: external, which the merge waits for, and after_ship, which the ship lists as owed. */
+const EVIDENCED = ['external', 'after_ship'];
 const SCANNER_KEYS = ['id', 'answer', 'reason'];
 const ANSWERS = ['confirmed', 'struck'];
 
-function criteriaOf(rel, doc) {
+/** `marks` are the success criteria the brief beside the review marks (after ship) (run-after-ship.cjs). */
+function criteriaOf(rel, doc, marks) {
   return entries(rel, doc, 'criteria', CRITERION_KEYS, ['evidence']).map((entry, index) => {
     const at = `criteria entry ${index + 1}`;
-    if (!PROOFS.includes(entry.proof)) throw bad(rel, `${at} proof must be test, code or external`);
+    if (!PROOFS.includes(entry.proof)) throw bad(rel, `${at} proof must be test, code, external or after_ship`);
     if (entry.proof === 'external' && entry.evidence === undefined) {
       throw bad(rel, `${at} is proven externally and names no evidence path; the merge waits for that path`);
     }
-    if (entry.proof !== 'external' && entry.evidence !== undefined) {
-      throw bad(rel, `${at} carries evidence, which is for an external proof only`);
+    if (entry.proof === 'after_ship') afterShipProblem(rel, at, entry, marks);
+    if (!EVIDENCED.includes(entry.proof) && entry.evidence !== undefined) {
+      throw bad(rel, `${at} carries evidence, which is for an external proof only, or an after_ship one`);
     }
     return entry.evidence === undefined ? entry : { ...entry, evidence: relativePath(rel, entry.evidence, at) };
   });
+}
+
+/** An after_ship proof names its evidence path and a criterion the plan marked, never one the merge could wait for. */
+function afterShipProblem(rel, at, entry, marks) {
+  if (entry.evidence === undefined) {
+    throw bad(rel, `${at} is proven after the ship and names no evidence path; the ship lists that path as owed`);
+  }
+  const id = criterionId(entry.criterion);
+  if (id === null) {
+    throw bad(rel, `${at} is proven after_ship and names no SC-<n> of the brief; start its criterion with the id the brief marks (after ship)`);
+  }
+  if (!marks.has(id)) {
+    throw bad(rel, `${at} is proven after_ship for ${id}, which the brief does not mark (after ship): only a criterion ` +
+      'whose instrument the plan said runs after the landing waits past the merge, so prove this one as test, code or external');
+  }
 }
 
 /** Every scan line answered once, and no answer to a line the scan does not hold. */
@@ -72,7 +93,7 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
     throw bad(rel, `unknown key ${key}: an intent review holds ${INTENT_KEYS.join(', ')} only`);
   }
   if (doc.verdict !== 'clean' && doc.verdict !== 'fix') throw bad(rel, 'verdict must be clean or fix');
-  const criteria = criteriaOf(rel, doc);
+  const criteria = criteriaOf(rel, doc, briefMarks(tree, rel));
   const { findings, mutants, survivors } = verdictParts(rel, doc, [...FINDING_KEYS, 'owner']);
   for (const finding of findings) {
     if (!items.includes(finding.owner)) {

@@ -21,6 +21,10 @@
  * A lane red accepted as intermittent goes into the ship commit as one `exception:` line per lane,
  * written here so nobody writes it by hand; those lines on the base are the ledger a later accept
  * reads (run-lanes-intermittent.cjs), and ship refuses an accept the base already holds twice.
+ *
+ * A proof only the landing makes possible, an `after_ship` criterion of the intent review whose
+ * evidence path is missing, never stops the merge: the ship prints one `owed after ship:` line per
+ * entry as its last output, and `run.cjs select` lists it until the path exists (run-after-ship.cjs).
  */
 
 const fs = require('fs');
@@ -35,6 +39,7 @@ const { shipExceptions } = require('./run-lanes-intermittent.cjs');
 const { linkedTree, loadOwnership, stopOwnedProcesses } = require('./run-processes.cjs');
 const gates = require('./run-config-gates.cjs');
 const { asideLines } = require('./run-review-aside.cjs');
+const { owedLine } = require('./run-after-ship.cjs');
 
 const { mergeSlot } = gates;
 const slot = require('./run-slot.cjs');
@@ -109,6 +114,8 @@ function ship(intentId, options) {
 
   // The findings the user put after the release, read before the teardown removes the tree.
   const deferred = asideLines(tree, intentId);
+  // The proofs only the landing makes possible: the ship's last lines, and select's until each path exists.
+  const after = (proof.payload.after_ship || []).map(owedLine);
 
   // The lane reds accepted as intermittent, refused before anything merges once the base holds two accepts of a test.
   const exceptions = shipExceptions(primary, base, intermittentHeld(tree, lib.readConfig(tree, options.config), options.config));
@@ -137,12 +144,16 @@ function ship(intentId, options) {
     // (6) Teardown, safe because step 5 proved the work is reachable from the base branch.
     cleanup = removeWorktree(primary, tree, branch, out, left, options, gates.shipCleanup(config));
   } catch (error) {
-    out.push(`${error.message}`, `left to do: ${left.join('; ')}`);
-    return { exit: 2, payload: { ok: false, step: 'after-merge', sha, left }, out };
+    out.push(`${error.message}`, `left to do: ${left.join('; ')}`, ...after);
+    return { exit: 2, payload: { ok: false, step: 'after-merge', sha, left, after_ship: proof.payload.after_ship || [] }, out };
   }
 
-  out.push(...deferred, 'shipped');
-  return { exit: 0, payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup, exceptions }, out };
+  out.push(...deferred, 'shipped', ...after);
+  return {
+    exit: 0,
+    payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup, exceptions, after_ship: proof.payload.after_ship || [] },
+    out,
+  };
 }
 
 /**
