@@ -206,6 +206,12 @@ test("each call builder prints its exact line from its own flags, the site's dec
       [["/w", "a-one"], `run.cjs integrate --item a-one --tree /w${tail}`],
       [["/w", "a-one", "beta"], `run.cjs integrate --item a-one --tree /w --intent beta --config ${CODEX}`],
     ],
+    integrateAgainCall: [
+      [["/w", ["a-one"]], `run.cjs integrate --item a-one --tree /w${tail}`],
+      [["/w", ["a-one", "a-two"]], `run.cjs integrate --items a-one,a-two --tree /w${tail}`],
+      [["/w", []], `run.cjs integrate --tree /w${tail}`],
+      [["/w", ["a-one"], "HEAD~1"], `run.cjs integrate --item a-one --since HEAD~1 --tree /w${tail}`],
+    ],
     itemRecordCall: [
       [["/w", "a-one"], `run.cjs review --item a-one --reviewer <agent-id> --tree /w${tail}`],
       [["/w", "a-one", "beta"], `run.cjs review --item a-one --reviewer <agent-id> --tree /w --intent beta --config ${CODEX}`],

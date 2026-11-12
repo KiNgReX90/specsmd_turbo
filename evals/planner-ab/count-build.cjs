@@ -40,7 +40,7 @@ const { claudeHome } = require('./hosts.cjs');
 const ROLES = [['reviewer-quality', 'quality reviewer'], ['reviewer', 'reviewer'], ['builder', 'builder'], ['scanner', 'scanner']];
 const INTEGRATE = /run\.cjs['"]?\s+integrate(?:\s|$)/;
 /** What integrate prints when it comes back red (run-integrate.cjs), read only when no exit code says it. */
-const RED_LINES = /integrate command\(s\) failed|the code changed while integrate ran|refusing to integrate|^ERROR \[/m;
+const FAILED_STEP_LINES = /integrate command\(s\) failed|the code changed while integrate ran|refusing to integrate|^ERROR \[/m;
 
 function roleOf(type) {
   const name = String(type || '');
@@ -209,7 +209,7 @@ function integrateSteps(command, result) {
       const code = /^Exit code (\d+)/.exec(output);
       exit = result.isError ? (code ? Number(code[1]) : 1) : 0;
     }
-    if (exit === null) exit = RED_LINES.test(output) ? 2 : 0;
+    if (exit === null) exit = FAILED_STEP_LINES.test(output) ? 2 : 0;
     steps.push({ items, red: exit !== 0, exit });
   });
   return steps;

@@ -41,7 +41,7 @@ const result = (turns, output) => ({
 });
 
 const INTEGRATE_RED = 'S=.specsmd/scripts; node $S/run.cjs integrate --item refund-share --tree ../w; echo "EXIT $?"; node $S/run.cjs frontier refunds; echo "EXIT $?"';
-const RED_OUT = 'FAIL 1s npm test -> .specs-inferno/logs/0.log\n1 of 1 integrate command(s) failed; send every failure above to the builder in one correction.\nEXIT 2\nready refund-email\nEXIT 0';
+const FAILED_STEP_OUT = 'FAIL 1s npm test -> .specs-inferno/logs/0.log\n1 of 1 integrate command(s) failed; send every failure above to the builder in one correction.\nEXIT 2\nready refund-email\nEXIT 0';
 
 function stream({ finished = true } = {}) {
   const lines = [
@@ -58,7 +58,7 @@ function stream({ finished = true } = {}) {
     said('o4', [use('t-send', 'SendMessage', { to: 'agent1', summary: 'Correction', message: CORRECTION })]),
     back('t-send', '{"success":true}'),
     said('o5', [use('t-red', 'Bash', { command: INTEGRATE_RED })]),
-    back('t-red', RED_OUT),
+    back('t-red', FAILED_STEP_OUT),
     said('o6', [use('t-green', 'Bash', { command: 'node .specsmd/scripts/run.cjs integrate --item refund-share' })]),
     back('t-green', 'PASS 1s npm test\ncompleted refund-share at abc1234'),
     said('o7', [use('t-both', 'Bash', { command: 'node .specsmd/scripts/run.cjs integrate --items refund-email,refund-share' })]),
