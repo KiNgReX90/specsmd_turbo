@@ -27,9 +27,11 @@
  * A survivor may take another test: the reviewer writes its entry again with only `test` changed,
  * and the record runs it with that test and keeps the first one as `was`.
  *
- * An item's record runs its mutants beside both lens files it signs. On a tree that holds a
- * sibling's uncommitted work nothing runs: an item review is recorded with its proposals owed,
- * and the intent review, which records on a clean tree only, runs them. What
+ * An item's record runs its mutants beside both lens files it signs and beside another item's
+ * pending review files, which are no test's input and no mutant's target (run-mutant-runs.cjs).
+ * On a tree that holds any other uncommitted work, a sibling's code included, or with another
+ * mutate alive, nothing runs: an item review is recorded with its proposals owed, and the intent
+ * review, which records on a clean tree only, runs them. What
  * the runner writes into a pending file is written again on every record, so a record that was
  * cut off records the same way the next time.
  */

@@ -12,15 +12,19 @@ function hostConfig(root, flowKey) {
 
 /**
  * The line the install prints for an INFERNO host whose config has no `mutate` block, or null.
- * The two keys change what a mutant's test sees, and nothing else tells a host they exist: a host
- * without `mutate.sealed` reseals inside its test command, and that seal stays changed afterwards.
+ * The keys change where and how a mutant's test runs and how its red reads, and nothing else tells
+ * a host they exist: a host without `mutate.sealed` reseals inside its test command, and that seal
+ * stays changed afterwards; a check's red without `mutate.checks` never reads caught.
  */
 function mutateLine(root, flowKey) {
     if (flowKey !== 'inferno' || Object.prototype.hasOwnProperty.call(hostConfig(root, flowKey), 'mutate')) return null;
     return '.specs-inferno/config.yaml has no mutate block. mutate.sealed: the files your tests check against a seal, ' +
         'with the command that reseals them, so a mutant in one is resealed before its test and put back after. ' +
         'mutate.session: the wrapper your tests run through on another machine, so a batch of mutants shares one session. ' +
-        'Both are in .specsmd/inferno/agents/orchestrator/config.example.yaml.';
+        'mutate.run: the wrapper every mutant test runs through, with {tree} and {test}, so a reviewer writes the bare test. ' +
+        'mutate.checks: your checks that print no test runner\'s summary, each with the line it prints on a finding, ' +
+        'so a red run that printed it reads caught. ' +
+        'All four are in .specsmd/inferno/agents/orchestrator/config.example.yaml.';
 }
 
 /**
