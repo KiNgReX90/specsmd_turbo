@@ -34,6 +34,7 @@ const { dirtyFiles } = require('./run-dirt.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
 const ladder = require('./run-review-ladder.cjs');
 const lens = require('./run-review-quality.cjs');
+const { changedSince, dispatchClaims, goneFiles, goneLine, itemFiles, rangeLines } = require('./run-review-span.cjs');
 
 const { builtBy, hostActor, nextActor, nextLine } = ladder;
 
@@ -130,37 +131,6 @@ function itemProof(tree, context) {
   return proofAtHead(tree, context.intent.id, context.item.id, context.config);
 }
 
-/** The most paths a range line lists itself. */
-const LISTED_PATHS = 40;
-
-/**
- * The range line of one lens's dispatch, and the file that lists its paths when the line does not.
- * Up to LISTED_PATHS paths stay on the line, as always. A longer list would make the reviewer's
- * brief hundreds of paths long, so it goes one per line into the run's cache, outside the tree,
- * and the line gives the count, with a `paths-file` line under it naming that file.
- */
-function rangeLines(tree, context, which, range, read) {
-  if (read.length <= LISTED_PATHS) return { file: null, lines: [`  range ${range} paths ${read.join(' ') || '(the whole range)'}`] };
-  const file = path.join(lib.cacheDir(tree), 'review-paths', context.intent.id, context.item.id, `${which}.txt`);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${read.join('\n')}\n`);
-  return { file, lines: [`  range ${range} paths ${read.length}, one per line in the paths-file below`, `  paths-file ${file}`] };
-}
-
-/** The paths a delta reads that left the tree since the previous review: deleted, or renamed away. */
-const goneFiles = (tree, read) => read.filter((file) => !fs.existsSync(path.join(tree, file)));
-
-/**
- * The line that tells a delta's reviewer which paths are gone, so it reads their removal in the
- * range, never looks for them, and leaves them out of the files it lists, which hold only files
- * the tree holds.
- */
-function goneLine(gone) {
-  if (gone.length === 0) return [];
-  const it = gone.length > 1 ? 'them' : 'it';
-  return [`  gone ${gone.join(' ')}: not in the tree since the previous review, so read the removal in the range and leave ${it} out of files`];
-}
-
 /**
  * The dispatch of one lens and its payload. A lens with a file on record reads `span`, the fix,
  * and names that file as its previous one. A first review reads the proof's own diff when one is
@@ -177,7 +147,7 @@ function lensDispatch(tree, context, which, span, proof) {
   const own = named && !previous && proof.paths.length > 0;
   const whole = quality && !previous && Boolean(item.review);
   const start = own ? proof.from : whole ? forkPoint(tree, config, intent) : span.from;
-  const read = own ? proof.paths : whole ? context.editable : span.paths;
+  const read = own ? proof.paths : whole ? itemFiles(context) : span.paths;
   const range = `${short(tree, start)}..${short(tree, 'HEAD')}`;
   const spec = path.relative(tree, lib.readItemSpec(tree, intent.id, item.id).file);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
@@ -314,7 +284,7 @@ function review(options) {
   const dispatched = lens.dispatchedLenses(tree, intent.id, item.id);
   if (isPending(qualityRel) && !dispatched.includes('quality')) dispatched.push('quality');
   const context = {
-    intent, item, config, rel, qualityRel, editable, isPending, dispatched,
+    intent, item, config, rel, qualityRel, editable, claimed: dispatchClaims(tree, intent.id, item.id), isPending, dispatched,
     reviewer: options.reviewer, qualityReviewer: options.quality_reviewer, configFile: options.config,
   };
 
@@ -326,7 +296,8 @@ function review(options) {
   // another item's reviewer may be running a mutant beside it. A dead run's mutant goes back
   // first, so it never reads as this item's work. A pending review binds every file it lists.
   const listed = pending ? pendingFiles(tree, context) : current ? current.files : [];
-  const mine = (file) => lib.ownedBy(file, editable) || listed.includes(file);
+  const owned = itemFiles(context);
+  const mine = (file) => lib.ownedBy(file, owned) || listed.includes(file);
   const restored = recoverInterrupted(tree, { keepLive: (file) => !mine(file) });
   const dirty = dirtyFiles(tree).filter(mine);
   if (dirty.length > 0) {
@@ -335,7 +306,7 @@ function review(options) {
         'commit the item first, then run this command again.'), 'DIRTY');
   }
 
-  const result = step(tree, context, { ledger, editable, exists, pending, current });
+  const result = step(tree, context, { ledger, exists, pending, current });
   const done = (value) => ({ ...value, out: [...restored, ...value.out] });
   return result && typeof result.then === 'function' ? result.then(done) : done(result);
 }
@@ -344,14 +315,13 @@ function review(options) {
  * Dispatch line when no review exists, record when one is written, the verdict when current, and
  * the settle of a minor-only fix whose correction stayed inside the files that review lists.
  */
-function step(tree, context, { ledger, editable, exists, pending, current }) {
+function step(tree, context, { ledger, exists, pending, current }) {
   const { intent, item, config } = context;
-  if (!exists) return owed(tree, context, 'no review yet', forkPoint(tree, config, intent), editable);
+  if (!exists) return owed(tree, context, 'no review yet', forkPoint(tree, config, intent), itemFiles(context));
   if (pending) return record(tree, context, ledger);
-  // A fix review is owed again by any commit on the item's own paths, not only on the files
-  // it listed: the usual answer to "this criterion has no test" is a new file.
-  const since = (from) => lib.gitLines(tree, ['diff', '--name-only', `${from}..HEAD`], { tolerate: true })
-    .filter((file) => lib.ownedBy(file, editable) || current.files.includes(file));
+  // A fix review is owed again by any commit on the item's own paths, a granted one too, not only
+  // on the files it listed: the usual answer to "this criterion has no test" is a new file.
+  const since = (from) => changedSince(tree, context, from, current.files);
   const holds = Boolean(item.review) && itemReviewCurrent(tree, { intent, item, files: current.files, config });
   if (item.review === 'settled') {
     if (holds) return settledResult(tree, context, `review ${item.id} settled for the current files (settled at ${short(tree, item.review_commit)})`);
