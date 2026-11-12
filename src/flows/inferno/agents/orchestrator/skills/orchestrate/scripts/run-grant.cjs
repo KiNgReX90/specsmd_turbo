@@ -12,13 +12,16 @@
  *
  * A grant goes on a dispatch that is still running. An accepted dispatch froze its ownership with
  * its result, and a superseded one answers for nothing, so both are refused. A correction starts
- * with a fresh dispatch-log, which carries every grant of the attempts before it.
+ * with a fresh dispatch-log, which carries every grant of the attempts before it. A path another
+ * item's dispatch owns while it runs, or changed beside this item, is refused before the builder
+ * builds on it, by the check verify-item runs later.
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { chainDispatchCall } = require('./run-call.cjs');
 
 const { RunError } = lib;
 
@@ -97,6 +100,31 @@ function grantable(dispatch, tree, id) {
   return { record, named };
 }
 
+/**
+ * Refuse a path another item's dispatch stands in the way of, by the check verify-item runs once
+ * the item claims it (run-peers.cjs): an open dispatch that owns it, or one that changed it while
+ * it ran beside this item. The refusal names that dispatch and the two ways on.
+ */
+function checkBeside(dispatch, tree, record, file) {
+  // Loaded here: run-attribute.cjs loads this file for the paths a dispatch was granted.
+  const { openDispatches } = require('./run-attribute.cjs');
+  const { besideAt } = require('./run-peers.cjs');
+  const own = dispatch.effective(tree, record);
+  const peers = dispatch.currentRecords(tree).filter((entry) => entry.phase === 'accepted');
+  const now = { ...dispatch.captureSnapshot(tree), seq: Infinity };
+  const found = besideAt(tree, own, file, peers, openDispatches(tree, own), now);
+  if (!found) return;
+  const other = found.record;
+  const theirs = dispatch.itemsOf(other);
+  const mine = dispatch.itemsOf(record);
+  const first = own.before.seq <= dispatch.effective(tree, other).before.seq;
+  const chain = [...new Set(first ? [...mine, ...theirs] : [...theirs, ...mine])];
+  throw dispatch.refuse(`grant ${file}: dispatch ${other.dispatchId} for ${theirs.join(', ')} ` +
+    `${found.open ? 'owns it and is still open' : 'changed it beside this item'}, so verify-item would refuse ${mine.join(', ')} ` +
+    `at it. Build both as one chain with ${chainDispatchCall(tree, record.assignment.intent, chain)}, or let the change wait ` +
+    `until ${theirs.join(', ')} is integrated and dispatch ${mine.join(', ')} again`);
+}
+
 /** The step itself: append one path to a running dispatch's signed ownership. A path it already owns is no change. */
 function grant(id, options) {
   if (!id || !options.path) throw new RunError(`usage: node run.cjs ${USAGE}`, 'BAD_ARGS', 1);
@@ -106,6 +134,7 @@ function grant(id, options) {
   const file = treePath(tree, options);
   const { record, named } = grantable(dispatch, tree, id);
   const owned = lib.ownedBy(file, record.assignment.ownership.editable, tree);
+  if (!owned) checkBeside(dispatch, tree, record, file);
   const entry = { path: file, signer: SIGNER, dispatch: id, granted_at: new Date().toISOString() };
   const saved = owned ? record : dispatch.saveDispatch(tree, {
     ...record,
