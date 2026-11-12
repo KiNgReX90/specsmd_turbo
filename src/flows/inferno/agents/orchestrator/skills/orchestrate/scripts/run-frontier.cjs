@@ -29,6 +29,7 @@ const { waitFloorRefusal } = require('./run-codex-wait.cjs');
 const { RunError } = require('./run-error.cjs');
 const { reviewPath } = require('./run-review-file.cjs');
 const { frontierFindings } = require('./run-plan-lint.cjs');
+const { editableReader, pathErrors } = require('./run-manifest-paths.cjs');
 
 /**
  * The hour the proof rule landed. Every ledger written before it carries completed items and
@@ -145,27 +146,19 @@ function startedItems(tree, intentId, items) {
   return new Set(items.filter(started).map((item) => item.id));
 }
 
-/** The contract check, plus the one team-scheduler cannot make: the paths have to exist. */
-function contractErrors(tree, items) {
+/**
+ * The contract check, plus the one team-scheduler cannot make: the paths have to exist, or be
+ * owned by an item this one depends on that has not completed yet (run-manifest-paths.cjs).
+ */
+function contractErrors(tree, intent, items) {
   const errors = [];
+  const editableOf = editableReader(tree, intent.id, items.map((item) => [item.id, [].concat(item.ownership.editable || [])]));
   for (const item of items) {
     errors.push(...scheduler.validateWorkItem(item).errors);
     errors.push(...probes.shapeErrors(item.id, item.probes));
     errors.push(...probes.diagnosisErrors(item));
     errors.push(...writes.writesErrors(item.id, item.writes));
-    for (const entry of item.context.required || []) {
-      const target = entry && entry.path;
-      if (target && !fs.existsSync(path.join(tree, target))) {
-        errors.push(`${item.id}: context.required path does not exist: ${target}`);
-      }
-    }
-    // A declared read names the module holding it, so the same existence check applies.
-    for (const entry of Array.isArray(item.reads) ? item.reads : []) {
-      const target = entry && entry.path;
-      if (target && !fs.existsSync(path.join(tree, target))) {
-        errors.push(`${item.id}: reads path does not exist: ${target}`);
-      }
-    }
+    errors.push(...pathErrors(tree, item, intent.items, editableOf));
   }
   return errors;
 }
@@ -185,7 +178,7 @@ function frontier(intentId, options) {
   const planFindings = frontierFindings(tree, intent, config);
   if (planFindings.length > 0) return { exit: 2, payload: { ok: false, errors: planFindings }, out: planFindings };
 
-  const errors = contractErrors(tree, items);
+  const errors = contractErrors(tree, intent, items);
   if (errors.length === 0) errors.push(...wiringErrors(tree, intent.id, items, [...items, ...completedManifests(tree, intent)], config));
   if (errors.length > 0) {
     return { exit: 2, payload: { ok: false, errors }, out: errors.map((error) => `INVALID ${error}`) };
