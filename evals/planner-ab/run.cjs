@@ -230,4 +230,4 @@ function realRun(options) {
   }
 }
 
-module.exports = { RunError, CONFIG, dryRun, realRun, schedule };
+module.exports = { RunError, CONFIG, GIT_ENV, git, dryRun, realRun, schedule };
