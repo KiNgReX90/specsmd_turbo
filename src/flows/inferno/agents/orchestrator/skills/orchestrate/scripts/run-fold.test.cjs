@@ -10,7 +10,8 @@ const { fixture } = require('./run-attribution-fixture.cjs');
 const TESTS = 'src/gift_cards/tests/balance.rs';
 const IGNORE = '#[ignore = "regenerates the golden files only"]';
 
-const rust = (...tests) => tests.map(([name, ignore]) => `${ignore ? `${IGNORE}\n` : ''}#[test]\nfn ${name}() {\n    assert_eq!(1, 1);\n}\n`).join('\n');
+/** A Rust test file of the named tests, each switched off with `IGNORE` for `true` or with the line given. */
+const rust = (...tests) => tests.map(([name, ignore]) => `${ignore ? `${ignore === true ? IGNORE : ignore}\n` : ''}#[test]\nfn ${name}() {\n    assert_eq!(1, 1);\n}\n`).join('\n');
 
 /** An intent whose item `a` owns the Rust test file, which the base and the intent both hold already. */
 function rustIntent(t) {
@@ -49,6 +50,21 @@ test('the item switching a test off after the fold, with the base\'s own words, 
   assert.equal(result.code, 2, result.out);
   assert.deepEqual(result.data.tests_changed.switched_off, [{ file: TESTS, line: 1, text: IGNORE }]);
 });
+
+for (const [how, own] of [
+  ['rewrites the base\'s switch-off line with another reason', '#[ignore = "too slow on the build machine"]'],
+  ['deletes the base\'s switch-off line and writes one of its own kind in its place', '#[cfg_attr(not(feature = "goldens"), ignore)]'],
+]) {
+  test(`the item that ${how} after the fold is refused at that line as the item's`, (t) => {
+    const f = foldedRustIntent(t);
+    const fix = f.start('--item', 'a');
+    f.write(TESTS, rust(['starts_at_zero'], ['grows_on_top_up', own], ['shrinks_on_spend'], ['expires_after_a_year']));
+    f.accepted(fix, [TESTS]);
+    const result = f.verify('a');
+    assert.equal(result.code, 2, result.out);
+    assert.deepEqual(result.data.tests_changed.switched_off, [{ file: TESTS, line: 6, text: own }]);
+  });
+}
 
 test('the base\'s lines of two folds are both the base\'s, and the item\'s line between them is the item\'s', (t) => {
   const f = rustIntent(t);
