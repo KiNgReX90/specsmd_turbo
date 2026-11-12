@@ -87,6 +87,11 @@ const verifyItemCall = (tree, ids) => runCall('verify-item', tree, null, ids.len
 /** Land one item: fold, the cheap checks, then its completion; of `intent` when it is not the caller's. */
 const integrateCall = (tree, id, intent = null) => runCall('integrate', tree, intent, ['--item', id]);
 
+/** Run integrate again as it was called: the one item, the chain or no item, with the --since it named. */
+const integrateAgainCall = (tree, ids, since = null) => runCall('integrate', tree, null, [
+  ...(ids.length > 1 ? ['--items', ids.join(',')] : ids.map((id) => `--item ${id}`)), ...(since ? ['--since', since] : []),
+]);
+
 /** The cold review of the whole intent. */
 const intentReviewCall = (tree) => runCall('review', tree, null);
 
@@ -161,7 +166,7 @@ const deferItemCall = (intent, item, dependents = []) => writerCall('defer-item'
   ['--item', item, '--reason', '"<why it waits for a later plan>"', ...dependents.map((id) => `--rewire ${id}=<new-dep>`)]);
 
 module.exports = {
-  RUNNER, RUNNER_PATH, caller, blockIntentCall, chainDispatchCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
+  RUNNER, RUNNER_PATH, caller, blockIntentCall, chainDispatchCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateAgainCall, integrateCall, intentRecordCall,
   intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, laneIntermittentCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
   verifyItemCall,
 };
