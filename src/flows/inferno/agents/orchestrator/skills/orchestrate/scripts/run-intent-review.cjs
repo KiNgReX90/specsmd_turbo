@@ -27,6 +27,7 @@ const { gateStartCall, intentRecordCall, intentReviewCall, itemReviewCall, scanC
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { intentMutants, reopenIntentReview } = require('./run-review-mutants.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
+const { foldLines } = require('./run-intent-fold.cjs');
 const slot = require('./run-slot.cjs');
 const { deferredItems } = require('./state-defer.cjs');
 const { proofOwed } = require('./run-review-aside.cjs');
@@ -61,8 +62,11 @@ function scanRefusal(tree, context, folded) {
   };
 }
 
-/** The review owed, from `from` to HEAD; a delta names the recorded review it answers as `previous`. */
-function dispatch(tree, context, reasons, from, folded, previous = null) {
+/**
+ * The review owed, from `from` to HEAD; a delta names the recorded review it answers as `previous`,
+ * and under review.outside what of a base folded in since it to read.
+ */
+function dispatch(tree, context, reasons, from, folded, previous = null, base = null) {
   const { intent, config, rel } = context;
   const { agent, model } = hostActor('reviewer', config);
   const range = `${short(tree, from)}..${short(tree, 'HEAD')}`;
@@ -91,6 +95,7 @@ function dispatch(tree, context, reasons, from, folded, previous = null) {
       ...reasons.map((reason) => `intent review owed for ${intent}: ${reason}`),
       ...reviewerLines(config, `intent ${intent}`, previous, [
         `  range ${range}`,
+        ...(previous ? foldLines(tree, config, from, base) : []),
         ...realAppLine(tree, config, range),
         `  brief ${brief}`,
         `  specs ${specs}: ${items.map((id) => `${id}.md`).join(' ') || '(none)'}`,
@@ -227,7 +232,7 @@ function reviewIntent(options) {
   }
   if (options.rerun) throw noRerun(`is owed: ${state.owed.join('; ')}`);
   const from = state.review && state.review.commit ? state.review.commit : gate.mergeBase(tree, base);
-  return dispatch(tree, context, state.owed, from, folded, state.review ? rel : null);
+  return dispatch(tree, context, state.owed, from, folded, state.review ? rel : null, base);
 }
 
 module.exports = { reviewIntent };

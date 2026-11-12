@@ -358,7 +358,11 @@ function green(options) {
   const smoke = lanes.smokeOwed(tree, config, options.config, changedPaths(tree, mergeBase(tree, base)));
   const owed = [...merge.owed, ...smoke.owed];
   const out = [...restored, ...merge.out, ...smoke.out];
-  if (missing.length === 0 && owed.length === 0) return { exit: 0, payload: { green: true, hash }, out: [...restored, ...smoke.out, `green ${hash}`] };
+  if (missing.length === 0 && owed.length === 0) {
+    // An after_ship path is no merge's to wait for: the payload carries it so the ship prints it as owed.
+    const payload = merge.after.length > 0 ? { green: true, hash, after_ship: merge.after } : { green: true, hash };
+    return { exit: 0, payload, out: [...restored, ...smoke.out, `green ${hash}`] };
+  }
   if (missing.length > 0) out.push(`no green marker for ${hash}`, 'run gate first');
   return { exit: 3, payload: { green: false, hash, missing, owed }, out };
 }

@@ -218,7 +218,8 @@ test("brief template numbers its success criteria and carries the item map", () 
     "## Constraints",
     "## Notes",
   ]);
-  assert.ok(brief.split("\n").includes("- {{this.id}}: {{this.text}}"), "a success criterion line carries its SC-<n> id");
+  assert.ok(brief.split("\n").includes("- {{this.id}}: {{this.text}}{{#if this.after_ship}} (after ship){{/if}}"), "a success criterion line carries its SC-<n> id, and its after-ship mark");
+  assert.match(brief, /\{\{!-- after_ship: a criterion whose instrument runs only once the intent landed on the base branch/, "the template says when a criterion is marked after ship");
   assert.ok(brief.split("\n").includes("| Criterion | Items |"), "the item map is a table of criterion and items");
 });
 

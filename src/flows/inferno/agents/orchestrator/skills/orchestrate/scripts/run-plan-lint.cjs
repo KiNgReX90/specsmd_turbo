@@ -20,7 +20,11 @@
  *   - every open item has the nine sections in order, Edge Cases, Out of Scope and Reuse hold
  *     their content or exactly `None.`, every fixed line holds its form, and no line holds a
  *     TBD or a TODO;
- *   - every breaking test of the Test Plan is in the item's `ownership.editable`.
+ *   - every breaking test of the Test Plan is in the item's `ownership.editable`;
+ *   - every `context.required` and `reads` path exists, or an open item the item depends on owns
+ *     it (run-manifest-paths.cjs), the check the frontier makes before a dispatch;
+ *   - an after-ship mark is spelled `(after ship)` and sits on a success criterion of the brief
+ *     alone (run-after-ship.cjs).
  * Two open items with no `depends_on` path between them that share an editable file are
  * printed as `overlap` lines, never as findings: the overlap is legal, the orchestrator
  * serializes it, and the line is there so the planner orders them on purpose.
@@ -44,6 +48,8 @@ const lib = require('./run-lib.cjs');
 const { isComplete, isDeferred } = require('./state-transition.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
 const { gateMark, gateNames } = require('./run-criterion-marks.cjs');
+const { MARK, NEAR } = require('./run-after-ship.cjs');
+const { editableReader, pathErrors } = require('./run-manifest-paths.cjs');
 
 const ITEM_SECTIONS = [
   'Description', 'Acceptance Criteria', 'Edge Cases', 'Out of Scope', 'Test Plan', 'Reuse',
@@ -115,6 +121,9 @@ function readBrief(tree, intentId, findings) {
     if (!match) findings.push(`brief: success criterion line ${index + 1} carries no SC-<n> id`);
     else if (criteria.includes(match[1])) findings.push(`brief: ${match[1]} is numbered twice`);
     else criteria.push(match[1]);
+    if (match && NEAR.test(line) && !MARK.test(line)) {
+      findings.push(`brief: ${match[1]} carries an after-ship mark the scripts do not read; end its line in (after ship)`);
+    }
   });
 
   const map = new Map();
@@ -262,6 +271,9 @@ function itemFindings(tree, item, spec, criteria, findings, names) {
   const acceptance = acceptanceCriteria(spec.content);
   if (section(parsed, 'Acceptance Criteria') && acceptance.length === 0) add('## Acceptance Criteria lists no criterion');
   acceptance.forEach((criterion, index) => {
+    if (NEAR.test(criterion)) {
+      add(`acceptance criterion ${index + 1} is marked (after ship), which only a success criterion of the brief carries: an item is proven before the merge`);
+    }
     const mark = gateMark(criterion);
     if (mark !== null) {
       if (!names().includes(mark)) add(`acceptance criterion ${index + 1} is marked (gate: ${mark}), ${UNHELD}`);
@@ -350,6 +362,7 @@ function lintPlan(tree, intent, configOf) {
 
   const delivered = new Map();
   const editable = new Map();
+  const manifests = new Map();
   const open = new Set();
   for (const item of intent.items) {
     const spec = readSpec(tree, intent.id, item.id);
@@ -367,7 +380,11 @@ function lintPlan(tree, intent, configOf) {
     delivered.set(item.id, itemFindings(tree, item, spec, brief.criteria, findings, names));
     const manifest = spec.manifest || {};
     editable.set(item.id, list(manifest.ownership && manifest.ownership.editable));
+    manifests.set(item.id, manifest);
   }
+  // The frontier's existence check, at plan time: a cited path exists or an open item it depends on creates it.
+  const editableOf = editableReader(tree, intent.id, editable);
+  for (const [id, manifest] of manifests) findings.push(...pathErrors(tree, { id, context: manifest.context, reads: manifest.reads }, intent.items, editableOf));
   // A completed item whose spec is gone delivers what the Item Map says it does.
   for (const [id, ids] of delivered) {
     if (ids === undefined) {

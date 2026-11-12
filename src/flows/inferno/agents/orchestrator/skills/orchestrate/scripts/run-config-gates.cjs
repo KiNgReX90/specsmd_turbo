@@ -5,7 +5,9 @@
  * a merge waits its turn in the slot across worktrees, `verification.ship_cleanup`, the host's
  * one shell command ship runs once a shipped worktree is gone, `verification.session`, the host
  * session the checks of one integrate or gate share (run-check-session.cjs), and `review.outside`,
- * the globs of a knowledge base the base branch syncs, whose folded changes keep the intent review current.
+ * the globs whose folded changes keep the intent review current where the intent never touched the
+ * file, such as a knowledge base the base branch syncs; `["**"]` binds the review to the files the
+ * intent changed (run-intent-fold.cjs).
  *
  * It sits apart from run-lib.cjs, as run-lane-config.cjs does, so the config reader validates
  * and inherits both keys and every reader asks one place for their values. The YAML reader has
@@ -70,7 +72,7 @@ function shipCleanup(config) {
   return command(value) ? value.trim() : null;
 }
 
-/** The globs whose base-side changes keep the intent review current, or none. */
+/** The globs whose base-side changes keep the intent review current where the intent never touched the file, or none. */
 function reviewOutside(config) {
   const value = isMap(config.review) ? config.review.outside : undefined;
   return globList(value) ? [...value] : [];
