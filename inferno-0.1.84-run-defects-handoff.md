@@ -275,3 +275,25 @@ Met 2026-11-13 on the app repo, at the ship of the first intent that carries gat
 It closes the intent and commits without the archive, ships, and runs `archive-intent --sweep` on the base branch after the merge, in one commit of state files.
 
 A tree that already holds the archive commit, with folds and review records on top, keeps it. Where a late mark is then owed, the orchestrator makes one commit that changes that spec alone and rewrites the marked line, the mark's name in backticks. That commit is the last one that changed the text and it changed nothing but the spec, so the mark counts again. Measured on a second intent of the host: one late mark before the commit, none after, and the same code tree hash, so no gate proof is lost. On that intent the reviewer had already been sent after the late mark and had proposed a mutant for a criterion the plan had marked as one no mutant can reach.
+
+## 11. Committing the evidence of an external criterion voids the intent review that waits for it
+
+Met 2026-11-13 on the app repo, on an intent with one `proof: external` criterion and `review.outside: ["**"]` set. The code is the same in 0.1.85.
+
+### What happened
+
+- The reviewer's text (`agents/reviewer/agent.md`, intent mode) says an external criterion names its evidence path under `.specs-inferno/intents/<intent>/evidence/`, "so adding it later leaves the reviewed tree as it is".
+- The intent review was recorded clean. The gate then folded the base in, so the review no longer held by its `tree` hash and held by `tree_outside` alone. `green` asked for nothing but the evidence.
+- The orchestrator committed the evidence file, one file under the intent's `evidence/` directory. `green` then read "intent review owed: the code changed since the review read it".
+- The cause is the list of names in `outsideHash` (`S/run-intent-owed.cjs:101-123`). `own` holds every path the branch changed against the base, the flow's own files under `.specs-inferno` among them, and `kb` (`:120`) names each of them that matches the globs. With `["**"]` that is all of them. The hash beside the list leaves `.specs-inferno` out, as every other hash does (`scopeHash`, `S/run-proofs.cjs:26`), but a new path under it is a new name in the list.
+- Measured on a copy of that tree: before the evidence commit the outside binding holds and nothing is owed, after it the binding fails. With the paths under `.specs-inferno` left out of the list, the value is the same at both commits.
+- The same list changes with every other new path under `.specs-inferno` after a fold: a deferred finding's file, and the archive's move of the whole directory.
+
+### What the flow should do
+
+- `outsideHash` leaves the paths under `.specs-inferno` out of `own`, so they reach neither the list nor the `skip` test. That is what `scopeHash` already does for content.
+- Tests: with `review.outside` set, a review recorded, the base folded in and then one file committed under the intent's `evidence/` directory, the review reads current and `green` owes nothing. The same sequence with a file of the intent's code changed owes the review as today.
+
+### How the host gets through
+
+It sends the intent review the flow asks for. The range is the evidence commit alone, so the round is short, and it is one reviewer dispatch that reads nothing new.
