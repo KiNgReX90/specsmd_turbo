@@ -1,6 +1,6 @@
 # INFERNO: what to build next
 
-Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURE FIRST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
+Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
 Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b and the ten rows of section 1c. What is left to build is three lines: row 0l, which a host met on 2026-11-13, the numbers behind the thinner work items, and the release steps.
 
@@ -80,13 +80,20 @@ Two notes for whoever builds:
 
 **Improvement 6, bring the docs repo back onto the canonical scripts.** Canonical holds both module splits today (`S/run-integrate.cjs`, `S/run-probes.cjs`, `S/run-proofs.cjs` and `S/run-dispatch.cjs`, `S/run-processes.cjs`, `S/state-store.cjs`). The five hosts on the first host's machine were reinstalled from this branch on 2026-11-11 and 2026-11-12, each with a lock that matches every installed file, and none holds a tracked copy under `.codex/skills/` or a stray planner file. If a host exists that is not on that machine, run `node .specsmd/inferno/check-lock.cjs` there; a match closes it for that host too.
 
-## 4. MEASURE FIRST: one read-only count decides
+## 4. MEASURED, NOT NOW: P5
 
-**P5, new scope is a new item.** The design: a requirement that appears in the review loop becomes a new item of the same intent, the original item closes on its own criteria, and a grant only ever answers an existing criterion.
+**P5, new scope is a new item.** The design: a requirement that appears in the review loop becomes a new item of the same intent, the original item closes on its own criteria, and a grant only ever answers an existing criterion. The rule was to build it when at least 30% of the findings of round 2 and later are beyond the contract.
 
-- The count: classify the findings of round 2 and later on the first host as "on an acceptance criterion", "on the bar" or "beyond the contract", and record what asked for each ownership grant. It reads review files and changes nothing.
-- Build it when at least 30% of those findings are beyond the contract. Below that the design costs more than it saves.
-- Who: the count needs the first host's review files, so the session that monitors that host makes it and writes the number here.
+The count, made read-only on the first host on 2026-11-13:
+
+- What was read: every finding first written in round 2 or later of an item review, contract and quality, in the six intents the host shipped with reviews recorded since 2026-11-10. That is 59 items, 95 review files and 252 recorded rounds, built on 0.1.81 to 0.1.85. 60 findings.
+- 28 are on an acceptance criterion or a step of the item's description. 17 are on the bar: the 10 of the quality review, and 7 that name a rule file, a constraint of the brief or a regression of the correction. 15 are beyond the contract.
+- That is 25%. Four findings can be read either way, and it stays between 22% and 28% wherever they are placed.
+- All 15 name a decision or an amendment written during the item's own loop. 10 are in one item that took six rounds and three decisions, 4 in one item whose amendment was committed 13 seconds after its first review, and 1 names a host decision. Those two items ran their rounds before 0.1.83 was installed. The other four intents hold 16 of the 60 findings and none beyond the contract.
+- 13 of the 28 on a criterion are one item with two criteria that have no end, read over five rounds of ever narrower cases. P5 does not answer that.
+- Grants in the same period: 13 grants and 2 withdrawals, all but one commit in one intent. 8 of the 13 went to the item that holds 10 of the 15 findings, two of them in the same commit as a decision. The other 5, by their subject lines, gave an item a test or a fixture of a neighbour that its change reached.
+
+Verdict: not now. The count is under the threshold, and what it found is two items, both before 0.1.83. Unlocks: a count on intents built wholly on 0.1.85 that reads 30% or more. If it comes back, the count names the one moment a rule could act on: a decision file or an amendment written while an item is in its loop.
 
 ## 5. NOT NOW
 
