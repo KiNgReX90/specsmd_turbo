@@ -252,3 +252,24 @@ Met 2026-11-12 on the app repo, at the final gate of an intent with fourteen mar
 ### How the host gets through
 
 It reads the verdict of a marked command from the gate's own PASS or FAIL line for that command, and takes the MARKED line of a command mark for nothing. It runs `frontier` and `plan-lint` without the generated config.
+
+## 10. The archive before the ship makes every gate mark read as late, and the ship then owes the intent review
+
+Met 2026-11-13 on the app repo, at the ship of the first intent that carries gate marks. The code is the same in 0.1.85.
+
+### What happened
+
+- The orchestrator followed its own finalize order (`agents/orchestrator/agent.md`, steps 5 and 6): `close-intent`, `archive-intent --sweep`, one commit, then `ship`. The archive commit moved the intent's directory under `archive/`, 47 files in one commit.
+- `ship` proves the folded tree with `green`, which counts the criteria that still owe a mutant. `itemProofs` (`S/run-mutant-coverage.cjs:70-76`) reads the spec where it now lies, in the archive, and hands that path to `lateMarks`.
+- `planned` (`S/run-criterion-marks.cjs:51-56`) asks for the commit that last changed the criterion's text with `git log -1 -S<text> -- <spec>`. At the archived path the only commit that holds the text is the archive commit itself. It is no ancestor of the item's first review, and it changed more than the spec, so the mark counts for nothing.
+- Measured on that archive commit with the flow's own readers: 14 marks, all 14 late. Before the archive none was. Twelve criteria across five items owed a mutant again, and `ship` ended with exit 3 and the intent review owed, on a tree whose gate and intent review were both green one commit earlier.
+- A commit that moves the directory back does not help: it adds the text at the live path, so it is the last commit that changed it there, and it too changed more than the spec.
+
+### What the flow should do
+
+- `planned` reads the history of the criterion's text at the spec's live path, also when the spec is read from the archive, and counts only a commit that added or changed the file there (`--diff-filter=AM`). The archive's move is then no change of the text. The "nothing but the spec" compare names the live path too. Read so, all 14 marks of the measured commit count again.
+- Tests: an intent with a marked criterion that was planned before its first review is closed and archived in one commit. The coverage lists no late mark and `green` holds. A mark added after the first review, in a commit beside other work, reads late before the archive and after it.
+
+### How the host gets through
+
+It closes the intent and commits without the archive, ships, and runs `archive-intent --sweep` on the base branch after the merge, in one commit of state files. A tree that already holds the archive commit drops that commit and closes again before it ships.
