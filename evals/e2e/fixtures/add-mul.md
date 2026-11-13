@@ -1,36 +1,56 @@
 ---
 id: add-mul
-title: Add mul() module with test
+title: "Add mul() module with test"
 intent: toy-math
 kind: behavior
 complexity: low
 mode: autopilot
 status: pending
 depends_on: []
-created: 2026-06-12T00:00:00Z
+delivers: [SC-1]
+created: 2026-11-13T00:00:00Z
 ---
 
 # Work Item: Add mul() module with test
 
 ## Description
 
-Create `lib/mul.js` exporting `mul(a, b)` (CommonJS: `module.exports = { mul }`) and `tests/mul.test.js` using `node:test` + `node:assert` verifying mul(2,3)=6 and mul(-1,1)=-1.
+Gives the library its `mul(a, b)`, which `calc()` builds on. `lib/mul.js` exports it as `module.exports = { mul }`.
 
 ## Acceptance Criteria
 
-- [ ] `lib/mul.js` exports mul(a, b) returning a * b
-- [ ] `node --test tests/mul.test.js` passes
+- [ ] `tests/mul.test.js` shows mul(2, 3) is 6 and mul(-1, 1) is -1.
+
+## Edge Cases
+
+None.
+
+## Out of Scope
+
+None.
+
+## Test Plan
+
+- Adds: `tests/mul.test.js` :: mul(2, 3) is 6 and mul(-1, 1) is -1
+- Integration: none
+- Breaks: none
+
+## Reuse
+
+None.
 
 ## Execution Manifest
 
 context:
   required:
     - path: package.json
-      reason: test script and module conventions
-  patterns: []
+      reason: the test script
+  patterns:
+    - path: package.json
+      reason: CommonJS, tests under tests/ with node:test
   tests:
-    - path: tests/
-      reason: where the new test lives
+    - path: tests/mul.test.js
+      reason: the test this item adds
 ownership:
   editable:
     - lib/mul.js
