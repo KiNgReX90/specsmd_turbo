@@ -14,6 +14,7 @@ const lib = require("./run-lib.cjs");
 function laned() {
   const fixture = repo();
   write(fixture.root, "lane.cjs", "process.exit(11);\n");
+  write(fixture.root, "src/harness/walk.cjs", "// the walk\n");
   const lane = '  smoke:\n    command: node lane.cjs\n    scope: ["src/**"]\n';
   const scoped = `review:\n  outside: ["src/harness/**"]\n${CONFIG.replace("verification:\n", `verification:\n${lane}`)}`
     .replace('"echo scoped": ["docs/**"]', '"echo scoped": ["docs/**"]\n    "echo always": ["src/a.ts"]');

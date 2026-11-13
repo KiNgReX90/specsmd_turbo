@@ -16,8 +16,12 @@ const short = (sha) => sha.slice(0, 7);
 const unwalked = (fix, files) =>
   new RegExp(`^the accept leaves unwalked the files harness fix ${short(fix)} changed in the smoke lane's scope: ${files.join(', ')}$`, 'm');
 
-/** The smoke lane ends instrument red on a tree the branch changed in scope. */
+/**
+ * The smoke lane ends instrument red on a tree the branch changed in scope. The harness file WALK
+ * is on the base and in the tree first, so a fix to it changes a file the red tree holds.
+ */
 function redLane(f) {
+  harnessFix(f, WALK);
   touch(f);
   const wait = gated(f);
   assert.equal(wait.code, 3, wait.out + wait.err);
@@ -87,6 +91,15 @@ test('a second base commit to the fixed file retires the accept and green owes t
   harnessFix(f, WALK, false);
   fold(f);
   owed(f);
+});
+
+test('a fix that adds a file the red tree does not hold holds through the fold too', (t) => {
+  const f = fixture(t, config({ smoke: '11' }));
+  redLane(f);
+  const fix = harnessFix(f, 'src/added.txt', false);
+  assert.match(accept(f, fix).out, unwalked(fix, ['src/added.txt']));
+  fold(f);
+  held(f);
 });
 
 test('a base commit to another file in scope retires the accept', (t) => {
