@@ -5,7 +5,8 @@
 // tree it was given, and `open`, `run` and `close` are its session modes, `run` on INFERNO_TEST.
 // Every call logs one line to wrap.log beside it. Each `refuse-<n>` file beside it makes one run
 // whose test holds the file's text refuse with the line REFUSED reads, as a wrapper with no machine
-// free does, and a `close-fails` file makes the session's close fail.
+// free does, and a `close-fails` file makes the session's close fail. A session call logs its
+// INFERNO_SESSION.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -17,7 +18,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const [mode, tree, test] = process.argv.slice(2);
 const direct = mode === 'auto';
-const call = { mode, tree: direct ? tree : process.env.INFERNO_TREE, test: direct ? test : process.env.INFERNO_TEST || null };
+const call = { mode, tree: direct ? tree : process.env.INFERNO_TREE, test: direct ? test : process.env.INFERNO_TEST || null, session: process.env.INFERNO_SESSION || null };
 fs.appendFileSync(path.join(__dirname, 'wrap.log'), JSON.stringify(call) + '\n');
 if (mode === 'close' && fs.existsSync(path.join(__dirname, 'close-fails'))) process.exit(1);
 if (!direct && mode !== 'run') process.exit(0);
@@ -63,7 +64,19 @@ function configOf({ run = true, wrapped = null, refused = null, session = false 
   return `delivery:\n  base_branch: main\n${verification ? `verification:\n${verification}` : ''}`;
 }
 
+/**
+ * Leave the record of a host session in the fixture's branch cache, as a verify-item killed between
+ * the session's open and close does: of `owner`, `{ pid, start }`, with the session folder `dir`.
+ */
+function leftSession(f, owner, dir) {
+  const records = path.join(f.cache, 'specsmd-inferno', 'repo', 'intent', 'check-sessions');
+  fs.mkdirSync(records, { recursive: true });
+  const file = path.join(records, `20260101T000000Z-${owner.pid}.json`);
+  writeFile(file, `${JSON.stringify({ ...owner, close: `${WRAPPER} close`, dir, tree: f.root })}\n`);
+  return file;
+}
+
 /** The command a bare `check` runs as in `tree` through the wrapper. */
 const placed = (tree, check) => `${WRAPPER} auto '${tree}' '${check}'`;
 
-module.exports = { CHECK, REFUSED, WRAPPER, configOf, hostOf, placed, refuse, wrapCalls };
+module.exports = { CHECK, REFUSED, WRAPPER, configOf, hostOf, leftSession, placed, refuse, wrapCalls };

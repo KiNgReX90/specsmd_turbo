@@ -30,8 +30,8 @@
  *
  * Before the open starts, a record of the session's close goes into the branch's cache folder,
  * and it goes once the close has run. A kill between the two leaves the record, and the next
- * integrate or gate in the tree runs that close first (`closeLeft`), unless the process that
- * opened it still lives.
+ * integrate, gate, or verify-item with `verification.run` (run-item-check.cjs) in the tree runs
+ * that close first (`closeLeft`), unless the process that opened it still lives.
  */
 
 const fs = require('fs');
@@ -146,8 +146,8 @@ function checkRounds(tree, config, dir, plan) {
 }
 
 /**
- * Close each session a killed integrate or gate left open in this tree's branch, from its
- * record, and drop the record. A session whose owner still lives is its own. Returns what happened.
+ * Close each session a killed integrate, gate or verify-item left open in this tree's branch, from
+ * its record, and drop the record. A session whose owner still lives is its own. Returns what happened.
  */
 function closeLeft(tree) {
   const dir = recordsOf(tree);

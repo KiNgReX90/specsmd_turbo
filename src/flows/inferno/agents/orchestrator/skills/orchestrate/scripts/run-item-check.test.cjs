@@ -6,14 +6,16 @@
 // Without the key the check runs in the tree as it always did. The config: run-item-check-config.test.cjs.
 
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
 const { fixture } = require('./run-attribution-fixture.cjs');
 const { verifyItemCall } = require('./run-call.cjs');
+const { owner } = require('./run-mutate-journal.cjs');
 const { writeFile } = require('./test-write.cjs');
-const { CHECK, REFUSED, WRAPPER, configOf, hostOf, placed, refuse, wrapCalls } = require('./run-item-check-fixture.cjs');
+const { CHECK, REFUSED, WRAPPER, configOf, hostOf, leftSession, placed, refuse, wrapCalls } = require('./run-item-check-fixture.cjs');
 
 /** Items with their checks, dispatched as `selector` and changed, on the host `config` describes. */
 function host(t, checks, config, selector = ['--item', 'a']) {
@@ -114,6 +116,45 @@ test('with verification.session the placed check runs inside the session: open, 
   const proof = proofOf(f);
   assert.deepEqual(proof.commands.map((entry) => [entry.command, entry.tail]), [[placed(f.root, CHECK), ['item check ran']]]);
   assert.deepEqual(result.data.checks.map((entry) => entry.command), [placed(f.root, CHECK)], 'the payload names the check, not the session\'s call');
+  const shown = human(f);
+  assert.equal(shown.code, 0, shown.out);
+  assert.match(shown.out, new RegExp(`^PASS \\d+s ${literal(placed(f.root, CHECK))}$`, 'm'), 'the PASS line names the check, not the session\'s call');
+});
+
+test('a red check inside the session fails with a FAIL line naming the check as placed, not the session\'s call', (t) => {
+  const red = 'echo item check failed; exit 1';
+  const f = host(t, { a: red }, configOf({ session: true, refused: REFUSED }));
+  const shown = human(f);
+  assert.equal(shown.code, 2, shown.out);
+  assert.match(shown.out, new RegExp(`^FAIL \\d+s ${literal(placed(f.root, red))} -> \\S+$`, 'm'));
+  assert.match(shown.out, /^item check failed$/m);
+  assert.deepEqual(wrapCalls(f).map((call) => [call.mode, call.test]), [['open', null], ['run', red], ['close', null]]);
+  assert.equal(proofOf(f).passed, false);
+});
+
+test('a session a killed verify-item left open is closed by the next verify-item with the key, first, and one whose owner lives is left alone', (t) => {
+  const f = host(t, { a: CHECK }, configOf({ session: true }));
+  const dead = spawnSync(process.execPath, ['-e', '0']).pid;
+  const record = leftSession(f, { pid: dead, start: null }, '/left/session');
+  const living = leftSession(f, owner(), '/living/session');
+  const shown = human(f);
+  assert.equal(shown.code, 0, shown.out);
+  assert.match(shown.out, /^closed the host session an interrupted check run left open\n/, 'the close is the first line');
+  assert.deepEqual(wrapCalls(f).map((call) => [call.mode, call.session && call.session.startsWith('/') && !call.session.startsWith('/left') && !call.session.startsWith('/living') ? 'own' : call.session]),
+    [['close', '/left/session'], ['open', 'own'], ['run', 'own'], ['close', 'own']], 'the left session closes before the new one opens');
+  assert.ok(!fs.existsSync(record), 'the left record is gone');
+  assert.ok(fs.existsSync(living), 'a session whose owner lives is its own');
+});
+
+test('a verify-item without verification.run closes no session a killed run left', (t) => {
+  const f = host(t, { a: CHECK }, configOf({ run: false, session: true }));
+  const dead = spawnSync(process.execPath, ['-e', '0']).pid;
+  const record = leftSession(f, { pid: dead, start: null }, '/left/session');
+  const shown = human(f);
+  assert.equal(shown.code, 0, shown.out);
+  assert.doesNotMatch(shown.out, /host session/);
+  assert.deepEqual(wrapCalls(f), []);
+  assert.ok(fs.existsSync(record), 'the record waits for the next integrate or gate, or verify-item with the key');
 });
 
 test('a session whose close failed leaves its line beside the verdict, which stands', (t) => {

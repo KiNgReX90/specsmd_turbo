@@ -397,6 +397,7 @@ function verifyItem(itemId, options) {
       failed = true;
     }
   }
+  out.unshift(...ran.left);
   out.push(...ran.notes);
 
   if (outside.length > 0) {
