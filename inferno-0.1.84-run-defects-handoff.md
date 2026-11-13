@@ -272,4 +272,6 @@ Met 2026-11-13 on the app repo, at the ship of the first intent that carries gat
 
 ### How the host gets through
 
-It closes the intent and commits without the archive, ships, and runs `archive-intent --sweep` on the base branch after the merge, in one commit of state files. A tree that already holds the archive commit drops that commit and closes again before it ships.
+It closes the intent and commits without the archive, ships, and runs `archive-intent --sweep` on the base branch after the merge, in one commit of state files.
+
+A tree that already holds the archive commit, with folds and review records on top, keeps it. Where a late mark is then owed, the orchestrator makes one commit that changes that spec alone and rewrites the marked line, the mark's name in backticks. That commit is the last one that changed the text and it changed nothing but the spec, so the mark counts again. Measured on a second intent of the host: one late mark before the commit, none after, and the same code tree hash, so no gate proof is lost. On that intent the reviewer had already been sent after the late mark and had proposed a mutant for a criterion the plan had marked as one no mutant can reach.
