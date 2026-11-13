@@ -35,3 +35,27 @@ Met 2026-11-13 on the app repo, on an item whose first review sent eight finding
 ### How the host gets through
 
 It leaves the fresh mutant out, as the refusal asks, and the criterion keeps the count of the entry that is gone. A host that wants the proof runs that one mutant by hand on a test machine. The flow records nothing of it.
+
+## 13. verify-item runs an item's own check on the machine the orchestrator sits on, and a host that sends its tests elsewhere cannot route it
+
+Met 2026-11-13 on the app repo. Not built: the code is the same in the build at `052e3654`.
+
+### What happened
+
+- An item's manifest holds `finalize_check: "npx vitest run src/lib/sbom/"`, a directory of test files, 757 tests.
+- `verify-item` hands that string to `lib.runShell` in the tree (`S/run-item-proof.cjs:381`). No host key reaches it. `mutate.run` places a mutant's test, the host's own config wraps the integrate and gate commands, and `real_app.prove` has its own command. The item's check is the one test command of the flow that always runs where the orchestrator runs.
+- This host's main machine is out of memory by its own measure and sends every suite to its test machines. Its low-memory guard ended the check with SIGTERM after 6 seconds, twice in a row. Each log holds the runner's first line and no result.
+- `verify-item` printed FAIL both times and wrote a proof that did not pass. The check of a sibling item, one test file, passed on the same machine the same hour in under 3 seconds.
+- The same check through the host's wrapper: 757 passed on a test machine.
+- What the failed proof costs: the reviewer's brief carries a FAIL that is no fact about the code, and `settle` refuses a minor-only correction of such an item with "its verify-item proof failed" (`proofProblem`, `S/run-review.cjs:363`), so the item pays a second review.
+
+### What the flow should do
+
+- One host key says how an item's check goes to the host's test machine, in the shape `mutate.run` already has: `{tree}` and `{test}`, each one quoted shell word, and a check that already starts with the wrapper's own words, or that the host's wrapped pattern reaches, runs as written (`commandOf`, `S/run-mutate-host.cjs:100`). Suggested name: `verification.run`, beside `verification.session`. `verify-item` reads it for `finalize_check`. Without the key the check runs as today.
+- The placed check runs through the shell the integrate step uses. With `verification.session` it then takes the session's slot, and with `verification.refused` a check the wrapper refused is no verdict: `verify-item` ends with exit 5 and leaves the last proof as it was, as integrate and gate do since `2bb00704`.
+- The proof records the command as it ran.
+- Tests: with the key, `verify-item` on an item with a bare check runs the placed command and records it. A check that is already wrapped runs as written. A run that ends on a refused line exits 5 and writes no failed proof. Without the key nothing changes.
+
+### How the host gets through
+
+It runs the item's check through its wrapper by hand and tells the reviewers the result. A minor-only correction of such an item goes to the short second review, since `settle` refuses the failed proof.
