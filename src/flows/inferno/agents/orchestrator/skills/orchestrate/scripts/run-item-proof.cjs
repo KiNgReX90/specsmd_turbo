@@ -18,7 +18,8 @@
  *   since            the baseline as verify-item named it: the dispatch's first baseline sha,
  *                    `--since`, or HEAD for an item the runner before signed records dispatched
  *   outside, unreported   as verify-item reports them
- *   commands         [{ item, command, exit, seconds, counts, tail, log }] per check it ran;
+ *   commands         [{ item, command, exit, seconds, counts, tail, log }] per check it ran,
+ *                    `command` as it ran: through the host's `verification.run` (run-item-check.cjs);
  *                    `counts` is { passed, failed } where the runner prints them (vitest, jest,
  *                    node --test, cargo, Playwright, mocha, pytest, go test -v, dotnet, phpunit,
  *                    maven), else null; `tail` is the last 40 lines, ANSI codes removed; the
@@ -43,6 +44,9 @@
  *                    whose red fails verify-item, or null when the diff changed none
  *                    (run-real-app-prove.cjs)
  *
+ * A check the host's wrapper refused twice is no verdict: verify-item exits 5 (NO_VERDICT) and
+ * leaves the last proof as it was.
+ *
  * `proofAtHead(tree, intent, item, config)` tells whether the proof is of the state a review reads.
  */
 
@@ -59,6 +63,10 @@ const { changedPaths, treeOf } = require('./run-gate.cjs');
 const { isSwitchOff, isTestFile, parseAddedLines } = require('./run-test-files.cjs');
 const { owedProof, proveItem } = require('./run-real-app-prove.cjs');
 const { dispatchClaims } = require('./run-review-span.cjs');
+const { runItemChecks } = require('./run-item-check.cjs');
+const { noVerdictLine } = require('./run-check-refused.cjs');
+const { NO_VERDICT } = require('./run-exit.cjs');
+const { verifyItemCall } = require('./run-call.cjs');
 
 const { RunError } = lib;
 
@@ -219,14 +227,6 @@ function tailLines(output, count = TAIL_LINES) {
   return text ? text.split(/\r?\n/).slice(-count) : [];
 }
 
-function readLog(file) {
-  try {
-    return fs.readFileSync(file, 'utf8');
-  } catch (error) {
-    return '';
-  }
-}
-
 // ---------------------------------------------------------------------------
 // The item's diff, read through an index of its own
 // ---------------------------------------------------------------------------
@@ -372,27 +372,33 @@ function verifyItem(itemId, options) {
   let failed = outside.length > 0;
   const checks = [];
   const commands = [];
+  // Each check runs where the host's verification.run sends it, or here without the key (run-item-check.cjs).
+  const ran = runItemChecks(tree, config, items.filter((entry) => entry.spec.manifest.finalize_check)
+    .map((entry) => ({ item: entry.id, check: entry.spec.manifest.finalize_check })),
+  (id) => path.join(lib.cacheDir(tree), lib.currentBranch(tree), `verify-${id}-${lib.stamp()}.log`));
   for (const entry of items) {
-    if (!entry.spec.manifest.finalize_check) {
+    const done = ran.runs.find((one) => one.item === entry.id);
+    if (!done) {
       out.push(`PASS ${entry.id} carries no finalize_check`);
       continue;
     }
-    const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `verify-${entry.id}-${lib.stamp()}.log`);
-    const check = lib.runShell(entry.spec.manifest.finalize_check, tree, log);
-    checks.push({ item: entry.id, ...check });
-    const output = readLog(log);
-    commands.push({ item: entry.id, command: check.command, exit: check.code, seconds: check.seconds,
+    const { command, run: check, output } = done;
+    const log = check.log;
+    checks.push({ item: entry.id, ...check, command });
+    if (done.line) {
+      out.push(`NO VERDICT ${command} -> ${log}`, done.line);
+      continue;
+    }
+    commands.push({ item: entry.id, command, exit: check.code, seconds: check.seconds,
       counts: parseCounts(output), tail: tailLines(output), log });
-    out.push(
-      check.code === 0
-        ? `PASS ${check.seconds}s ${check.command}`
-        : `FAIL ${check.seconds}s ${check.command} -> ${log}`
-    );
+    out.push(check.code === 0 ? `PASS ${check.seconds}s ${command}` : `FAIL ${check.seconds}s ${command} -> ${log}`);
     if (check.code !== 0) {
       out.push(...lib.tail(log, 5));
       failed = true;
     }
   }
+  out.unshift(...ran.left);
+  out.push(...ran.notes);
 
   if (outside.length > 0) {
     out.push(`outside ${label} ownership.editable: ${outside.slice(0, 10).join(', ')}`);
@@ -402,6 +408,19 @@ function verifyItem(itemId, options) {
   if (unreported.length > 0) {
     out.push(`owned but not in changed_files: ${unreported.slice(0, 10).join(', ')}. If this item wrote them, run dispatch-log ` +
       'for it again and accept-dispatch its full list, or each sibling\'s review names them outside');
+  }
+  const unrun = ran.runs.filter((one) => one.line);
+  if (unrun.length > 0) {
+    // No verdict: the last proof stays as it was, and the step runs again (run-check-refused.cjs).
+    out.push(noVerdictLine('item', unrun.length, ran.runs.length, verifyItemCall(tree, items.map((entry) => entry.id))));
+    return {
+      exit: NO_VERDICT,
+      payload: {
+        items: items.map((entry) => entry.id), item: items[0].id, intent: items[0].intent, since, outside, unreported, checks,
+        dispatches: attributed, proof: null, tests_changed: null, no_verdict: unrun.map((one) => one.command),
+      },
+      out,
+    };
   }
 
   // The proof: what ran, and the item's diff since the same baseline the ownership was read from.
