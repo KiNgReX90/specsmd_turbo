@@ -230,3 +230,70 @@ Met 2026-11-12 on the app repo, at the fix of an intent review that touched six 
 ### How the host gets through
 
 It runs `verify-item --items ... --since <the commit the batch started from>`, so the windows before the batch are not read again. Each item's own verify covered them when the item completed.
+
+## 9. A gate mark names a bare command, and a config that wraps its commands for a test machine no longer holds it
+
+Met 2026-11-12 on the app repo, at the final gate of an intent with fourteen marked criteria. The code is the same in 0.1.85.
+
+### What happened
+
+- The plan marks a criterion with the command that proves it, as the base config lists it: `(gate: npm run test:definitions)`. The plan lint holds that name against `verification.finalize` of the base config, where it stands verbatim.
+- The gate runs with a config the host generates per intent tree. In it every finalize command carries the host's wrapper in front, `<wrapper> <tree> npm run test:definitions`, so the check runs on a test machine. The tree's path is in the command, so no plan can name it ahead.
+- `verdictOf` (`S/run-gate-marks.cjs:51-52`) compares the mark with the finalize commands and with the results by exact text. Under the generated config no command equals the bare name, so each of the thirteen command marks printed "no command of verification.finalize and no lane of this config". The same gate had printed PASS for that command a few lines up. The one lane mark read right.
+- The plan lint has the same compare (`S/run-plan-lint.cjs:267` over `gateNames`, `S/run-criterion-marks.cjs:37-41`). Read with the generated config, `gateNames` does not hold the bare name, so a `frontier` or `plan-lint` call that passes that config refuses an open item whose mark the base config accepts.
+- Nothing reads the verdict after it is printed, and the criterion still owes no mutant. What is lost is the one line that says the marked criterion was proven by this gate, and the line that takes its place says the plan is wrong.
+
+### What the flow should do
+
+- One function in `S/run-criterion-marks.cjs` answers which finalize command a name stands for: the command equal to it, or the command whose rest after `verification.session.match` equals it. That key is already how a host says what its wrapper's prefix is (`reach` in `S/run-host-session.cjs:43-46`). `gateNames` and both compares of `verdictOf` go through it.
+- With no `verification.session` only the verbatim form counts, as today.
+- Tests: under a config whose finalize commands are wrapped and whose match reaches them, a criterion marked with the bare command prints the verdict the gate gave the wrapped command, and the plan lint accepts the mark. A mark that names the wrapped command verbatim reads as today. A name neither form holds is refused by the lint and prints today's line at the gate. Without the session key a bare name under wrapped commands is refused as today.
+
+### How the host gets through
+
+It reads the verdict of a marked command from the gate's own PASS or FAIL line for that command, and takes the MARKED line of a command mark for nothing. It runs `frontier` and `plan-lint` without the generated config.
+
+## 10. The archive before the ship makes every gate mark read as late, and the ship then owes the intent review
+
+Met 2026-11-13 on the app repo, at the ship of the first intent that carries gate marks. The code is the same in 0.1.85.
+
+### What happened
+
+- The orchestrator followed its own finalize order (`agents/orchestrator/agent.md`, steps 5 and 6): `close-intent`, `archive-intent --sweep`, one commit, then `ship`. The archive commit moved the intent's directory under `archive/`, 47 files in one commit.
+- `ship` proves the folded tree with `green`, which counts the criteria that still owe a mutant. `itemProofs` (`S/run-mutant-coverage.cjs:70-76`) reads the spec where it now lies, in the archive, and hands that path to `lateMarks`.
+- `planned` (`S/run-criterion-marks.cjs:51-56`) asks for the commit that last changed the criterion's text with `git log -1 -S<text> -- <spec>`. At the archived path the only commit that holds the text is the archive commit itself. It is no ancestor of the item's first review, and it changed more than the spec, so the mark counts for nothing.
+- Measured on that archive commit with the flow's own readers: 14 marks, all 14 late. Before the archive none was. Twelve criteria across five items owed a mutant again, and `ship` ended with exit 3 and the intent review owed, on a tree whose gate and intent review were both green one commit earlier.
+- A commit that moves the directory back does not help: it adds the text at the live path, so it is the last commit that changed it there, and it too changed more than the spec.
+
+### What the flow should do
+
+- `planned` reads the history of the criterion's text at the spec's live path, also when the spec is read from the archive, and counts only a commit that added or changed the file there (`--diff-filter=AM`). The archive's move is then no change of the text. The "nothing but the spec" compare names the live path too. Read so, all 14 marks of the measured commit count again.
+- Tests: an intent with a marked criterion that was planned before its first review is closed and archived in one commit. The coverage lists no late mark and `green` holds. A mark added after the first review, in a commit beside other work, reads late before the archive and after it.
+
+### How the host gets through
+
+It closes the intent and commits without the archive, ships, and runs `archive-intent --sweep` on the base branch after the merge, in one commit of state files.
+
+A tree that already holds the archive commit, with folds and review records on top, keeps it. Where a late mark is then owed, the orchestrator makes one commit that changes that spec alone and rewrites the marked line, the mark's name in backticks. That commit is the last one that changed the text and it changed nothing but the spec, so the mark counts again. Measured on a second intent of the host: one late mark before the commit, none after, and the same code tree hash, so no gate proof is lost. On that intent the reviewer had already been sent after the late mark and had proposed a mutant for a criterion the plan had marked as one no mutant can reach.
+
+## 11. Committing the evidence of an external criterion voids the intent review that waits for it
+
+Met 2026-11-13 on the app repo, on an intent with one `proof: external` criterion and `review.outside: ["**"]` set. The code is the same in 0.1.85.
+
+### What happened
+
+- The reviewer's text (`agents/reviewer/agent.md`, intent mode) says an external criterion names its evidence path under `.specs-inferno/intents/<intent>/evidence/`, "so adding it later leaves the reviewed tree as it is".
+- The intent review was recorded clean. The gate then folded the base in, so the review no longer held by its `tree` hash and held by `tree_outside` alone. `green` asked for nothing but the evidence.
+- The orchestrator committed the evidence file, one file under the intent's `evidence/` directory. `green` then read "intent review owed: the code changed since the review read it".
+- The cause is the list of names in `outsideHash` (`S/run-intent-owed.cjs:101-123`). `own` holds every path the branch changed against the base, the flow's own files under `.specs-inferno` among them, and `kb` (`:120`) names each of them that matches the globs. With `["**"]` that is all of them. The hash beside the list leaves `.specs-inferno` out, as every other hash does (`scopeHash`, `S/run-proofs.cjs:26`), but a new path under it is a new name in the list.
+- Measured on a copy of that tree: before the evidence commit the outside binding holds and nothing is owed, after it the binding fails. With the paths under `.specs-inferno` left out of the list, the value is the same at both commits.
+- The same list changes with every other new path under `.specs-inferno` after a fold: a deferred finding's file, and the archive's move of the whole directory.
+
+### What the flow should do
+
+- `outsideHash` leaves the paths under `.specs-inferno` out of `own`, so they reach neither the list nor the `skip` test. That is what `scopeHash` already does for content.
+- Tests: with `review.outside` set, a review recorded, the base folded in and then one file committed under the intent's `evidence/` directory, the review reads current and `green` owes nothing. The same sequence with a file of the intent's code changed owes the review as today.
+
+### How the host gets through
+
+It sends the intent review the flow asks for. The range is the evidence commit alone, so the round is short, and it is one reviewer dispatch that reads nothing new.
