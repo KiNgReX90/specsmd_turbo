@@ -2,14 +2,14 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURED ON THE HOST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b and the ten rows of section 1c. What is left for the session that builds is four rows, in this order: rows 0l, 0m and 0n, which a host met on 2026-11-13, and then the release steps of row 7. Nothing else on this branch waits for a builder. The thinner work items are measured on the first host and are no work for the builder (section 4).
+Nothing on this branch waits for a builder today. Version 0.1.85 holds the six items of section 1b, the ten rows of section 1c and the three rows of section 1d, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
 Where the older text went, so that nothing built reads as open:
 
 - `inferno-future-improvements.md` is gone from this branch. Of its eight items six are built or struck (sections 1b and 3). The measurement of the first is section 4, its one standing rule is under section 2, and the one idea left unbuilt is in section 5. Its text is in this branch's history at `d5d82fa1`.
-- The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build. The built ones are in history at the same commit.
+- The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build, and none is open today. Its sections 1 to 11 are in history at the same commit, and 12 to 14 at `120be9b4`.
 - `inferno-generalization-plan.md` and `todo.md` are older backlogs that came from main. They ask nothing of whoever builds here, and what they hold is no commitment.
 
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
@@ -50,6 +50,8 @@ Built on this branch on 2026-11-12. `CHANGELOG.md` says what each one does. The 
 
 No run of the eval is owed. It stays as the tool for a planner text change that needs both arms side by side. The thinner work items are measured on the first host's own intents (section 4).
 
+`verification.session` has a second half on the host: its wrapper needs commands to open a session, run in it and close it. The first host's wrapper has them since 2026-11-12. Measured there on one machine: an integrate of three small checks went from 259 seconds to 54.
+
 ## 1c. DONE: ten rows the first host met or measured, built into 0.1.85
 
 Built on this branch on 2026-11-12 and 2026-11-13. Each was a section of the handoff file, which said what went wrong on the host; the column names the section as it stood at `d5d82fa1`. The shipped suite is green for this build on the first host's test machine. Four other hosts on that machine run it since 2026-11-13, and the first host installs it once the work it has at a final gate has landed.
@@ -67,18 +69,21 @@ Built on this branch on 2026-11-12 and 2026-11-13. Each was a section of the han
 | 0j | The archive is no change of a gate mark | 10 | `a58ae92d` |
 | 0k | The evidence of an external criterion keeps the review that waits for it | 11 | `760c3d67`, test `f7fc058f` |
 
-## 2. BUILD NOW, in this order
+## 1d. DONE: three rows the first host met on 2026-11-13, built into 0.1.85
 
-"Done when" is the proof the item is finished.
+Built on this branch on 2026-11-13. `CHANGELOG.md` says what each one does. The handoff column names the section as it stood at `120be9b4`.
 
-| Order | What | Specified in | Done when |
+| Row | What | Handoff section | Built in |
 | --- | --- | --- | --- |
-| 0l | **A caught mutant counts only while its line stands.** An item review's caught mutant whose line a correction removed still counts for its criterion, and the intent review is refused a fresh one. A pin is already held to the tree as it is. | `inferno-0.1.84-run-defects-handoff.md`, section 12 | A delta review prints one line for a carried caught mutant that can no longer be placed, the coverage owes that criterion, and the intent review's mutant for it is taken and run. A mutant whose line only moved counts as today. |
-| 0m | **An item's own check goes where the host's tests go (`verification.run`).** `verify-item` runs an item's `finalize_check` on the machine the orchestrator sits on. A host that sends its tests to another machine cannot route it, and a check its machine ended reads as a failed proof. | `inferno-0.1.84-run-defects-handoff.md`, section 13 | With the key, `verify-item` runs a bare check through the host's wrapper and records the command as it ran, a check that is already wrapped runs as written, and a refused run exits 5 and writes no failed proof. Without the key nothing changes. |
-| 0n | **An accepted instrument red holds through the fold of its fix.** `smoke --accept --harness-fix <sha>` binds the accept to the lane's hash. When the fix lies in the lane's own scope, the fold that brings it into the tree changes that hash: `ship` stops at `green`, and nothing is left to accept. | `inferno-0.1.84-run-defects-handoff.md`, section 14 | An accept made before the fold ships: `ship` folds a fix inside the lane's scope and merges. An accept on a tree that already holds the fix passes. Any other change in the lane's scope retires the accept as today. |
-| 7 | **The release steps on the combined tree.** `npm run validate:all`, `npm pack`, both install evals and the e2e smoke, on the tree that holds rows 0l, 0m and 0n. Run them after all three are built. | `dev_release_guide.md` | Each result is one line in the pull request text. |
+| 0l | A caught mutant counts only while its line stands | 12 | `771be02a`, `65b9550e` |
+| 0m | An item's own check goes where the host's tests go (`verification.run`, `verification.wrapped`) | 13 | `0461e9c6`, `6659c35e` |
+| 0n | An accepted instrument red holds through the fold of its fix | 14 | `e9aa44fc`, `7108c32b` |
 
-One note for whoever builds: `verification.session` has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The first host's wrapper has them since 2026-11-12, proven on both its test machines, and the host set the key with its install of 0.1.85. Measured there on one machine: an integrate of three small checks went from 259 seconds to 54.
+The release steps (row 7) ran on `f3be640a`, the tree that holds all three: each result is one line in the pull request text. The e2e smoke runs again on the flow as it is (`43fae93a`).
+
+## 2. BUILD NOW: nothing today
+
+A host's next finding arrives here as a row, with its section in the handoff file.
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
