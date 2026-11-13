@@ -230,3 +230,25 @@ Met 2026-11-12 on the app repo, at the fix of an intent review that touched six 
 ### How the host gets through
 
 It runs `verify-item --items ... --since <the commit the batch started from>`, so the windows before the batch are not read again. Each item's own verify covered them when the item completed.
+
+## 9. A gate mark names a bare command, and a config that wraps its commands for a test machine no longer holds it
+
+Met 2026-11-12 on the app repo, at the final gate of an intent with fourteen marked criteria. The code is the same in 0.1.85.
+
+### What happened
+
+- The plan marks a criterion with the command that proves it, as the base config lists it: `(gate: npm run test:definitions)`. The plan lint holds that name against `verification.finalize` of the base config, where it stands verbatim.
+- The gate runs with a config the host generates per intent tree. In it every finalize command carries the host's wrapper in front, `<wrapper> <tree> npm run test:definitions`, so the check runs on a test machine. The tree's path is in the command, so no plan can name it ahead.
+- `verdictOf` (`S/run-gate-marks.cjs:51-52`) compares the mark with the finalize commands and with the results by exact text. Under the generated config no command equals the bare name, so each of the thirteen command marks printed "no command of verification.finalize and no lane of this config". The same gate had printed PASS for that command a few lines up. The one lane mark read right.
+- The plan lint has the same compare (`S/run-plan-lint.cjs:267` over `gateNames`, `S/run-criterion-marks.cjs:37-41`). Read with the generated config, `gateNames` does not hold the bare name, so a `frontier` or `plan-lint` call that passes that config refuses an open item whose mark the base config accepts.
+- Nothing reads the verdict after it is printed, and the criterion still owes no mutant. What is lost is the one line that says the marked criterion was proven by this gate, and the line that takes its place says the plan is wrong.
+
+### What the flow should do
+
+- One function in `S/run-criterion-marks.cjs` answers which finalize command a name stands for: the command equal to it, or the command whose rest after `verification.session.match` equals it. That key is already how a host says what its wrapper's prefix is (`reach` in `S/run-host-session.cjs:43-46`). `gateNames` and both compares of `verdictOf` go through it.
+- With no `verification.session` only the verbatim form counts, as today.
+- Tests: under a config whose finalize commands are wrapped and whose match reaches them, a criterion marked with the bare command prints the verdict the gate gave the wrapped command, and the plan lint accepts the mark. A mark that names the wrapped command verbatim reads as today. A name neither form holds is refused by the lint and prints today's line at the gate. Without the session key a bare name under wrapped commands is refused as today.
+
+### How the host gets through
+
+It reads the verdict of a marked command from the gate's own PASS or FAIL line for that command, and takes the MARKED line of a command mark for nothing. It runs `frontier` and `plan-lint` without the generated config.
