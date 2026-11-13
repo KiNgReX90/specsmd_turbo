@@ -2,7 +2,7 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURE FIRST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b. Rows 0b to 0k came in after those were built: they go into 0.1.85 if its release steps have not run yet, and into the next release otherwise.
+Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b and the ten rows of section 1c. What is left to build is two lines: the numbers behind the thinner work items, and the release steps.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -27,7 +27,7 @@ The first host handed off fourteen findings on 0.1.83. All fourteen are built on
 | 13 | A grant takes a file another dispatch changed beside it | `7bdf52ff` |
 | 14 | A product red with no `verdicts` key ends with no step | `075d2bc2` |
 
-What is left for these is on the host: it sets the new keys it needs (`mutate.checks`, `real_app.prove`, `verification.<lane>.verdicts`) in its own time. `mutate.run` and `mutate.wrapped` it sets once a mutate session serves the whole batch (row 0f): until then the key would send every light test through its own sync and queue wait.
+What is left for these is on the host: it sets the new keys it needs (`mutate.checks`, `real_app.prove`, `verification.<lane>.verdicts`) in its own time. `mutate.run`, `mutate.wrapped` and `verification.refused` it sets with its install of the build that holds section 1c.
 
 ## 1b. DONE: six items of the build list, built as 0.1.85
 
@@ -44,23 +44,30 @@ Built on this branch on 2026-11-12. `CHANGELOG.md` says what each one does. The 
 
 Still owed from item 5: one recorded run of both arms in the pull request text. Item 6 below reads that run.
 
+## 1c. DONE: ten rows the first host met or measured, built into 0.1.85
+
+Built on this branch on 2026-11-12 and 2026-11-13. Each is a section of `inferno-0.1.84-run-defects-handoff.md`, which says what went wrong on the host. The shipped suite is green for this build on the first host's test machine. Four other hosts on that machine run it since 2026-11-13, and the first host installs it once the work it has at a final gate has landed.
+
+| Row | What | Handoff section | Built in |
+| --- | --- | --- | --- |
+| 0b | A mutant is checked against the criterion it names (`says`, and `moved` in the intent review) | 2 | `38a92dc1`, `1b6e50c7` |
+| 0c | A proof that exists only after the merge has its own kind (`after_ship`) | 3 | `f93ce251` |
+| 0d | A fold that touches nothing of the intent keeps its review (`review.outside: ["**"]`) | 4 | `760c3d67` |
+| 0e | The frontier lets a later item need a file an earlier item creates | 5 | `f93ce251` |
+| 0f | A mutate session serves the whole batch | 6 | `8ed26fcf` |
+| 0g | A check the wrapper refused to run is no verdict (`verification.refused`, exit 5) | 7 | `2bb00704`, `0f12ff4b`, `f22031c8` |
+| 0h | A dispatch over several completed items keeps their histories apart | 8 | `b1871434` |
+| 0i | A gate mark reads through the host's wrapper | 9 | `ddf14505` |
+| 0j | The archive is no change of a gate mark | 10 | `a58ae92d` |
+| 0k | The evidence of an external criterion keeps the review that waits for it | 11 | `760c3d67`, test `f7fc058f` |
+
 ## 2. BUILD NOW, in this order
 
 "Done when" is the proof the item is finished.
 
 | Order | What | Specified in | Done when |
 | --- | --- | --- | --- |
-| 0b | **A mutant is checked against the criterion it names.** A reviewer that numbers its mutants in the order it wrote them credits them to the wrong criteria, and the runner takes the numbers as written. The dispatch prints the numbered criteria, each entry repeats the criterion's opening words, and the intent review can move a recorded one. | `inferno-0.1.84-run-defects-handoff.md`, section 2 | A review numbered in order past a skipped criterion is refused and the message names the right number. A review whose numbers and words agree records as today. After a move the criterion left behind takes a proposal in the intent review. |
-| 0c | **A proof that exists only after the merge has its own kind.** An external criterion with no evidence file stops the ship, also when only the ship makes the proof possible, such as a timer that runs from the default branch. A fourth proof, `after_ship`, is listed as owed by the ship and marked in the brief at plan time. | `inferno-0.1.84-run-defects-handoff.md`, section 3 | A review with one `after_ship` entry and no file is green and the ship prints the owed line. The same entry spelled `external` is refused as today. An `after_ship` entry for a criterion the brief does not mark is refused. |
-| 0d | **A fold that touches nothing of the intent keeps its review.** Any folded file voids the intent review today, and the reviewer is handed the whole base delta. `review.outside: ["**"]` already binds the review to the files the intent changed; say so, test it, and let the delta dispatch name the files a fold did touch. | `inferno-0.1.84-run-defects-handoff.md`, section 4 | With the key, a fold of a file the intent never touched leaves the review current and the gate does not owe it. A fold that changes a file the intent changed owes the review and the dispatch names that file. |
-| 0e | **The frontier lets a later item need a file an earlier item creates.** The existence check of `context.required` and `reads` skips a path that an item this one depends on owns and has not completed yet, and plan-lint makes the same check. | `inferno-0.1.84-run-defects-handoff.md`, section 5 | A plan whose second item requires a file its first item owns gives a frontier of the first item. The same plan without the `depends_on` is refused. After the first item completes without creating the file, the frontier refuses the second. |
-| 0f | **A mutate session serves the whole batch.** A session opens per distinct test command today, and a reviewer writes one test per mutant, so on the first host 185 opens remain of 251. One session per batch leaves 31. The switched runs of a shared Rust build join it. | `inferno-0.1.84-run-defects-handoff.md`, section 6 | A batch of three mutants with three test commands opens one session and closes one. A failed send back stops the rest with no verdict and the session still closes. A batch with two switched Rust entries and one other entry opens one session. |
-| 0g | **A check the wrapper refused to run is no verdict.** A wrapper that ran nothing (machine gone, session slot ended) exits non-zero, and integrate prints FAIL and sends the builder after it. A host names the wrapper's refusal line under `verification.refused`; such a check runs once more in a fresh session, and a second refusal ends the step with its own exit and no failed check. | `inferno-0.1.84-run-defects-handoff.md`, section 7 | A refused first open and a good second give a green integrate with two opens. Two refused opens give the no-verdict exit and no failed check. A non-zero exit without the line fails as today. |
-| 0h | **A dispatch over several completed items keeps their histories apart.** One dispatch-log with `--items` over completed items joins their histories, and verify-item then refuses a peer that ran beside one item and changed a file only another one owns. A peer overlaps only beside an attempt of the branch that claims the file. | `inferno-0.1.84-run-defects-handoff.md`, section 8 | A peer beside item A that changed a file only item B owns passes a batched verify over A and B. The same peer beside B's attempt is refused as today. |
-| 0i | **A gate mark reads through the host's wrapper.** A plan marks a criterion with the bare command, and a config that wraps every finalize command for a test machine no longer holds that name: the gate prints "no command of verification.finalize" for a command it just passed, and a lint read with that config refuses the mark. A name stands for the command equal to it or the command whose rest after `verification.session.match` equals it. | `inferno-0.1.84-run-defects-handoff.md`, section 9 | Under wrapped finalize commands the match reaches, a bare mark prints the wrapped command's verdict and the lint accepts it. A verbatim mark reads as today. Without the session key a bare name under wrapped commands is refused as today. |
-| 0j | **The archive is no change of a gate mark.** The flow's own order archives before it ships, and at the archived path the last commit that holds a marked criterion's text is the archive commit, so every mark reads as late and the ship owes the intent review. On the first host: 14 marks, all 14 late, ship exit 3. The mark's history is read at the spec's live path, and only a commit that added or changed the file there counts. | `inferno-0.1.84-run-defects-handoff.md`, section 10 | An intent with a mark planned before its first review, closed and archived in one commit, lists no late mark and ships. A mark added after the first review beside other work reads late before the archive and after it. |
-| 0k | **The evidence of an external criterion keeps the review that waits for it.** With `review.outside` set and the base folded in, the review holds by a hash that carries the names of every path the branch changed, the flow's own files under `.specs-inferno` among them. Committing the evidence file adds a name, and the intent review is owed again. `outsideHash` leaves the paths under `.specs-inferno` out, as `scopeHash` does. | `inferno-0.1.84-run-defects-handoff.md`, section 11 | After a review, a fold and one file committed under the intent's `evidence/` directory, the review reads current and `green` owes nothing. The same sequence with a changed code file owes the review as today. |
-| 6 | **Thinner work items.** The planner stops writing prose that explains what the code does and keeps what a builder cannot get alone. | improvement 1 | It is adopted only on numbers: the eval of item 5, then one intent built both ways, show that the builder's cost (rounds, output tokens, wall time, red integrate steps per item) rises less than the planner's cost falls. If it does not, the text change is reverted and this line says so. |
+| 6 | **Thinner work items: the numbers.** The text change is built in `7c770d7c`: the planner keeps prose about the code out of a work item. What is owed is the proof that it may stay. | improvement 1 | It stays only on numbers: the eval of item 5, then one intent built both ways, show that the builder's cost (rounds, output tokens, wall time, red integrate steps per item) rises less than the planner's cost falls. If it does not, the text change is reverted and this line says so. |
 | 7 | **The release steps on the combined tree.** `npm run validate:all`, `npm pack`, both install evals and the e2e smoke, on 0.1.85. | `dev_release_guide.md` | Each result is one line in the pull request text. |
 
 Two notes for whoever builds:

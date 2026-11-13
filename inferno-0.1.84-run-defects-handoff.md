@@ -38,6 +38,8 @@ It does not set `mutate.run` yet. Its orchestrators keep telling every reviewer 
 
 ## 2. A mutant numbered by its place in the review is credited to the wrong criterion, and nothing can move it
 
+**Built into 0.1.85 in `38a92dc1` and `1b6e50c7`. Nothing of this section is left to build.**
+
 Met 2026-11-12 on the app repo, in the first review of an item with twelve acceptance criteria.
 
 ### What happened
@@ -79,6 +81,8 @@ It cannot repair this item inside the flow, so its orchestrator records the four
 
 ## 3. A criterion that can only be proven after the merge blocks the merge
 
+**Built into 0.1.85 in `f93ce251` (`after_ship`). Nothing of this section is left to build.**
+
 Met 2026-11-12 on the app repo, at the ship of an intent that installs a timer on each machine.
 
 ### What happened
@@ -104,6 +108,8 @@ Any intent that ends in a step run from the default branch meets this: an instal
 Its intent reviewer judged the two halves again and took them out of the merge's criteria. The review still names both evidence paths as owed after the landing, and the session that ran the intent writes them on the default branch once the install has run. That cost one more review round, and the owed half now lives in prose that no command reads.
 
 ## 4. Every fold of the base voids the intent review, and the reviewer is handed the whole base delta
+
+**Built into 0.1.85 in `760c3d67`. Nothing of this section is left to build.**
 
 Met 2026-11-12 on the app repo. Reported as "the shared host config counts as intent code"; the cause is wider than that.
 
@@ -136,6 +142,8 @@ It sets `review.outside: ["**"]`.
 
 ## 5. The frontier refuses a plan in which a later item needs a file an earlier item creates
 
+**Built into 0.1.85 in `f93ce251`. Nothing of this section is left to build.**
+
 Met 2026-11-12 on the app repo, at the first `run.cjs frontier` of an intent.
 
 ### What happened
@@ -155,6 +163,8 @@ Met 2026-11-12 on the app repo, at the first `run.cjs frontier` of an intent.
 It takes the path out of the second item's `context.required` in a spec-only commit and puts it back in another one once the first item is integrated.
 
 ## 6. A mutate session opens once per distinct test command, so a review whose mutants each name their own test saves little
+
+**Built into 0.1.85 in `8ed26fcf`. Nothing of this section is left to build.**
 
 Read 2026-11-12 in the 0.1.85 source on this branch, before the host set the key. It is a gap in 0.1.85, written here because this is the one open file.
 
@@ -191,6 +201,8 @@ It sets `mutate.session` as it is, for the entries that do share a command, and 
 
 ## 7. A check the host's wrapper refused to run reads as a failed check, and the builder is sent after a machine fault
 
+**Built into 0.1.85 in `2bb00704` (`verification.refused`). Nothing of this section is left to build.**
+
 Read 2026-11-12 in the 0.1.85 source on this branch by the session that owns the first host's wrapper, before the first integrate ran through a session. It holds for a plain wrapped check too, and a session adds new ways to meet it.
 
 ### What the code does
@@ -213,6 +225,8 @@ An orchestrator that sees every check of an integrate or a gate fail with a REFU
 
 ## 8. A dispatch-log over several completed items joins their histories, and verify-item then refuses a peer that ran beside one of them
 
+**Built into 0.1.85 in `b1871434`. Nothing of this section is left to build.**
+
 Met 2026-11-12 on the app repo, at the fix of an intent review that touched six completed items. The code is the same in 0.1.85.
 
 ### What happened
@@ -232,6 +246,8 @@ Met 2026-11-12 on the app repo, at the fix of an intent review that touched six 
 It runs `verify-item --items ... --since <the commit the batch started from>`, so the windows before the batch are not read again. Each item's own verify covered them when the item completed.
 
 ## 9. A gate mark names a bare command, and a config that wraps its commands for a test machine no longer holds it
+
+**Built into 0.1.85 in `ddf14505`. Nothing of this section is left to build.**
 
 Met 2026-11-12 on the app repo, at the final gate of an intent with fourteen marked criteria. The code is the same in 0.1.85.
 
@@ -255,6 +271,8 @@ It reads the verdict of a marked command from the gate's own PASS or FAIL line f
 
 ## 10. The archive before the ship makes every gate mark read as late, and the ship then owes the intent review
 
+**Built into 0.1.85 in `a58ae92d`. Nothing of this section is left to build.**
+
 Met 2026-11-13 on the app repo, at the ship of the first intent that carries gate marks. The code is the same in 0.1.85.
 
 ### What happened
@@ -277,6 +295,8 @@ It closes the intent and commits without the archive, ships, and runs `archive-i
 A tree that already holds the archive commit, with folds and review records on top, keeps it. Where a late mark is then owed, the orchestrator makes one commit that changes that spec alone and rewrites the marked line, the mark's name in backticks. That commit is the last one that changed the text and it changed nothing but the spec, so the mark counts again. Measured on a second intent of the host: one late mark before the commit, none after, and the same code tree hash, so no gate proof is lost. On that intent the reviewer had already been sent after the late mark and had proposed a mutant for a criterion the plan had marked as one no mutant can reach.
 
 ## 11. Committing the evidence of an external criterion voids the intent review that waits for it
+
+**Built into 0.1.85 in `760c3d67`, with its test in `f7fc058f`. Nothing of this section is left to build.**
 
 Met 2026-11-13 on the app repo, on an intent with one `proof: external` criterion and `review.outside: ["**"]` set. The code is the same in 0.1.85.
 
