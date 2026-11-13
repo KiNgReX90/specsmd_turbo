@@ -10,6 +10,9 @@
  * A mutant counts from the item's own review or from the intent review, and only when it reads
  * caught yes, so an entry the batch gave no verdict never counts. A proposal an item review
  * recorded without `caught` never ran: the intent review's record runs it (run-review-mutants.cjs).
+ * An item review's caught mutant counts only while it can still be placed on the tree as it is, as
+ * an owed proposal is placed (`placed` below): one whose line a correction or a fold rewrote proves
+ * nothing about the code that replaced it, so its criterion is the intent review's again.
  * A pin counts from either review too (run-review-pins.cjs): the intent review's once its record
  * checked it, an item review's while it still stands in the tree as it is.
  *
@@ -29,6 +32,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { pinProblem, testPaths } = require('./run-review-pins.cjs');
 const { gateMark, lateMarks } = require('./run-criterion-marks.cjs');
+const { changedSince, locate } = require('./run-mutant-runs.cjs');
 
 /** The criteria under `## Acceptance Criteria`, one per list line, checkbox or not. */
 function acceptanceCriteria(content) {
@@ -100,8 +104,23 @@ const owedProposals = (tree, intentId, ids) => {
 const criteriaOf = (tree, intentId, itemId) => acceptanceCriteria(fs.readFileSync(lib.readItemSpec(tree, intentId, itemId).file, 'utf8'));
 
 /**
+ * Where an entry of `itemId`'s review stands on the tree now (run-mutant-runs.cjs `locate`), followed
+ * into the files the item changed since its first review: `{ why }` when it has no place. Those files
+ * are read from the live path's history, which holds that review's first commit after the archive
+ * too, and only when the entry's own file no longer holds it. An entry that names no line, a released
+ * flow's, stands as recorded. `spec` is the item's (run-lib.cjs readItemSpec).
+ */
+function placed(tree, intentId, itemId, spec) {
+  const rel = path.posix.join(lib.SPECS_DIR, 'intents', intentId, 'reviews', `${itemId}.yaml`);
+  // The manifest's ownership is read only here: an item never reviewed may have none.
+  const elsewhere = () => changedSince(tree, rel, spec.manifest.ownership.editable);
+  return (entry) => (typeof entry.find === 'string' ? locate(tree, entry, elsewhere) : {});
+}
+
+/**
  * What each item of the intent needs: its criteria, how its tests prove them, its manifest's test
- * paths, its own caught mutants, its own pins that still stand, and its marks that count for nothing.
+ * paths, its own caught mutants that can still be placed, its own pins that still stand, and its
+ * marks that count for nothing.
  */
 function itemProofs(tree, intentId, ids) {
   const moves = intentMoves(tree, intentId);
@@ -109,13 +128,14 @@ function itemProofs(tree, intentId, ids) {
     const spec = lib.readItemSpec(tree, intentId, id);
     const tests = testPaths(spec);
     const criteria = acceptanceCriteria(fs.readFileSync(spec.file, 'utf8'));
+    const where = placed(tree, intentId, id, spec);
     return {
       id,
       criteria,
       late: lateMarks(tree, intentId, id, spec.file, criteria),
       tested: tests.length > 0,
       tests,
-      mutants: movedMutants(tree, intentId, id, criteria, moves).filter((entry) => entry.caught === 'yes'),
+      mutants: movedMutants(tree, intentId, id, criteria, moves).filter((entry) => entry.caught === 'yes' && !where(entry).why),
       pins: recorded(tree, intentId, id, 'pins').filter((pin) => pinProblem(tree, pin, { item: id, tests }) === null),
     };
   });
@@ -165,5 +185,6 @@ const gapRefusal = (gaps) => `verdict clean while ${gaps.join('; ')}. Propose on
   'the runner runs or checks each when it records this file';
 
 module.exports = {
-  NAMED, acceptanceCriteria, criteriaOf, gapRefusal, intentMoves, itemProofs, mutantGaps, names, owedProposals, recordedMutants,
+  NAMED, acceptanceCriteria, criteriaOf, gapRefusal, intentMoves, itemProofs, mutantGaps, names, owedProposals, placed,
+  recordedMutants,
 };

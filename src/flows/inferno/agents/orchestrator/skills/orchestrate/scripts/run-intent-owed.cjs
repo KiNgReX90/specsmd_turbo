@@ -87,11 +87,11 @@ function scanOwed(tree, intentId) {
   return scanIds(tree, intentId) === null;
 }
 
-/** Validate a review file against the intent as it stands. */
-function parseFor(tree, rel, intentId, recorded) {
+/** Validate a review file against the intent as it stands; `owing` false leaves out what each criterion owes. */
+function parseFor(tree, rel, intentId, recorded, owing = true) {
   const items = intentItems(tree, intentId);
   return parseIntentReview(tree, rel, {
-    recorded, items, scanIds: scanIds(tree, intentId) || [], proofs: itemProofs(tree, intentId, items),
+    recorded, items, scanIds: scanIds(tree, intentId) || [], proofs: owing ? itemProofs(tree, intentId, items) : [],
   });
 }
 
@@ -132,11 +132,17 @@ function reviewCurrent(tree, config, review) {
   return Boolean(hashes) && hashes.includes(review.tree_outside);
 }
 
+const changedLine = (review) => `the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`;
+
 /**
  * The review as it holds for the tree: `owed` lists every reason it does not, empty when a
  * recorded review reads clean for the current content. A recorded file the review refuses now is
  * `refused`: it goes back to its reviewer, and the record call is what runs next, never the call
- * that read it.
+ * that read it. A clean review whose only refusal is a criterion that owes a proof, on a tree
+ * that moved since its record, as a fold that rewrote a mutated line or a pinned copy leaves it,
+ * is owed a review instead: its record's dispatch read another tree, so no record of the file can
+ * close the gap. The review call reads it as a delta of the recorded review, or whole while that
+ * review still binds the tree.
  */
 function intentReviewState(tree, config, intentId) {
   const rel = intentReviewPath(tree, intentId);
@@ -151,13 +157,18 @@ function intentReviewState(tree, config, intentId) {
   }
   let review;
   try {
-    review = parseFor(tree, rel, intentId, true);
+    review = parseFor(tree, rel, intentId, true, false);
+    parseFor(tree, rel, intentId, true);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
+    if (review && review.tree !== proofs.scopeHash(tree)) {
+      const delta = !reviewCurrent(tree, config, review);
+      return { rel, review: delta ? review : null, owed: [...owed, ...(delta ? [changedLine(review)] : []), error.refused] };
+    }
     return { rel, review: null, refused: Boolean(error.refused), owed: [...owed, sentBack(error, intentRecordCall(tree))] };
   }
   if (!reviewCurrent(tree, config, review)) {
-    owed.push(`the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`);
+    owed.push(changedLine(review));
   } else if (review.verdict !== 'clean') {
     owed.push(proofOwed(tree, intentId, review) || 'the review says fix and its findings are not fixed');
   }
