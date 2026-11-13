@@ -3,10 +3,10 @@ const test = require("node:test");
 const path = require("node:path");
 
 const { REVIEW, itemReview, runs } = require("./run-review-mutants-fixture.cjs");
-const { git, write } = require("./review-fixture.cjs");
-const { MARKED, SPEC, aOne, intentReview, itemReviewed, lint, planned, shown } = require("./run-criterion-marks-fixture.cjs");
+const { CONFIG, git, run, write } = require("./review-fixture.cjs");
+const { GATE, MARKED, SPEC, aOne, intentReview, itemReviewed, lint, planned, shown } = require("./run-criterion-marks-fixture.cjs");
 const { itemProofs, mutantGaps } = require("./run-mutant-coverage.cjs");
-const { gateMark, gateNames } = require("./run-criterion-marks.cjs");
+const { gateCommand, gateHeld, gateMark } = require("./run-criterion-marks.cjs");
 const { tempDir } = require("./test-temp.cjs");
 
 // A criterion no mutant can turn red carries a gate mark on its own line, `(gate: <name>)`: the
@@ -33,7 +33,7 @@ test("a criterion marked with a gate command owes no mutant, and one the config 
   assert.equal(refused.code, 2, shown(refused));
   assert.deepEqual(refused.out.split("\n").filter((line) => line.startsWith("FINDING ")), [
     "FINDING a-one: acceptance criterion 2 is marked (gate: echo nothing), which the config's verification block does not hold: " +
-      "name a command of verification.finalize verbatim or a lane the config sets as verification.<lane>",
+      "name a command of verification.finalize, verbatim or as its rest after verification.session.match, or a lane the config sets as verification.<lane>",
   ]);
 });
 
@@ -144,7 +144,82 @@ test("a mark names a command of verification.finalize or a lane the config sets"
       windows: { command: "npm run test:windows", scope: ["src/**"] },
     },
   };
-  assert.deepEqual(gateNames(config), ["npm run check", "cargo test", "verification.windows"]);
-  assert.deepEqual(gateNames({ verification: { smoke: { command: "npm run smoke", scope: ["src/**"] } } }), ["verification.smoke"]);
-  assert.deepEqual(gateNames({}), []);
+  const held = (names, under) => names.filter((name) => gateHeld(under, name));
+  const names = ["npm run check", "cargo test", "verification.windows", "npm run quick", "npm run lint", "verification.lint", "verification.smoke"];
+  assert.deepEqual(held(names, config), ["npm run check", "cargo test", "verification.windows"]);
+  assert.deepEqual(held(names, { verification: { smoke: { command: "npm run smoke", scope: ["src/**"] } } }), ["verification.smoke"]);
+  assert.deepEqual(held(names, {}), []);
+});
+
+test("a finalize command is named verbatim, or by its rest after the session's match, and the verbatim one wins", () => {
+  const session = { match: "^remote \\S+ ", open: "o", run: "r", close: "c" };
+  const wrapped = { verification: { finalize: ["remote /t npm run check", "cargo test"], session } };
+  assert.equal(gateCommand(wrapped, "npm run check"), "remote /t npm run check");
+  assert.equal(gateCommand(wrapped, "remote /t npm run check"), "remote /t npm run check");
+  assert.equal(gateCommand(wrapped, "cargo test"), "cargo test");
+  assert.equal(gateCommand(wrapped, "/t npm run check"), null, "the rest is read after the whole match");
+  assert.equal(gateCommand(wrapped, "npm run lint"), null);
+  assert.equal(gateCommand({ verification: { finalize: ["x remote /t npm run check"], session } }, "npm run check"), null, "the match reaches only at the start");
+  assert.equal(gateCommand({ verification: { finalize: wrapped.verification.finalize } }, "npm run check"), null, "no session, no rest");
+  assert.equal(gateCommand({ verification: { finalize: ["remote /t npm run check", "npm run check"], session } }, "npm run check"), "npm run check");
+  assert.equal(gateCommand({ verification: { session } }, "npm run check"), null);
+  assert.equal(gateHeld(wrapped, "npm run check"), true);
+  assert.equal(gateHeld({ verification: { finalize: wrapped.verification.finalize } }, "npm run check"), false);
+});
+
+// A host config may put its wrapper in front of every finalize command; the plan still names the
+// bare command, the rest the session's match leaves, and the lint reads it so under that config.
+const WRAP = "tools/remote.sh /trees/alpha";
+const SESSION = "  session:\n    match: '^tools/remote\\.sh \\S+ '\n    open: tools/remote.sh open\n" +
+  "    run: tools/remote.sh run\n    close: tools/remote.sh close\n";
+const wrappedConfig = (session) => CONFIG.replace("verification:\n", `verification:\n  finalize:\n    - ${WRAP} ${GATE}\n${session}`);
+const findings = (result) => result.out.split("\n").filter((line) => line.startsWith("FINDING "));
+const unheld = (name) => `FINDING a-one: acceptance criterion 2 is marked (gate: ${name}), which the config's verification block does not hold: ` +
+  "name a command of verification.finalize, verbatim or as its rest after verification.session.match, or a lane the config sets as verification.<lane>";
+
+test("under wrapped finalize commands the session's match reaches, the plan lint accepts a bare mark and a verbatim one", () => {
+  const { fixture, tree } = planned();
+  write(tree, ".specs-inferno/config.yaml", wrappedConfig(SESSION));
+  const bare = lint(fixture, tree);
+  assert.equal(bare.code, 0, shown(bare));
+
+  write(tree, SPEC, aOne(`the size cap holds on every file (gate: ${WRAP} ${GATE})`));
+  const verbatim = lint(fixture, tree);
+  assert.equal(verbatim.code, 0, shown(verbatim));
+
+  write(tree, SPEC, aOne("the size cap holds on every file (gate: echo nothing)"));
+  const neither = lint(fixture, tree);
+  assert.equal(neither.code, 2, shown(neither));
+  assert.deepEqual(findings(neither), [unheld("echo nothing")]);
+});
+
+test("under wrapped finalize commands with no session key, the plan lint refuses a bare mark as before", () => {
+  const { fixture, tree } = planned();
+  write(tree, ".specs-inferno/config.yaml", wrappedConfig(""));
+  const result = lint(fixture, tree);
+  assert.equal(result.code, 2, shown(result));
+  assert.deepEqual(findings(result), [unheld(GATE)]);
+});
+
+test("a host config that wraps its commands lets the plan lint read a bare mark through the session it inherits", () => {
+  const { fixture, tree } = planned();
+  const base = CONFIG.replace("verification:\n", `verification:\n  finalize:\n    - ${GATE}\n${SESSION}`);
+  write(tree, ".specs-inferno/config.yaml", base);
+  write(tree, ".specs-inferno/config.host.yaml", wrappedConfig(""));
+  const host = run(fixture, ["plan-lint", "alpha", "--tree", tree, "--config", ".specs-inferno/config.host.yaml"]);
+  assert.equal(host.code, 0, shown(host));
+
+  write(tree, ".specs-inferno/config.yaml", CONFIG.replace("verification:\n", `verification:\n  finalize:\n    - ${GATE}\n`));
+  const unwrapped = run(fixture, ["plan-lint", "alpha", "--tree", tree, "--config", ".specs-inferno/config.host.yaml"]);
+  assert.equal(unwrapped.code, 2, shown(unwrapped));
+  assert.deepEqual(findings(unwrapped), [unheld(GATE)]);
+});
+
+test("the config example says a gate mark may name the rest its documented match leaves", () => {
+  const example = require("node:fs").readFileSync(path.join(__dirname, "../../../config.example.yaml"), "utf8");
+  const line = example.split("\n").find((entry) => entry.startsWith("  #   match: "));
+  assert.match(line, /the rest of the command is the check the session runs, and a gate mark may name it$/);
+  const match = /^ {2}# {3}match: '(.+?)'/.exec(line)[1];
+  const config = { verification: { finalize: ["tools/remote-test.sh . npm test"], session: { match } } };
+  assert.equal(gateCommand(config, "npm test"), "tools/remote-test.sh . npm test");
 });

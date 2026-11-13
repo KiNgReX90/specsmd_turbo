@@ -8,8 +8,10 @@
  * named. The criterion then owes no mutant (run-mutant-coverage.cjs), and the gate prints it
  * beside the verdict of what it names (run-gate-marks.cjs).
  *
- * A name is one of the things the gate runs: a command of `verification.finalize`, verbatim, or a
- * lane the config sets, as `verification.<lane>` (`verification.smoke`, `verification.windows`).
+ * A name is one of the things the gate runs: a command of `verification.finalize`, or a lane the
+ * config sets, as `verification.<lane>` (`verification.smoke`, `verification.windows`). A command
+ * is named verbatim, or by its rest after `verification.session.match`, the check the host's
+ * wrapper runs, so a plan names the bare command a host config wraps; the verbatim one wins.
  * One pair of backticks around the name is read past. The plan lint refuses any other name.
  *
  * The reviewer never adds a mark: a criterion that turns out unreachable goes to the
@@ -30,6 +32,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { configuredLanes } = require('./run-lane-config.cjs');
+const { reach } = require('./run-host-session.cjs');
 
 const MARK = /(?:^|\s)\(gate:\s*(.*?)\s*\)$/;
 
@@ -39,11 +42,19 @@ function gateMark(text) {
   return match && match[1] ? match[1].replace(/^`(.+)`$/, '$1') : null;
 }
 
-/** Every name a mark may give under this config: its finalize commands, then its lanes. */
-function gateNames(config) {
+/** The finalize command a mark's name stands for under this config, as the header says, or null. */
+function gateCommand(config, name) {
   const verification = config.verification || {};
   const commands = Array.isArray(verification.finalize) ? verification.finalize : [];
-  return [...commands, ...configuredLanes(config).map((lane) => `verification.${lane.name}`)];
+  if (commands.includes(name)) return name;
+  if (!verification.session) return null;
+  const match = new RegExp(verification.session.match);
+  return commands.find((command) => reach(match, command) === name) || null;
+}
+
+/** Whether a mark may give `name` under this config: a finalize command it stands for, or a lane. */
+function gateHeld(config, name) {
+  return gateCommand(config, name) !== null || configuredLanes(config).some((lane) => `verification.${lane.name}` === name);
 }
 
 /** The two homes of a spec, live and archived, from its path in either. */
@@ -104,4 +115,4 @@ function lateMarks(tree, intentId, itemId, specFile, criteria) {
   return marked.filter((entry) => !planned(tree, specs, entry.text, review)).map((entry) => entry.index);
 }
 
-module.exports = { gateMark, gateNames, lateMarks };
+module.exports = { gateCommand, gateHeld, gateMark, lateMarks };
