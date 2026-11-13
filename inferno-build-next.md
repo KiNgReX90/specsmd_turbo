@@ -2,7 +2,7 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURE FIRST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b and the ten rows of section 1c. What is left to build is two lines: the numbers behind the thinner work items, and the release steps.
+Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b and the ten rows of section 1c. What is left to build is three lines: row 0l, which a host met on 2026-11-13, the numbers behind the thinner work items, and the release steps.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -67,6 +67,7 @@ Built on this branch on 2026-11-12 and 2026-11-13. Each is a section of `inferno
 
 | Order | What | Specified in | Done when |
 | --- | --- | --- | --- |
+| 0l | **A caught mutant counts only while its line stands.** An item review's caught mutant whose line a correction removed still counts for its criterion, and the intent review is refused a fresh one. A pin is already held to the tree as it is. | `inferno-0.1.84-run-defects-handoff.md`, section 12 | A delta review prints one line for a carried caught mutant that can no longer be placed, the coverage owes that criterion, and the intent review's mutant for it is taken and run. A mutant whose line only moved counts as today. |
 | 6 | **Thinner work items: the numbers.** The text change is built in `7c770d7c`: the planner keeps prose about the code out of a work item. What is owed is the proof that it may stay. | improvement 1 | It stays only on numbers: the eval of item 5, then one intent built both ways, show that the builder's cost (rounds, output tokens, wall time, red integrate steps per item) rises less than the planner's cost falls. If it does not, the text change is reverted and this line says so. |
 | 7 | **The release steps on the combined tree.** `npm run validate:all`, `npm pack`, both install evals and the e2e smoke, on 0.1.85. | `dev_release_guide.md` | Each result is one line in the pull request text. |
 
