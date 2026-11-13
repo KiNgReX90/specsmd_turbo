@@ -18,7 +18,7 @@ const lib = require('./run-lib.cjs');
 const { configuredLanes } = require('./run-lane-config.cjs');
 const { intentFor, intentItems } = require('./run-intent-owed.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
-const { gateMark } = require('./run-criterion-marks.cjs');
+const { gateCommand, gateMark } = require('./run-criterion-marks.cjs');
 const { gateStartCall } = require('./run-call.cjs');
 
 const MAX_LINES = 30;
@@ -48,9 +48,9 @@ function verdictOf(name, tree, config, payload) {
     if (!state) return 'not started, no path in its scope changed';
     return state.state === 'green' ? 'GREEN' : state.state;
   }
-  // A gate with a verdict ran its finalize list, so the config holds one.
-  if (!config.verification.finalize.includes(name)) return 'no command of verification.finalize and no lane of this config';
-  const entry = payload.results.find((result) => result.command === name);
+  const command = gateCommand(config, name);
+  if (command === null) return 'no command of verification.finalize and no lane of this config';
+  const entry = payload.results.find((result) => result.command === command);
   return entry ? WORDS[entry.result] : 'not run, the gate stopped at an earlier red';
 }
 

@@ -136,3 +136,48 @@ test("a gate with no verdict names each mark whose command the host ran nothing 
   ]);
   assert.equal(result.exit, NO_VERDICT);
 });
+
+// A host config may put its wrapper in front of every finalize command, so no plan can name the
+// command it runs: a mark names the bare command, which is the rest after verification.session.match.
+const WRAP = "tools/remote.sh /trees/alpha";
+const SESSION = "  session:\n    match: '^tools/remote\\.sh \\S+ '\n    open: tools/remote.sh open\n" +
+  "    run: tools/remote.sh run\n    close: tools/remote.sh close\n";
+const WRAPPED = `verification:\n  finalize:\n    - ${WRAP} npm run check\n    - ${WRAP} npm run size\n`;
+const WRAPPED_RESULTS = [{ command: `${WRAP} npm run check`, result: "pass" }, { command: `${WRAP} npm run size`, result: "fail" }];
+const BARE = {
+  "a-one": ["the check passes (gate: npm run check)", "the size cap holds (gate: `npm run size`)"],
+  "a-two": [`the check passes (gate: ${WRAP} npm run check)`, "a lint passes (gate: npm run lint)"],
+};
+
+test("under wrapped finalize commands the session's match reaches, a bare mark reads the verdict the gate gave the wrapped command", () => {
+  const root = tree(BARE, WRAPPED + SESSION);
+  assert.deepEqual(marked(gateResult(2, WRAPPED_RESULTS), root), [
+    "MARKED a-one:1 (gate: npm run check): PASS",
+    "MARKED a-one:2 (gate: npm run size): FAIL",
+    `MARKED a-two:1 (gate: ${WRAP} npm run check): PASS`,
+    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize and no lane of this config",
+  ]);
+});
+
+test("a bare mark under wrapped commands with no session key reads as no command, as before", () => {
+  const root = tree(BARE, WRAPPED);
+  assert.deepEqual(marked(gateResult(2, WRAPPED_RESULTS), root), [
+    "MARKED a-one:1 (gate: npm run check): no command of verification.finalize and no lane of this config",
+    "MARKED a-one:2 (gate: npm run size): no command of verification.finalize and no lane of this config",
+    `MARKED a-two:1 (gate: ${WRAP} npm run check): PASS`,
+    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize and no lane of this config",
+  ]);
+});
+
+test("the verbatim command wins when a name is one command and the rest of another", () => {
+  const root = tree({ "a-one": ["the check passes (gate: npm run check)"] }, `verification:\n  finalize:\n    - ${WRAP} npm run check\n    - npm run check\n${SESSION}`);
+  const results = [{ command: `${WRAP} npm run check`, result: "fail" }, { command: "npm run check", result: "pass" }];
+  assert.deepEqual(marked(gateResult(2, results), root), ["MARKED a-one:1 (gate: npm run check): PASS"]);
+});
+
+test("a host config that wraps its commands reads a bare mark through the session it inherits from the project config", () => {
+  const root = tree({ "a-one": ["the check passes (gate: npm run check)"] }, `verification:\n  finalize:\n    - npm run check\n${SESSION}`);
+  write(root, ".specs-inferno/config.host.yaml", WRAPPED);
+  const result = withMarks({ tree: root, intent: "alpha", config: ".specs-inferno/config.host.yaml" }, gateResult(2, WRAPPED_RESULTS));
+  assert.deepEqual(result.out.filter((line) => line.startsWith("MARKED ")), ["MARKED a-one:1 (gate: npm run check): PASS"]);
+});

@@ -47,7 +47,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { isComplete, isDeferred } = require('./state-transition.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
-const { gateMark, gateNames } = require('./run-criterion-marks.cjs');
+const { gateHeld, gateMark } = require('./run-criterion-marks.cjs');
 const { MARK, NEAR } = require('./run-after-ship.cjs');
 const { editableReader, pathErrors } = require('./run-manifest-paths.cjs');
 
@@ -255,9 +255,9 @@ function testPlanFindings(id, item, editable, parsed, tree, add) {
 }
 
 const UNHELD = "which the config's verification block does not hold: " +
-  'name a command of verification.finalize verbatim or a lane the config sets as verification.<lane>';
+  'name a command of verification.finalize, verbatim or as its rest after verification.session.match, or a lane the config sets as verification.<lane>';
 
-/** Every finding on one open item's own text. `names` gives the names a gate mark may give. */
+/** Every finding on one open item's own text. `names` says whether a gate mark may give a name. */
 function itemFindings(tree, item, spec, criteria, findings, names) {
   const add = (message) => findings.push(`${item.id}: ${message}`);
   const parsed = sections(spec.content);
@@ -276,7 +276,7 @@ function itemFindings(tree, item, spec, criteria, findings, names) {
     }
     const mark = gateMark(criterion);
     if (mark !== null) {
-      if (!names().includes(mark)) add(`acceptance criterion ${index + 1} is marked (gate: ${mark}), ${UNHELD}`);
+      if (!names(mark)) add(`acceptance criterion ${index + 1} is marked (gate: ${mark}), ${UNHELD}`);
     } else if (codeSpans(criterion).length === 0) add(`acceptance criterion ${index + 1} names no test file, case id or command in a code span`);
   });
 
@@ -355,7 +355,7 @@ function overlaps(tree, intent, editable) {
  * criterion that carries a gate mark.
  */
 function lintPlan(tree, intent, configOf) {
-  const names = () => gateNames(configOf());
+  const names = (mark) => gateHeld(configOf(), mark);
   const findings = [];
   const brief = readBrief(tree, intent.id, findings);
   if (!brief) return { form: 'old', findings: [], overlaps: [], open: 0, criteria: 0 };
