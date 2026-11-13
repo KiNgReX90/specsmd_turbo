@@ -2,7 +2,7 @@
 
 One file for the defects a host session meets, newest last. Each section says what is wrong, the evidence and how to fix it. Nothing here is built on the host's account: the host works around it and writes the section.
 
-Only what is still to build is in this file. A section leaves it once it is built, and `inferno-build-next.md` keeps its row with the commit. Sections 1 to 11 are built in 0.1.85 and gone from here, and the fourteen sections of the 0.1.83 file before them are built as 0.1.84. Their text is in this branch's history, at `d5d82fa1` and at `912c9feb`. A section keeps its number, so the next one is 13.
+Only what is still to build is in this file. A section leaves it once it is built, and `inferno-build-next.md` keeps its row with the commit. Sections 1 to 11 are built in 0.1.85 and gone from here, and the fourteen sections of the 0.1.83 file before them are built as 0.1.84. Their text is in this branch's history, at `d5d82fa1` and at `912c9feb`. A section keeps its number, so the next one is 15.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -59,3 +59,36 @@ Met 2026-11-13 on the app repo. Not built: the code is the same in the build at 
 ### How the host gets through
 
 It runs the item's check through its wrapper by hand and tells the reviewers the result. A minor-only correction of such an item goes to the short second review, since `settle` refuses the failed proof.
+
+## 14. An accepted instrument red does not survive the fold of the fix it was accepted against
+
+Met 2026-11-13 on the app repo. Not built: the code is the same in the build at `052e3654`.
+
+### What happened
+
+- The smoke lane of an intent at its final gate ended instrument red. The fix was one commit to a walk script of the lane's own harness. This host keeps its harness in the lane's scope on purpose, so that a change to the lane walks the lane.
+- `accept` wants the fix on the base (`S/run-lanes.cjs:319`) and binds its record to the lane's proof hash of the tree as it stands (`:325`, `:331`). `readAccepted` holds the record for that same hash and no other (`:68`).
+- The lane's hash covers every file in its scope (`laneProof`, `scopeHash`). So the fold that brings the fix into the tree changes the hash. Measured on a copy of the intent's tree with the installed readers: the smoke hash read `9dfb9d98` before the fix and `1b9af566` with it. With the one harness file left out it read `736729a3` both times.
+- Both orders end the same. Accept first: the accept passes on the tree before the fold, `ship` folds the base (`S/run-ship.cjs:100`), `green` owes the smoke lane and `ship` stops with exit 3 (`:109`). Fold first: the tree's last lane result holds the old hash, and `accept` answers "no instrument red of the smoke lane on this tree to accept".
+- After the fold nothing can be accepted, because the folded tree has no lane run. The one way on is to walk the lane again, which is the walk the accept exists to save.
+- The flow's tests do not meet this. Their harness fix is a file outside the lane's scope, folded into the branch before the gate (`harnessFix`, `S/run-lanes-fixture.cjs:210`).
+
+### Why it matters
+
+A harness fix lies in the lane's scope on every host that lets a change to its harness walk the lane. There an accept can never reach a ship, and each instrument red costs a second walk of the lane. On this host that is about an hour and a half of its test machines.
+
+### What the flow should do
+
+- An accept holds for a tree that differs from the accepted tree only by the fix. One rule, read by `accept` and `readAccepted`, and through them by `smokeOwed`, the lane start of `gate` and `gate --wait`.
+- The record keeps, beside the hash, the files of the lane's scope that the fix commit changed, and the lane's scope hash with those files left out (`scopeHash` takes `skip`).
+- The record holds for a later tree when three things are true. That hash, with the same files left out, reads the same. The fix is an ancestor of HEAD. Each of those files is at HEAD what the fix commit left, the same blob. A later change to one of them retires the accept, as any other change in the lane's scope does today.
+- The record has to be found for a tree whose proof hash moved. Today its file name is the proof's key (`${file}${ACCEPTED}`, `S/run-lanes.cjs:331`), so it needs a place by lane, or a reader that looks through the lane's records.
+- `accept` on a tree that already holds the fix passes when the last lane result is an instrument red of a tree that differs from this one only by the fix, by the same rule.
+- The accept prints the files it leaves out, one line, so that whoever accepts sees what ships unwalked.
+- `accept_check` gets the fix sha, as `INFERNO_HARNESS_FIX` beside `INFERNO_LANE_RUN` (`S/run-lanes.cjs:290`), so that a host can refuse a fix that changes more than its harness.
+- What stays: the latest lane result must still be the accepted run, and a fix outside the lane's scope works as today.
+- Tests: an accept on a red tree with the fix inside the lane's scope on the base, then `ship` folds and merges with the ACCEPTED line. The fold-first order accepts. A second base commit to the same file retires the accept and `green` owes the lane. A base commit to another file in scope retires it. A fix outside the scope reads as today.
+
+### How the host gets through
+
+It folds the fix into the tree with `gate --detach` and walks the lane again.
