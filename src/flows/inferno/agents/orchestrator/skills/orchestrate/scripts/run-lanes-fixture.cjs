@@ -206,14 +206,17 @@ function gated(f, ...extra) {
   return run(f, 'gate', '--wait', '--minutes', '0.5', ...extra);
 }
 
-/** A harness fix committed on main and folded into the branch; returns its sha. */
-function harnessFix(f) {
+/**
+ * A harness fix to `files` (one path or a list) committed on main, and folded into the branch
+ * unless `fold` is false; returns its sha. By default the one file lies outside the lanes' scope.
+ */
+function harnessFix(f, files = 'harness.txt', fold = true) {
   git(f.tree, 'checkout', '-q', 'main');
-  write(f.tree, 'harness.txt', `${Date.now()}\n`);
+  for (const file of [].concat(files)) write(f.tree, file, `${Date.now()}-${Math.random()}\n`);
   commit(f.tree, 'harness fix');
   const fix = git(f.tree, 'rev-parse', 'HEAD');
   git(f.tree, 'checkout', '-q', BRANCH);
-  git(f.tree, 'merge', '-q', '--no-edit', 'main');
+  if (fold) git(f.tree, 'merge', '-q', '--no-edit', 'main');
   return fix;
 }
 
