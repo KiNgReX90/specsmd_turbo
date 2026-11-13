@@ -1,8 +1,8 @@
 # INFERNO: what to build next
 
-Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
+Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURED ON THE HOST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b and the ten rows of section 1c. What is left to build is three lines: row 0l, which a host met on 2026-11-13, the numbers behind the thinner work items, and the release steps.
+Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six items of section 1b and the ten rows of section 1c. What is left for the session that builds is two rows, in this order: row 0l, which a host met on 2026-11-13, and then the release steps of row 7. Nothing else on this branch waits for a builder. The thinner work items are measured on the first host and are no work for the builder (section 4).
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -42,7 +42,7 @@ Built on this branch on 2026-11-12. `CHANGELOG.md` says what each one does. The 
 | 4 | The config step proposes the tools that fit the host, per role (`run.cjs tools`) | `5ab4fd5f` |
 | 5 | A planner A/B eval, one command (`evals/planner-ab/`) | `cd3f5dfd` |
 
-Still owed from item 5: one recorded run of both arms in the pull request text. Item 6 below reads that run.
+No run of the eval is owed. It stays as the tool for a planner text change that needs both arms side by side. The thinner work items are measured on the first host's own intents (section 4).
 
 ## 1c. DONE: ten rows the first host met or measured, built into 0.1.85
 
@@ -68,21 +68,26 @@ Built on this branch on 2026-11-12 and 2026-11-13. Each is a section of `inferno
 | Order | What | Specified in | Done when |
 | --- | --- | --- | --- |
 | 0l | **A caught mutant counts only while its line stands.** An item review's caught mutant whose line a correction removed still counts for its criterion, and the intent review is refused a fresh one. A pin is already held to the tree as it is. | `inferno-0.1.84-run-defects-handoff.md`, section 12 | A delta review prints one line for a carried caught mutant that can no longer be placed, the coverage owes that criterion, and the intent review's mutant for it is taken and run. A mutant whose line only moved counts as today. |
-| 6 | **Thinner work items: the numbers.** The text change is built in `7c770d7c`: the planner keeps prose about the code out of a work item. What is owed is the proof that it may stay. | improvement 1 | It stays only on numbers: the eval of item 5, then one intent built both ways, show that the builder's cost (rounds, output tokens, wall time, red integrate steps per item) rises less than the planner's cost falls. If it does not, the text change is reverted and this line says so. |
-| 7 | **The release steps on the combined tree.** `npm run validate:all`, `npm pack`, both install evals and the e2e smoke, on 0.1.85. | `dev_release_guide.md` | Each result is one line in the pull request text. |
+| 7 | **The release steps on the combined tree.** `npm run validate:all`, `npm pack`, both install evals and the e2e smoke, on the tree that holds row 0l. Run them after row 0l is built. | `dev_release_guide.md` | Each result is one line in the pull request text. |
 
-Two notes for whoever builds:
-
-- `verification.session` has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The first host's wrapper has them since 2026-11-12, proven on both its test machines, and the host set the key with its install of 0.1.85. Measured there on one machine: an integrate of three small checks went from 259 seconds to 54.
-- Item 6 is the only one that can make things worse without anyone seeing it, because a builder that searches longer still finishes. That is why it stays behind a number.
+One note for whoever builds: `verification.session` has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The first host's wrapper has them since 2026-11-12, proven on both its test machines, and the host set the key with its install of 0.1.85. Measured there on one machine: an integrate of three small checks went from 259 seconds to 54.
 
 ## 3. DONE: strike it
 
 **Improvement 6, bring the docs repo back onto the canonical scripts.** Canonical holds both module splits today (`S/run-integrate.cjs`, `S/run-probes.cjs`, `S/run-proofs.cjs` and `S/run-dispatch.cjs`, `S/run-processes.cjs`, `S/state-store.cjs`). The five hosts on the first host's machine were reinstalled from this branch on 2026-11-11 and 2026-11-12, each with a lock that matches every installed file, and none holds a tracked copy under `.codex/skills/` or a stray planner file. If a host exists that is not on that machine, run `node .specsmd/inferno/check-lock.cjs` there; a match closes it for that host too.
 
-## 4. MEASURED, NOT NOW: P5
+## 4. MEASURED ON THE HOST: nothing here is for the builder
 
-**P5, new scope is a new item.** The design: a requirement that appears in the review loop becomes a new item of the same intent, the original item closes on its own criteria, and a grant only ever answers an existing criterion. The rule was to build it when at least 30% of the findings of round 2 and later are beyond the contract.
+Both lines are read from the first host's own intents by the session that monitors that host. Neither asks the builder for anything. A result that asks for a change arrives as a new row in section 2.
+
+**Thinner work items: do they stay.** The text change is built in `7c770d7c`: the planner keeps prose about the code out of a work item. It can make things worse without anyone seeing it, because a builder that searches longer still finishes, so it stays behind a number.
+
+- What is read: the review-loop readout (`evals/review-loop/stats.cjs`) of the first intents the first host plans after it installs the build that holds `7c770d7c`, until they hold ten items together. No intent is built twice and no eval run is paid for.
+- Against what: the same readout of the host's intents planned before that install.
+- The rule: the text change stays, unless the review rounds per item or the builder's output tokens per item read more than a quarter above the intents before. Then a row to revert `7c770d7c` goes on top of section 2.
+- When: the host installs that build on 2026-11-13, and every intent it runs today was planned before. The first reading comes with the first intent it plans after.
+
+**P5, new scope is a new item: measured, not now.** The design: a requirement that appears in the review loop becomes a new item of the same intent, the original item closes on its own criteria, and a grant only ever answers an existing criterion. The rule was to build it when at least 30% of the findings of round 2 and later are beyond the contract.
 
 The count, made read-only on the first host on 2026-11-13:
 
