@@ -15,7 +15,8 @@
  * INFERNO_SESSION, an empty directory of this session beside the step's logs, outside the tree;
  * `run` also gets INFERNO_TEST, the command with the words `match` reached cut off, as the mutate
  * session's run gets its test, so one wrapper serves both keys. The output and exit code of `run`
- * are the check's.
+ * are the check's. A check verify-item placed through `verification.run` gets the bare check as
+ * INFERNO_TEST instead, as a mutate session of a wrapped test runs the bare test (run-item-check.cjs).
  *
  * The session opens at the first command that runs through it, so a scoped check skipped for
  * the landing, or one whose proof still holds, opens nothing, and a step that runs none of them
@@ -53,7 +54,8 @@ const recordsOf = (tree) => path.join(lib.cacheDir(tree), lib.currentBranch(tree
 
 /**
  * The session of one step whose logs go to `dir`, or null when the config sets no key. `shell`
- * runs one command as lib.runShell does, through the session when `match` reaches it; `close`
+ * runs one command as lib.runShell does, through the session when `match` reaches it, on
+ * `options.test` when the caller placed the command around that check, else on what `match` left; `close`
  * closes the session when its open started and returns the lines to print beside the result.
  */
 function checkSession(tree, config, dir) {
@@ -75,11 +77,11 @@ function checkSession(tree, config, dir) {
   };
 
   return {
-    shell(command, cwd, log) {
+    shell(command, cwd, log, options = {}) {
       const inner = reach(match, command);
       if (inner === null) return lib.runShell(command, cwd, log);
       if (!opened) opened = open();
-      if (opened.code === 0) return lib.runShell(exported({ ...env, INFERNO_TEST: inner }) + key.run, tree, log, { wrap: false });
+      if (opened.code === 0) return lib.runShell(exported({ ...env, INFERNO_TEST: options.test === undefined ? inner : options.test }) + key.run, tree, log, { wrap: false });
       fs.mkdirSync(path.dirname(log), { recursive: true });
       // The open's refusal line goes into the check's own log, where runCommand reads it as no verdict.
       const line = refused ? refusalIn(refused, opened.log) : null;

@@ -24,9 +24,13 @@
  * and `finding`, a regex of the line the check prints on a finding. A red run of a check that
  * printed that line reads caught (run-mutate-verdict.cjs). A wrapper that refused prints no such
  * line, so it still reads no verdict.
+ *
+ * `verification.run` and `verification.wrapped` place an item's own check the same way for
+ * verify-item (run-item-check.cjs). Both pairs are read and refused by `validateWrapper` and
+ * `wrapperOf`, so they cannot drift apart. A leaf: it loads no script that loads the config reader.
  */
 
-const { RunError } = require('./run-lib.cjs');
+const { RunError } = require('./run-error.cjs');
 
 const PART = /\{(tree|test)\}/g;
 const RUN_SHAPE = 'the wrapper\'s command with {tree} and {test} once each, after its own words';
@@ -45,22 +49,30 @@ function regexOf(bad, key, source) {
   }
 }
 
-/** Refuse a `mutate.run`, `mutate.wrapped` or `mutate.checks` this runner cannot use, naming the file. */
-function validateHost(mutate, file) {
-  const bad = (key, what) => new RunError(`${key} in ${file} must be ${what}.`, 'BAD_CONFIG');
-  if (mutate.run !== undefined) {
-    const text = mutate.run;
+const badIn = (file) => (key, what) => new RunError(`${key} in ${file} must be ${what}.`, 'BAD_CONFIG');
+
+/** Refuse a `<section>.run` or `<section>.wrapped` of `block` this runner cannot use, naming the file. */
+function validateWrapper(block, section, file) {
+  const bad = badIn(file);
+  if (block.run !== undefined) {
+    const text = block.run;
     const count = (part) => (typeof text === 'string' ? text.split(`{${part}}`).length - 1 : 0);
     if (!nonEmpty(text) || count('tree') !== 1 || count('test') !== 1 || text.slice(0, text.search(PART)).trim() === '') {
-      throw bad('mutate.run', RUN_SHAPE);
+      throw bad(`${section}.run`, RUN_SHAPE);
     }
   }
-  if (mutate.wrapped !== undefined) {
-    if (regexOf(bad, 'mutate.wrapped', mutate.wrapped).test('')) {
-      throw bad('mutate.wrapped', 'a regex that an empty test does not match, or every test reads as wrapped');
+  if (block.wrapped !== undefined) {
+    if (regexOf(bad, `${section}.wrapped`, block.wrapped).test('')) {
+      throw bad(`${section}.wrapped`, 'a regex that an empty test does not match, or every test reads as wrapped');
     }
-    if (mutate.run === undefined) throw bad('mutate.wrapped', 'set beside mutate.run, the wrapper whose spellings it marks');
+    if (block.run === undefined) throw bad(`${section}.wrapped`, `set beside ${section}.run, the wrapper whose spellings it marks`);
   }
+}
+
+/** Refuse a `mutate.run`, `mutate.wrapped` or `mutate.checks` this runner cannot use, naming the file. */
+function validateHost(mutate, file) {
+  const bad = badIn(file);
+  validateWrapper(mutate, 'mutate', file);
   if (mutate.checks === undefined) return;
   if (!Array.isArray(mutate.checks)) throw bad('mutate.checks', 'a list of {match, finding}');
   mutate.checks.forEach((entry, i) => {
@@ -74,18 +86,24 @@ function validateHost(mutate, file) {
 }
 
 /**
- * The host's wrapper and checks a config names: `run` null without one, with `wrapped` the regex of
- * the other spellings of an already wrapped test, null without it; `checks` empty without any.
+ * The wrapper a block (`mutate` or `verification`) names, or null without one: its command, its
+ * own words, and `wrapped`, the regex of the other spellings of an already wrapped test, null
+ * without it.
  */
+function wrapperOf(block) {
+  const run = block && block.run;
+  return run ? {
+    text: run,
+    words: run.slice(0, run.search(PART)).trim(),
+    wrapped: block.wrapped ? new RegExp(block.wrapped) : null,
+  } : null;
+}
+
+/** The host's wrapper and checks a config names: `run` as `wrapperOf` reads `mutate`; `checks` empty without any. */
 function hostOf(config) {
   const mutate = (config && config.mutate) || {};
-  const run = mutate.run ? {
-    text: mutate.run,
-    words: mutate.run.slice(0, mutate.run.search(PART)).trim(),
-    wrapped: mutate.wrapped ? new RegExp(mutate.wrapped) : null,
-  } : null;
   const checks = (mutate.checks || []).map((entry) => ({ match: new RegExp(entry.match, 'm'), finding: new RegExp(entry.finding, 'm') }));
-  return { run, checks };
+  return { run: wrapperOf(mutate), checks };
 }
 
 /** Whether `test` already starts with the wrapper's own words, or with a spelling `mutate.wrapped` marks. */
@@ -102,4 +120,4 @@ function commandOf(host, tree, test) {
   return host.run.text.replace(PART, (all, part) => quote(part === 'tree' ? tree : test));
 }
 
-module.exports = { commandOf, hostOf, quote, validateHost };
+module.exports = { commandOf, hostOf, quote, validateHost, validateWrapper, wrapperOf };
