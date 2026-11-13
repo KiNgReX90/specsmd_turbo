@@ -54,7 +54,7 @@ No run of the eval is owed. It stays as the tool for a planner text change that 
 
 ## 1c. DONE: ten rows the first host met or measured, built into 0.1.85
 
-Built on this branch on 2026-11-12 and 2026-11-13. Each was a section of the handoff file, which said what went wrong on the host; the column names the section as it stood at `d5d82fa1`. The shipped suite is green for this build on the first host's test machine. Four other hosts on that machine run it since 2026-11-13, and the first host installs it once the work it has at a final gate has landed.
+Built on this branch on 2026-11-12 and 2026-11-13. Each was a section of the handoff file, which said what went wrong on the host; the column names the section as it stood at `d5d82fa1`. The four other hosts on the first host's machine run the build at `f3be640a`, which holds sections 1c and 1d, since 2026-11-13. The shipped suite is green for it on the first host's test machine, and the first host installs it once its release line is cut.
 
 | Row | What | Handoff section | Built in |
 | --- | --- | --- | --- |
@@ -100,7 +100,7 @@ Both lines are read from the first host's own intents by the session that monito
 - What is read: the review-loop readout (`evals/review-loop/stats.cjs`) of the first intents the first host plans after it installs the build that holds `7c770d7c`, until they hold ten items together. No intent is built twice and no eval run is paid for.
 - Against what: the same readout of the host's intents planned before that install.
 - The rule: the text change stays, unless the review rounds per item or the builder's output tokens per item read more than a quarter above the intents before. Then a row to revert `7c770d7c` goes on top of section 2.
-- When: the host installs that build on 2026-11-13, and every intent it runs today was planned before. The first reading comes with the first intent it plans after.
+- When: the first host installs that build once its release line is cut, and every intent it runs until then was planned before. The first reading comes with the first intent it plans after that install.
 
 **P5, new scope is a new item: measured, not now.** The design: a requirement that appears in the review loop becomes a new item of the same intent, the original item closes on its own criteria, and a grant only ever answers an existing criterion. The rule was to build it when at least 30% of the findings of round 2 and later are beyond the contract.
 
