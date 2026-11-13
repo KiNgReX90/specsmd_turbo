@@ -11,11 +11,12 @@
  * mutants ran without dirtying the tree.
  */
 
+const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { CONFIG, git, repo, run, write } = require('./review-fixture.cjs');
+const { CONFIG, INTENT_TREE, git, repo, run, worktree, write } = require('./review-fixture.cjs');
 
 const WRITER = path.join(__dirname, 'state-transition.cjs');
 const REVIEW = '.specs-inferno/intents/alpha/reviews/a-one.yaml';
@@ -77,15 +78,34 @@ function proposal(criterion, { file = 'src/a.ts', line = 1, find = 'a = 1', repl
     `    test: node checks/has.cjs ${expect} ../runs.log\n`;
 }
 
-/** Criterion 1 caught by its strong test; criterion 2 survives its weak one. */
+/** Criterion 1 caught by its strong test; criterion 2 survives its weak one, and is caught by its strong one. */
 const CAUGHT_ONE = proposal(1);
 const SURVIVES_TWO = proposal(2, { line: 2, find: 'a2 = 2', replace: 'a2 = 8', expect: 'checks/two.expect' });
+const STRONG_TWO = proposal(2, { line: 2, find: 'a2 = 2', replace: 'a2 = 8', expect: 'checks/a2.expect' });
 
 const itemReview = (body, verdict = 'clean') => `item: a-one\nverdict: ${verdict}\nfiles: [src/a.ts, checks/one.expect, checks/two.expect]\n${body}`;
 const withMutants = (...entries) => itemReview(`mutants:\n${entries.join('')}`);
 
 const record = (fixture, args = [], tree = fixture.root) =>
   run(fixture, ['review', '--item', 'a-one', '--tree', tree, '--reviewer', 'rev-1', ...args]);
+
+/**
+ * The intent worktree, its scan collected, in which a-one's first review `body` was recorded on a
+ * clean tree: by default a caught mutant for each of its two criteria.
+ */
+function caughtTree(options = {}, body = withMutants(CAUGHT_ONE, STRONG_TWO)) {
+  const fixture = mutantRepo(options);
+  const tree = worktree(fixture, INTENT_TREE);
+  write(tree, '.specs-inferno/intents/alpha/scan.yaml', 'lines: []\n');
+  git(tree, ['add', '-A']);
+  git(tree, ['commit', '-qm', 'scan']);
+  write(tree, REVIEW, body);
+  const first = record(fixture, [], tree);
+  assert.equal(first.code, 0, first.out + first.err);
+  assert.match(first.out, /mutants: (\d) ran, \1 caught, 0 survived, 0 without a verdict/);
+  runs(fixture);
+  return { fixture, tree };
+}
 
 /** The expect files the tests read, in the order they ran, since the last call. */
 function runs(fixture) {
@@ -110,6 +130,6 @@ function recordedByHand(tree, body, verdict = 'clean', files = ['src/a.ts']) {
 }
 
 module.exports = {
-  A_EDITABLE, A_ONE, CAUGHT_ONE, CHECK, CONFIG, INTENT_REVIEW, REVIEW, SURVIVES_TWO, itemReview, itemSpec, mutantRepo, proposal, read, record,
-  recordedByHand, runs, withMutants,
+  A_EDITABLE, A_ONE, CAUGHT_ONE, CHECK, CONFIG, INTENT_REVIEW, REVIEW, STRONG_TWO, SURVIVES_TWO, caughtTree, itemReview, itemSpec, mutantRepo,
+  proposal, read, record, recordedByHand, runs, withMutants,
 };

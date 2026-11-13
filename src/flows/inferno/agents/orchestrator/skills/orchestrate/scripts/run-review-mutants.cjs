@@ -10,7 +10,9 @@
  * record step runs them in one batch, writes `caught` (yes, no, or none with `why`) on each, and
  * writes a `major` finding per survivor, marked `mutant: <criterion>`; a survivor makes the verdict
  * fix. A delta review proposes none: its record carries the last review's entries over, reruns
- * only the survivors and the entries that never ran, and keeps the rest as they read. A released
+ * only the survivors and the entries that never ran, and keeps the rest as they read. A caught
+ * entry the tree as it is can no longer place is kept as recorded and printed: it counts for
+ * nothing (run-mutant-coverage.cjs), so its criterion is the intent review's. A released
  * flow's `{criterion, test, caught}` entry is carried while caught; one that survived names no line
  * to break again, so it is dropped and its criterion is the intent review's.
  *
@@ -51,7 +53,9 @@ const { MOVE_HOW, carryMoves } = require('./run-mutant-moves.cjs');
 const { carryAside } = require('./run-review-aside.cjs');
 const { checkPins, pinProblem, previousPins, testPaths } = require('./run-review-pins.cjs');
 const { INTENT_KEYS, parseIntentReview } = require('./run-intent-review-file.cjs');
-const { acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals } = require('./run-mutant-coverage.cjs');
+const {
+  acceptanceCriteria, gapRefusal, itemProofs, mutantGaps, names, owedProposals, placed,
+} = require('./run-mutant-coverage.cjs');
 const {
   changedSince, checkTargets, dump, kept, locate, ownFindings, previousEntries, ranLines, runEntries, survivorFinding,
 } = require('./run-mutant-runs.cjs');
@@ -102,6 +106,7 @@ async function itemMutants(tree, context) {
   const out = [];
   const spec = lib.readItemSpec(tree, intent.id, item.id);
   const owner = { item: item.id, tests: testPaths(spec) };
+  const owes = (entry) => `the intent review owes criterion ${entry.criterion} a caught mutant or a checked pin`;
   let entries;
   let pins;
   if (item.review) {
@@ -110,6 +115,11 @@ async function itemMutants(tree, context) {
     entries = previous.filter((entry) => entry.find !== undefined || entry.caught === 'yes');
     for (const entry of previous.filter((one) => !entries.includes(one))) {
       out.push(`MUTANT ${entry.criterion} names no line to break, so the intent review owes its criterion a caught mutant or a checked pin`);
+    }
+    const where = placed(tree, intent.id, item.id, spec);
+    for (const entry of entries.filter((one) => one.caught === 'yes')) {
+      const { why } = where(entry);
+      if (why) out.push(`MUTANT ${entry.criterion} (${entry.file}:${entry.line}, find ${JSON.stringify(entry.find)}) no longer stands: ${why}; ${owes(entry)}`);
     }
     pins = carriedPins(tree, rel, doc, owner, out);
   } else {
@@ -125,7 +135,6 @@ async function itemMutants(tree, context) {
 
   const elsewhere = () => changedSince(tree, rel, spec.manifest.ownership.editable);
   const result = await runEntries(tree, entries.filter(due), { configFile, rel, signs, elsewhere });
-  const owes = (entry) => `the intent review owes criterion ${entry.criterion} a caught mutant or a checked pin`;
   const survivors = entries.filter((entry) => entry.caught === 'no');
   rewrite(path.join(tree, rel), doc, ITEM_KEYS, {
     verdict: own.length > 0 || survivors.length > 0 ? 'fix' : 'clean',
