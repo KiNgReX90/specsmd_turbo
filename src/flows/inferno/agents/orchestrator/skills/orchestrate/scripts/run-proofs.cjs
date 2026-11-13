@@ -5,7 +5,7 @@ const path = require('path');
 const { createHash } = require('crypto');
 const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
-const { logSize, refusalIn, refusedOf } = require('./run-check-refused.cjs');
+const { readRun } = require('./run-check-refused.cjs');
 
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -162,10 +162,7 @@ function runCommand(tree, config, selected, command, log, force = false, shell =
   const previous = readProof(proof);
   if (previous && !force) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
   fs.rmSync(proof.file, { force: true });
-  const refused = refusedOf(config);
-  const from = logSize(log);
-  const run = shell(command, tree, log);
-  const line = run.code !== 0 && refused ? refusalIn(refused, log, from) : null;
+  const { run, line } = readRun(config, shell, command, tree, log);
   if (line) return { command, result: 'refused', seconds: run.seconds, log: run.log, line };
   const moved = run.code === 0 && commandProof(tree, lib.readConfig(tree, selected), selected, command).file !== proof.file;
   if (run.code !== 0 || moved) {

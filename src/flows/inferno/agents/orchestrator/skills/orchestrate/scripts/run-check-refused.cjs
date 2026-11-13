@@ -61,10 +61,24 @@ function refusalIn(regex, log, from = 0) {
   return text.split('\n').find((line) => regex.test(line)) || null;
 }
 
+/**
+ * Run `command` with `shell` (lib.runShell, or a host session's) and read whether the host's wrapper
+ * refused it: `run` as the shell returned it, `from`, the byte of `log` this run's output starts at,
+ * and `line`, the refusal line it printed on a non-zero exit, null for a run with a verdict or
+ * without the key. `rest` goes to `shell` after the log. Integrate, the gate and verify-item read
+ * a refusal only here.
+ */
+function readRun(config, shell, command, cwd, log, ...rest) {
+  const refused = refusedOf(config);
+  const from = logSize(log);
+  const run = shell(command, cwd, log, ...rest);
+  return { run, from, line: run.code !== 0 && refused ? refusalIn(refused, log, from) : null };
+}
+
 /** The last line of a step whose checks got no verdict twice: the machine fault, and the call that runs it again. */
 function noVerdictLine(list, count, total, again) {
   return `${count} of ${total} ${list} check(s) got no verdict: the host's wrapper ran nothing, twice, ` +
     `a fault of the test machine and not of the code; run the step again: ${again}`;
 }
 
-module.exports = { logSize, noVerdictLine, refusalIn, refusedOf, validateRefused };
+module.exports = { logSize, noVerdictLine, readRun, refusalIn, refusedOf, validateRefused };
