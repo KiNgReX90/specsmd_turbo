@@ -111,6 +111,8 @@ function ship(intentId, options) {
     out.push(`${branch} is not green after folding ${base} in`, ...proof.out);
     return { exit: 3, payload: { ok: false, step: 'green', hash: proof.payload.hash, owed: proof.payload.owed }, out };
   }
+  // What ships held by an accept rather than walked, so the ship says so.
+  out.push(...proof.out.filter((line) => line.startsWith('ACCEPTED ')));
 
   // The findings the user put after the release, read before the teardown removes the tree.
   const deferred = asideLines(tree, intentId);
