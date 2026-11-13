@@ -6,6 +6,12 @@ Build section 2 from top to bottom. Version 0.1.85 on this branch holds the six 
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
+Where the older text went, so that nothing built reads as open:
+
+- `inferno-future-improvements.md` is gone from this branch. Of its eight items six are built or struck (sections 1b and 3). The measurement of the first is section 4, its one standing rule is under section 2, and the one idea left unbuilt is in section 5. Its text is in this branch's history at `d5d82fa1`.
+- The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build. The built ones are in history at the same commit.
+- `inferno-generalization-plan.md` and `todo.md` are older backlogs that came from main. They ask nothing of whoever builds here, and what they hold is no commitment.
+
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
 
 The first host handed off fourteen findings on 0.1.83. All fourteen are built on this branch as 0.1.84, and the first host installed it on 2026-11-12 with the shipped suite green there. Nothing of them is left to build. Their text is in this branch's history at `912c9feb`.
@@ -46,7 +52,7 @@ No run of the eval is owed. It stays as the tool for a planner text change that 
 
 ## 1c. DONE: ten rows the first host met or measured, built into 0.1.85
 
-Built on this branch on 2026-11-12 and 2026-11-13. Each is a section of `inferno-0.1.84-run-defects-handoff.md`, which says what went wrong on the host. The shipped suite is green for this build on the first host's test machine. Four other hosts on that machine run it since 2026-11-13, and the first host installs it once the work it has at a final gate has landed.
+Built on this branch on 2026-11-12 and 2026-11-13. Each was a section of the handoff file, which said what went wrong on the host; the column names the section as it stood at `d5d82fa1`. The shipped suite is green for this build on the first host's test machine. Four other hosts on that machine run it since 2026-11-13, and the first host installs it once the work it has at a final gate has landed.
 
 | Row | What | Handoff section | Built in |
 | --- | --- | --- | --- |
@@ -72,9 +78,11 @@ Built on this branch on 2026-11-12 and 2026-11-13. Each is a section of `inferno
 
 One note for whoever builds: `verification.session` has a second half that is not flow work. A host's wrapper needs commands to open a session, run in it and close it. The first host's wrapper has them since 2026-11-12, proven on both its test machines, and the host set the key with its install of 0.1.85. Measured there on one machine: an integrate of three small checks went from 259 seconds to 54.
 
+One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
+
 ## 3. DONE: strike it
 
-**Improvement 6, bring the docs repo back onto the canonical scripts.** Canonical holds both module splits today (`S/run-integrate.cjs`, `S/run-probes.cjs`, `S/run-proofs.cjs` and `S/run-dispatch.cjs`, `S/run-processes.cjs`, `S/state-store.cjs`). The five hosts on the first host's machine were reinstalled from this branch on 2026-11-11 and 2026-11-12, each with a lock that matches every installed file, and none holds a tracked copy under `.codex/skills/` or a stray planner file. If a host exists that is not on that machine, run `node .specsmd/inferno/check-lock.cjs` there; a match closes it for that host too.
+**The docs repo is back on the canonical scripts.** Canonical holds both module splits today (`S/run-integrate.cjs`, `S/run-probes.cjs`, `S/run-proofs.cjs` and `S/run-dispatch.cjs`, `S/run-processes.cjs`, `S/state-store.cjs`). The five hosts on the first host's machine were reinstalled from this branch on 2026-11-11 and 2026-11-12, each with a lock that matches every installed file, and none holds a tracked copy under `.codex/skills/` or a stray planner file. If a host exists that is not on that machine, run `node .specsmd/inferno/check-lock.cjs` there; a match closes it for that host too.
 
 ## 4. MEASURED ON THE HOST: nothing here is for the builder
 
@@ -103,5 +111,7 @@ Verdict: not now. The count is under the threshold, and what it found is two ite
 ## 5. NOT NOW
 
 **P8, the live test and the break test.** A live tester tries each intent on the running application, and a breaker attacks marked items from the outside. Reason: it adds wall time and tokens to every intent, and the first host has two test machines whose queue is its bottleneck this week. Unlocks: the owner's word, after the first host's release, and a host that names how its application starts and stops under `verification.live`.
+
+**The commands of one integrate run beside each other.** One slot for the whole integrate is built (`verification.session`), and it took the queue and the sync out of every command but the first. Running the commands beside each other helps only while a host has machines free. Unlocks: a host whose integrate is still slow with an empty queue.
 
 **The merge of this pull request.** The branch carries real work on the first host from this branch, by the owner's choice. The merge is the owner's word and nothing here waits on it.
