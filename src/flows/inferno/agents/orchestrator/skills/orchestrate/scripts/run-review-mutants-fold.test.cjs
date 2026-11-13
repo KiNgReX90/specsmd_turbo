@@ -2,7 +2,9 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const { CONFIG, git, run, write } = require("./review-fixture.cjs");
-const { CAUGHT_ONE, INTENT_REVIEW, caughtTree, proposal, read, runs, withMutants } = require("./run-review-mutants-fixture.cjs");
+const {
+  A_EDITABLE, A_ONE, CAUGHT_ONE, INTENT_REVIEW, caughtTree, itemSpec, proposal, read, runs, withMutants,
+} = require("./run-review-mutants-fixture.cjs");
 const { intentRecordCall, intentReviewCall } = require("./run-call.cjs");
 
 // A fold of the base that rewrites the line an item review's caught mutant broke, or the copy its
@@ -116,4 +118,18 @@ test("a recorded review refused for anything but a gap still goes back to its re
   assert.match(gated.out, new RegExp(`^intent review owed: ${quoted(INTENT_REVIEW)}: unknown key notes: .*send this back to the reviewer that wrote the file, ` +
     `then run ${quoted(intentRecordCall(tree))} to record it\\.$`, "m"));
   assert.match(gated.out, new RegExp(`^run ${quoted(intentRecordCall(tree))} first, then gate again$`, "m"));
+});
+
+test("a count that fails on a moved tree reads its own error, as before", () => {
+  const { fixture, tree } = foldOwed(undefined, { "docs/notes.md": "the notes of main\n" });
+  write(tree, ".specs-inferno/intents/alpha/work-items/a-one.md", itemSpec("a-one", A_ONE, [...A_EDITABLE, '""']));
+  write(tree, "docs/b.md", "a-two moved on\n");
+  git(tree, ["add", "-A"]);
+  git(tree, ["commit", "-qm", "an ownership entry that names no path"]);
+
+  const gated = run(fixture, ["gate", "--tree", tree]);
+
+  assert.equal(gated.code, 3, shown(gated));
+  assert.match(gated.out, /^intent review owed: Ownership requires a path: item a-one lists `- ""` under ownership\.editable at /m);
+  assert.doesNotMatch(gated.out, /undefined/);
 });

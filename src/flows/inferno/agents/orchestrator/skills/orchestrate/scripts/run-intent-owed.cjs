@@ -142,7 +142,7 @@ const changedLine = (review) => `the code changed since the review read it at ${
  * that moved since its record, as a fold that rewrote a mutated line or a pinned copy leaves it,
  * is owed a review instead: its record's dispatch read another tree, so no record of the file can
  * close the gap. The review call reads it as a delta of the recorded review, or whole while that
- * review still binds the tree.
+ * review still binds the tree. An error of the count that is no refusal reads as any other error.
  */
 function intentReviewState(tree, config, intentId) {
   const rel = intentReviewPath(tree, intentId);
@@ -161,7 +161,7 @@ function intentReviewState(tree, config, intentId) {
     parseFor(tree, rel, intentId, true);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
-    if (review && review.tree !== proofs.scopeHash(tree)) {
+    if (review && error.refused && review.tree !== proofs.scopeHash(tree)) {
       const delta = !reviewCurrent(tree, config, review);
       return { rel, review: delta ? review : null, owed: [...owed, ...(delta ? [changedLine(review)] : []), error.refused] };
     }
