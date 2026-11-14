@@ -9,7 +9,7 @@ This procedure adapts the canonical INFERNO lifecycle to Codex. The canonical sc
 - Intent artifacts: `.specs-inferno/intents/<intent-id>/`
 - Work items: `.specs-inferno/intents/<intent-id>/work-items/<item-id>.md`
 - Halt notes: `.specs-inferno/halt-notes/`
-- Run script, one subcommand per mechanical step: `.specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs` (exit 0 ok, 1 usage, 2 failure, 3 a step is owed first)
+- Run script, one subcommand per mechanical step: `.specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs` (exit 0 ok, 1 usage, 2 failure, 3 a step is owed first, 4 running or queued)
 - Ledger writer: `.specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/state-transition.cjs`
 - Selection template: `.specsmd/inferno/agents/orchestrator/skills/orchestrate/templates/intent-selection.md.hbs`
 
@@ -23,8 +23,8 @@ Complete this phase before claiming anything.
 
 1. Confirm state exists. If it does not, tell the user to plan with `$specsmd-inferno-planner` and stop.
 2. Read state and scan all work-item specs with `rg --files .specs-inferno/intents`.
-3. Compute the runnable set from disk: status `pending`, one or more pending work items, every `depends_on_intents` entry `completed`.
-4. List `in_progress` intents with `claimed_at` and `claimed_by`, pending intents with unmet prerequisites with those ids, and report intent-level dependency cycles. Run `run.cjs select --config .specs-inferno/config.codex.yaml` in the same batch; every `leftover` line names a worktree a finished run left standing, so tear each down with `run.cjs teardown --tree <path> --config .specs-inferno/config.codex.yaml` before the menu. The scripts print their own refusals; report one, never work around it.
+3. In the same batch run `run.cjs select --config .specs-inferno/config.codex.yaml`: it prints the claimable intents, the blocked ones with their unmet prerequisites, and the running, parked and recoverable ones.
+4. Report intent-level dependency cycles. Run the teardown each `leftover` line prints before the menu. The scripts print their own refusals; report one, never work around it.
 5. A user-named intent passes the same prerequisite gate; naming it never bypasses dependencies.
 6. For a named `in_progress` intent, a live process or a branch advancing since this session began is running elsewhere, a stale branch or worktree without a process is recoverable, and a stale claim with neither can be reclaimed.
 7. If no intent was named, render a numbered menu: for one entry ask for yes or no, for several ask for the number. Show running and blocked intents for context, never offer them.
@@ -36,8 +36,8 @@ Complete this phase before claiming anything.
 Continue in this thread from here.
 
 1. In one batched read, load the applicable `AGENTS.md` files, state, Codex config, every pending work-item spec for this intent, the halt flag, UTC time, the worktree list and branch status.
-2. Read configuration once. Missing keys use canonical behavior: `delivery.mode: auto-close` and the discovered build and full tests for final verification. `verification.finalize_scopes` narrows a gate command to the paths worth running it on, `worktree.bootstrap` runs in a fresh worktree, and `dispatch.constraints` is pasted verbatim into every dispatch.
-3. Validate every pending work item before creating a worktree with `run.cjs frontier <intent-id> --tree <path> --config .specs-inferno/config.codex.yaml`. It checks the manifest fields and the dependency graph and names the exact missing field; hand a manifest defect to the planner skill for a bounded repair and never claim or dispatch an invalid item.
+2. Read configuration once. Missing keys use canonical behavior: `delivery.mode: auto-close` and the discovered build and full tests at the gate. `verification.finalize_scopes` narrows a gate command to the paths worth running it on, `worktree.bootstrap` runs in a fresh worktree, and `dispatch.constraints` is pasted verbatim into every dispatch.
+3. Validate every pending work item before creating a worktree with `run.cjs frontier <intent-id> --tree <path> --config .specs-inferno/config.codex.yaml`. It names the exact missing manifest field or graph defect; hand a manifest defect to the planner skill for a bounded repair and never claim or dispatch an invalid item. An `INVALID` line beside ready items names an unbuilt item whose diagnosis probe went stale: dispatch the ready items and repair that one.
 4. For recovery, inspect the branch's commits and run:
 
    ```sh
@@ -45,8 +45,8 @@ Continue in this thread from here.
    ```
 
    Integrate landed work the ledger lacks with `run.cjs integrate --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`; never redispatch it.
-5. For a fresh or stale-claim run, claim on the default branch before the worktree with `run.cjs claim <intent-id> --config .specs-inferno/config.codex.yaml`: it sets `in_progress` and `claimed_at`, sets `claimed_by` to the intended `inferno-intent/<id>-<timestamp>` branch, and commits `specsmd(<id>): claim intent for run`.
-6. Choose an explicit `<path>` inside the current writable roots, then create one clean worktree from that claim commit on branch `inferno-intent/<id>-<timestamp>` with `run.cjs worktree <intent-id> --config .specs-inferno/config.codex.yaml --path <path>`. It runs every `worktree.bootstrap` command there once, before the first dispatch. An in-place run needs an explicit user override.
+5. For a fresh or stale-claim run, claim on the default branch before the worktree with `run.cjs claim <intent-id> --config .specs-inferno/config.codex.yaml`: it records the claim and its branch and commits it.
+6. Choose an explicit `<path>` inside the current writable roots, then create one clean worktree from that claim commit on branch `inferno-intent/<id>-<timestamp>` with `run.cjs worktree <intent-id> --config .specs-inferno/config.codex.yaml --path <path>`. An in-place run needs an explicit user override.
 
 If a fresh run is abandoned before any item integrates, run `run.cjs unclaim <intent-id> --config .specs-inferno/config.codex.yaml`. A halted run retains its claim.
 
@@ -54,7 +54,7 @@ If a fresh run is abandoned before any item integrates, run `run.cjs unclaim <in
 
 Repeat until all items are completed or the run blocks or halts.
 
-1. Build the graph from `depends_on`. Ready items are pending, have completed dependencies, are not in flight, and do not overlap an in-flight or co-selected `ownership.editable` path. `run.cjs frontier` also prints a `candidate` line for every file outside an item that references what the item owns; grant each into the dispatched ownership unless you can say why it is not this item's.
+1. Build the graph from `depends_on`. Ready items are pending, have completed dependencies, are not in flight, and do not overlap an in-flight or co-selected `ownership.editable` path. `run.cjs frontier` also prints a `candidate` line for every file outside an item that references what the item owns; grant each with `run.cjs grant <dispatch_id> --path <file> --tree <path> --config .specs-inferno/config.codex.yaml` right after its `dispatch-log` unless you can say why it is not this item's.
 2. Before each frontier, compare the base branch since the merge base across the frontier's editable and required paths. Merge it in before dispatch when relevant changes landed and no work is in flight; when work is in flight, hold only the affected items.
 3. Check the configured halt flag before every frontier; a future `resets_at` stops new dispatch.
 4. Batch a few consecutive low or medium items only when a serial dependency chain or a shared compile tree prevents parallelism, keeping combined required context near six files. Never batch high-complexity work, different worker tiers, or across a point where disjoint work can run in parallel.
@@ -68,9 +68,10 @@ Repeat until all items are completed or the run blocks or halts.
    - the item's `context` manifest and `ownership.editable` verbatim, and `design_contract` verbatim when present;
    - the exact verification command, as the whole verification budget;
    - `dispatch.constraints` pasted verbatim;
+   - every `standards` line `dispatch-log` prints, verbatim: the rule files under `.specs-inferno/standards/` that apply to the item's `ownership.editable`. A rule the item's own criterion asks to break is no fault of the builder: it goes to the oracle;
    - firewall files by name with the sanctioned alternative for each;
-   - already-landed dependency outputs, semantics that must survive, skipped items and known hazards;
-   - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold.
+   - already-landed dependency outputs, semantics that must survive, deferred items and known hazards;
+   - every `drift` and `real-app` line from `run.cjs probes <item-id> --tree <path> --config .specs-inferno/config.codex.yaml`, run in the dispatching round and again after every base fold, and every `SLICE` line from `run.cjs scan --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` and the collect it prints, run once per item, a `conflict` line sent to the planner once instead.
    Pass pointers, not file bodies or broad search instructions. Never ask for residual risks: that slot is how a builder parks a defect it could have fixed.
 7. Use `wait_agent` until every dispatched builder returns, tracking each outstanding worker by id.
 
@@ -100,6 +101,7 @@ A single item returns the envelope in the builder procedure. Allowed statuses ar
 - Malformed output (empty, prose-only, missing keys) gets one `followup_task` with the result contract and the missing fields; a second malformed result blocks the run.
 - A blocked result beginning `tool_failure:` gets one evidence-based retry: a missing path located with `rg`, a fresh read for a stale edit fingerprint, or a bounded error line for a shell failure. A permission denial is answered once with the sandboxed form of the command; only a genuinely missing authorization goes to the user. A second failure blocks.
 - A blocked result whose failing line comes from the build wrapper (a run cap kill, a queue refusal) or from the sandbox (`EPERM`, a read-only path) is an environment failure and never a code defect: it goes to the oracle once with that line and what the tree holds, and its decision rides in one fresh dispatch or ends the item in two sentences. No such result waits for a person.
+- Every oracle ask carries two grades, each `high <clause>` or `low` with one line its `bears on` paths prove. `impact` is high for lost user `data`, weakened `security` or privacy, changed `money`, licensing or legal text, a changed public `contract` (schema, file format, API, CLI), or a `reach` past one item or intent; `complexity` for three or more `readings` defensible after measuring, a call across `subsystems`, an `earlier` decision on it blocked, rejected or repeated, or an `asker` on the oracle's own tier. Run `run.cjs dispatch-log <intent-id> --tier oracle --item <item-id> --impact "<grade>: <line>" --complexity "<grade>: <line>" --tree <path> --config .specs-inferno/config.codex.yaml` and spawn the agent it prints, both grades in the ask. An oracle `blocked` because the artifact does not settle the call holds that item, its question in `.specs-inferno/halt-notes/<item-id>.md`.
 - A normal blocked result stops dependent dispatch, preserves the worktree and reports the reason, changed files, failing command and next step. A halted one is not retried.
 - Preserve a halted item's partial edits and proceed to halt finalization.
 
@@ -108,15 +110,15 @@ A single item returns the envelope in the builder procedure. Allowed statuses ar
 Run `run.cjs dispatch-log <intent-id> --item <item-id> --tier <tier> --agent <name> --tree <path> --config .specs-inferno/config.codex.yaml` right before each builder starts, `--items <a,b>` for a batch, keeping its `dispatch_id`. Run `run.cjs accept-dispatch <dispatch_id> --changed-paths '<changed_files as JSON>' --tree <path> --config .specs-inferno/config.codex.yaml` for each `ready` item before `verify-item`, then process the results one at a time.
 
 1. Reject noisy output. Review from the result block, `run.cjs verify-item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` and `git diff --stat`, and open a changed file only when one of those raises a question. Check `changed_files` against `ownership.editable`; accept an extra file only on evidence that the assigned change requires it.
-2. `verify-item` and `integrate` confirm the builder's checks; do not replay a focused check by hand. For a `design_contract`, require verification against the cited source. A note naming a defect the builder saw and left, a residual or a product call is postponed work: send it back with `followup_task` before integrating, never into the ledger, the report or the user's lap.
-3. Stage only that item's changed files, never the entire tree, and commit directly on the intent branch for `auto-close`. The commit message carries the builder's `cases:` value as its `Cases:` line, which integrate checks. Then `run.cjs review --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` prints the reviewer dispatch line (exit 3); after the reviewer writes, run the printed `then` line: 0 clean, 2 findings and the `next` builder, who fixes before you commit and review again.
+2. `verify-item` and `integrate` confirm the builder's checks; do not replay a focused check by hand. For a `design_contract`, require verification against the cited source. A note naming a defect the builder saw and left, a residual or a product call is postponed work: send it back with `followup_task`, and the minimal ownership extension granted with `run.cjs grant` on the correction's fresh `dispatch-log`, before integrating, never into the ledger, the report or the user's lap.
+3. Stage only that item's changed files and commit directly on the intent branch for `auto-close`. The commit message carries the builder's `cases:` value as its `Cases:` line, which integrate checks. Then `run.cjs review --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml` prints the reviewer dispatch, plus the quality lens's for production code: spawn both in one turn (exit 3); after they write, run the printed `then` line with each reviewer's agent id: 0 clean or settled, 2 findings and the `next` builder, who fixes before you commit and review again. `next user` holds that item as its line says, its two sentences in `Needs you:`. To mark a criterion a reviewer named unreachable by any mutant, add its `(gate: <name>)` in one commit that changes that spec alone, then record the review again.
 4. Then run:
 
    ```sh
    node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs integrate --item <item-id> --tree <path> --config .specs-inferno/config.codex.yaml
    ```
 
-   It folds the base branch in, runs `verification.integrate` and only then completes the item with the sha those checks proved. Non-zero names the failing command, and every failure goes to the still-warm builder in one correction. Never mark an item completed by hand.
+   Non-zero names the failing command, and every failure goes to the still-warm builder in one correction. Never mark an item completed by hand.
 5. For `merge-request`, commit the same exact paths on an item branch off the current intent head, push, open a non-blocking item-to-intent request, merge it serially and return to the intent branch. Without a forge, push and report the request details.
 6. For a batch, commit once and pass every id to one `integrate --items <a,b> --tree <path> --config .specs-inferno/config.codex.yaml`. Recompute the frontier immediately after.
 
@@ -130,13 +132,13 @@ On resume, read that note, reconcile state from disk, and dispatch ready halted 
 
 Finalize automatically once no work remains.
 
-1. Fold the base branch into the intent branch first (`git fetch origin <base>` then `git merge --no-edit origin/<base>`), resolving any conflict there so both goals survive. Then `run.cjs review --tree <path> --config .specs-inferno/config.codex.yaml` reviews the intent cold: exit 3 prints the reviewer dispatch; 2 sends each finding to its owner item's builder, then review again. Gate that folded tree once: `run.cjs gate --detach --tree <path> --config .specs-inferno/config.codex.yaml`, then `run.cjs gate --wait --tree <path> --config .specs-inferno/config.codex.yaml`. The runner skips a `finalize_scopes` command no changed path matches; that list is the gate and it runs once per intent. Run a work-item `finalize_check` only for a scoped invariant the list does not cover. A run tests a binary only through the configured lanes the gate starts and waits on; nothing else in a run builds a binary for testing or dispatches a tester. Non-zero blocks close. Never de-parallelize the gate, regate to mask flake, or poll in a loop.
+1. Fold the base branch into the intent branch first (`git fetch origin <base>` then `git merge --no-edit origin/<base>`), resolving any conflict there so both goals survive. Then `run.cjs review --tree <path> --config .specs-inferno/config.codex.yaml` reviews the intent cold: exit 3 prints the reviewer dispatch; 2 sends each finding to its owner item's builder, then review again. A finding the user puts after the release leaves through `state-transition.cjs defer-finding --intent <intent-id> --entry <n> --to <file> --reason <why> --config .specs-inferno/config.codex.yaml`: do what it prints. Gate that folded tree once: `run.cjs gate --detach --tree <path> --config .specs-inferno/config.codex.yaml`, then `run.cjs gate --wait --tree <path> --config .specs-inferno/config.codex.yaml`. That list is the gate and it runs once per intent. Run a work-item `finalize_check` only for a scoped invariant the list does not cover. A run tests a binary only through the configured lanes the gate starts and waits on; nothing else in a run builds a binary for testing or dispatches a tester. Non-zero blocks close. Never de-parallelize the gate, regate to mask flake, or poll in a loop.
 
-   With `verification.merge_slot` set, `gate --detach` folds and starts only when its ticket heads the repository's merge queue; behind another, detach and wait exit 4 queued. At the head, a queued wait folds and starts the gate itself, so on 4 call the same wait again.
+   On exit 4, running or queued in the merge slot, call the same wait again. Exit 5, from integrate or the gate, is no verdict, since the host ran nothing twice: run the printed step again and send nothing to the builder.
 
-   A log line matching a lane's `red_line` turns the wait red at once, while the lane walks on. While a lane walks, a committed fix gates through `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml`: it stops the tree's running gate and lanes and proves each lane stopped by its `stop` check. It refuses when the fix changes nothing a running lane proves.
+   A log line matching a lane's `red_line` turns the wait red at once, while the lane walks on. While a lane walks, a committed fix gates through `run.cjs gate --detach --supersede --tree <path> --config .specs-inferno/config.codex.yaml`.
 
-   An instrument red passes only against a harness fix already on the base branch, through the step `gate --wait` prints, and only when the lane's `accept_check`, where set, exits 0.
+   A lane red passes only through the step `gate --wait` prints: an instrument red against a harness fix on the base branch, a product red the lane's `verdicts` prove intermittent.
 2. Run ledger reconciliation:
 
    ```sh
@@ -144,13 +146,13 @@ Finalize automatically once no work remains.
    ```
 
    Reconcile only demonstrably integrated work, then require exit zero.
-3. Close through the single writer, committing only the resulting intent artifacts:
+3. Close through the single writer:
 
    ```sh
    node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/state-transition.cjs close-intent --intent <intent-id> --config .specs-inferno/config.codex.yaml
    ```
 
-   Its refusal over open items is authoritative. Then archive, so the live ledger holds open work only:
+   Its refusal is authoritative; an item the user drops leaves only through `defer-item`. Then archive:
 
    ```sh
    node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/state-transition.cjs archive-intent --intent <intent-id> --sweep --config .specs-inferno/config.codex.yaml
@@ -163,7 +165,7 @@ Finalize automatically once no work remains.
    node .specsmd/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs teardown --tree <worktree> --config .specs-inferno/config.codex.yaml
    ```
 
-   It stops the worktree's processes, removes the worktree and deletes the branch, and its refusal names what blocks that. The intent is not finished while its worktree stands.
+   The intent is not finished while its worktree stands.
 5. In `merge-request`, keep the worktree and branch, push it, and open one intent-to-base request as the review gate, stopping only processes spawned in the worktree. Without a forge, report the head, base and title.
 6. Report the run in one shape. For an actually finished, verified and delivered intent the exact first line is `INTENT FINISHED {intent-id}`, with the full actual intent id substituted, emitted once and preserved verbatim. A blocked, halted, failed or delivery-pending intent, including one with an open merge request, uses `Intent HALTED <id>`, `Intent BLOCKED <id>`, `Intent FAILED <id>` or `Intent PENDING <id>` instead. Then a small block in plain language: what changed for the user of the product, what was verified, what shipped and its sha or why it did not, and only when something genuinely needs the user a last line starting `Needs you:`. No headers, no inventories, no process narration.
 

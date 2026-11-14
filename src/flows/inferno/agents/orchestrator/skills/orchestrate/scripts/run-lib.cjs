@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Shared plumbing for `run.cjs`: git, the ledger, the config, work-item specs, globs,
- * shell runs and the cache.
+ * Shared plumbing for `run.cjs`: git, the ledger, the config, globs, shell runs and the cache.
+ * The YAML reader (run-yaml.cjs), the work-item spec (run-item-spec.cjs) and ownership
+ * (run-owned.cjs) live in modules of their own, re-exported here.
  *
  * Two constraints, the same ones state-transition.cjs carries: ZERO dependencies, because
  * these scripts run inside consumer projects that have no node_modules; and the ledger is
@@ -23,6 +24,7 @@ const owned = require('./run-owned.cjs');
 const lanes = require('./run-lane-config.cjs');
 const gates = require('./run-config-gates.cjs');
 const { parseYaml, stripQuotes } = require('./run-yaml.cjs');
+const { readItemSpec } = require('./run-item-spec.cjs');
 const { validateWiring } = require('./run-wiring.cjs');
 
 // ---------------------------------------------------------------------------
@@ -182,17 +184,17 @@ function readConfig(root, selected) {
     return {};
   }
   const config = parseYaml(fs.readFileSync(file, 'utf8'));
-  let wiringFile = file; // an inherited block is refused against the file that holds it
+  const from = {}; // an inherited block is refused against the file that holds it
   if (selected && file !== defaultFile && fs.existsSync(defaultFile)) {
     const defaults = parseYaml(fs.readFileSync(defaultFile, 'utf8'));
     // Machine facts every host config shares; the budget lookup must match the installer's.
-    for (const section of ['worktree', 'recovery', 'halt', 'budget', 'doubles', 'wiring', 'real_app', 'cases']) {
+    for (const section of ['worktree', 'recovery', 'halt', 'budget', 'doubles', 'wiring', 'real_app', 'cases', 'mutate']) {
       if (
         !Object.prototype.hasOwnProperty.call(config, section) &&
         Object.prototype.hasOwnProperty.call(defaults, section)
       ) {
         config[section] = defaults[section];
-        if (section === 'wiring') wiringFile = defaultFile;
+        from[section] = defaultFile;
       }
     }
     lanes.inheritLanes(config, defaults);
@@ -202,7 +204,8 @@ function readConfig(root, selected) {
   validateRoles(config, file);
   validateVerification(config, file);
   gates.validateGates(config, file);
-  validateWiring(config, wiringFile);
+  validateWiring(config, from.wiring || file);
+  require('./run-mutate-seal.cjs').validateSealed(config, from.mutate || file);
   return config;
 }
 
@@ -240,15 +243,19 @@ function readLedger(root) {
       integrated_sha: field(lines, item, 'integrated_sha'),
       completed_at: field(lines, item, 'completed_at'),
       // The item review state-review.cjs writes: the verdict, the hash of the files it bound,
-      // the commit it read, the tier that built that version, how often that tier was sent
-      // back and what the last fix weighed. integrate, frontier and review read this one shape.
+      // the commit it read, the tier that built that version, how often a review sent the item
+      // back (`review_misses`, null on a ledger the released flow wrote, which counted per tier
+      // in `review_rejections`) and what the last fix weighed. integrate, frontier and review
+      // read this one shape.
       review: field(lines, item, 'review'),
       review_hash: field(lines, item, 'review_hash'),
       review_commit: field(lines, item, 'review_commit'),
       review_tier: field(lines, item, 'review_tier'),
+      review_misses: field(lines, item, 'review_misses'),
       review_rejections: Number(field(lines, item, 'review_rejections')) || 0,
       review_weight: field(lines, item, 'review_weight'),
       reviewed_at: field(lines, item, 'reviewed_at'),
+      deferred_reason: field(lines, item, 'deferred_reason'),
       depends_on: listValues(lines, item, 'depends_on'),
     })),
   }));
@@ -264,36 +271,6 @@ function findIntent(ledger, id) {
     );
   }
   return intent;
-}
-
-/**
- * A work item's spec: the frontmatter plus the execution manifest.
- *
- * The manifest is plain YAML under the `## Execution Manifest` heading, fenced or not,
- * which is how the planner's template renders it.
- */
-function readItemSpec(root, intentId, itemId) {
-  const candidates = [
-    path.join(root, SPECS_DIR, 'intents', intentId, 'work-items', `${itemId}.md`),
-    path.join(root, SPECS_DIR, 'archive', 'intents', intentId, 'work-items', `${itemId}.md`),
-  ];
-  const file = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!file) {
-    throw new RunError(`work-item spec not found: ${candidates[0]}`, 'SPEC_MISSING');
-  }
-  const content = fs.readFileSync(file, 'utf8');
-  const frontmatter = /^---\n([\s\S]*?)\n---/.exec(content);
-  const section = /\n## Execution Manifest\s*\n([\s\S]*?)(?=\n## |\n?$)/.exec(content);
-  const body = section ? section[1].replace(/^\s*```(?:yaml)?\s*$/gm, '') : '';
-  // What the item says it is for, which is where a corrective item announces itself.
-  const described = /\n## Description\s*\n([\s\S]*?)(?=\n## |\n?$)/.exec(content);
-  const opening = /^# Work Item:[^\n]*\n([\s\S]*?)(?=\n## |\n?$)/m.exec(content);
-  return {
-    file,
-    frontmatter: frontmatter ? parseYaml(frontmatter[1]) : {},
-    description: ((described && described[1]) || (opening && opening[1]) || '').trim(),
-    manifest: parseYaml(body),
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +327,7 @@ function onPath(binary) {
   });
 }
 
-/** Run one shell command with its whole output in a log file, never in memory. */
+/** Run one shell command with its whole output in a log file, never in memory; `options.env` adds to its environment. */
 function runShell(command, cwd, logFile, options = {}) {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   const wrapped = options.wrap !== false && isHeavy(command) && onPath('claude-build');
@@ -361,7 +338,7 @@ function runShell(command, cwd, logFile, options = {}) {
   const result = spawnSync(
     wrapped ? 'claude-build' : 'bash',
     wrapped ? ['--', 'bash', '-c', command] : ['-c', command],
-    { cwd, stdio: ['ignore', handle, handle] }
+    { cwd, stdio: ['ignore', handle, handle], ...(options.env ? { env: { ...process.env, ...options.env } } : {}) }
   );
   fs.closeSync(handle);
   return {

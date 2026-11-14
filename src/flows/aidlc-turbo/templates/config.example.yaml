@@ -71,8 +71,10 @@ tester:
 # worked out by the agent every time. An old live_test block is ignored.
 
 construction:
-  # The most lines a script breaks per story, to prove its tests can fail; 0 turns it off.
-  mutants: 3
+  # After a story's reviews a script breaks one line per acceptance criterion a
+  # test covers, to prove that test can fail. A number caps them per story, the
+  # first criteria first; 0 turns them off; all (the default) is no cap.
+  mutants: all
 
 # Where the flow syncs with, optional and off by default. Confluence and Jira
 # are the tools supported today. Any other value behaves like none: the flow

@@ -25,6 +25,7 @@ const crypto = require('crypto');
 
 const lib = require('./run-lib.cjs');
 const snapshots = require('./run-snapshot.cjs');
+const grants = require('./run-grant.cjs');
 
 const { dispatchDirectory, hash, readJson, refuse, sequencedSnapshot, snapshotDelta, stable } = snapshots;
 
@@ -125,10 +126,22 @@ function lineage(tree, record) {
   return [...seen.values()];
 }
 
+/**
+ * The first attempt of a lineage. A dispatch over several completed items joins their histories,
+ * each with a first attempt of its own: the earliest of them is the baseline, so the reading of
+ * the joined history never depends on the order of the ids it was joined from.
+ */
+function firstAttempt(members) {
+  const roots = members.filter((entry) => !(entry.previous || []).length);
+  const sequenced = roots.length > 1 && roots.every((entry) => Number.isInteger((entry.beforeSnapshot || {}).seq));
+  if (sequenced) return roots.reduce((first, entry) => (entry.beforeSnapshot.seq < first.beforeSnapshot.seq ? entry : first));
+  return roots[roots.length - 1] || members[members.length - 1];
+}
+
 /** A record as verification reads it: the first attempt's baseline and every accepted or carried file. */
 function effective(tree, record) {
   const members = lineage(tree, record);
-  const root = [...members].reverse().find((entry) => !(entry.previous || []).length) || members[members.length - 1];
+  const root = firstAttempt(members);
   const claimed = new Set();
   for (const entry of members.filter((member) => member.phase === 'accepted')) {
     for (const file of [...claimedPaths(entry), ...exactPaths(entry.completion.carried || [])]) claimed.add(file);
@@ -146,23 +159,23 @@ function recordDispatch(tree, options) {
   const prior = readJson(recordFile(tree, id));
   if (prior) {
     validateDispatch(tree, prior, { intent: options.intent }, false);
-    if (hash([itemsOf(prior), prior.assignment.ownership.editable]) !== hash([items, options.editable])) {
+    if (hash([itemsOf(prior), grants.startedWith(prior)]) !== hash([items, options.editable])) {
       throw refuse('dispatch ownership is immutable');
     }
     return prior;
   }
-  const previous = new Set();
+  const previous = new Map();
   for (const item of items) {
     const current = readJson(currentFile(tree, options.intent, item));
-    if (current) previous.add(validateSigned(tree, current).dispatchId);
+    if (current) previous.set(validateSigned(tree, current).dispatchId, current);
   }
   return saveDispatch(tree, {
     version: 2,
     tree: fs.realpathSync(tree),
     dispatchId: id,
     phase: 'started',
-    assignment: { intent: options.intent, items, ownership: { editable: options.editable } },
-    previous: [...previous].sort(),
+    assignment: { intent: options.intent, items, ownership: grants.withGrants({ editable: options.editable }, grants.inherited([...previous.values()])) },
+    previous: [...previous.keys()].sort(),
     beforeSnapshot: sequencedSnapshot(tree),
   });
 }
@@ -247,5 +260,6 @@ module.exports = {
   loadDispatch,
   recordDispatch,
   recordFile,
+  saveDispatch,
   validateDispatch,
 };

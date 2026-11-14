@@ -16,16 +16,20 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const scheduler = require('./team-scheduler.cjs');
 const ownership = require('./run-ownership.cjs');
+const writes = require('./run-writes.cjs');
 const probes = require('./run-probes.cjs');
 const { wiringErrors } = require('./run-wiring.cjs');
-const { isComplete } = require('./state-transition.cjs');
-const { REINSTALL, completedBeforeReviewRule, reviewRuleSince } = require('./state-review.cjs');
+const { isComplete, isDeferred } = require('./state-transition.cjs');
+const { REINSTALL, completedBeforeReviewRule, reviewLands, reviewRuleSince } = require('./state-review.cjs');
 // The tier and the ladder live with the review that moves an item up it, so frontier and
 // `run.cjs review --item` print the same actor.
-const { actorLabel, hostActor, nextActor, nextLine, tierOf } = require('./run-review.cjs');
+const { LAST_MISS, actorLabel, hostActor, isBlocked, nextActor, nextLine, tierOf } = require('./run-review.cjs');
 const { integrateCall, itemReviewCall } = require('./run-call.cjs');
 const { waitFloorRefusal } = require('./run-codex-wait.cjs');
 const { RunError } = require('./run-error.cjs');
+const { reviewPath } = require('./run-review-file.cjs');
+const { frontierFindings } = require('./run-plan-lint.cjs');
+const { editableReader, pathErrors } = require('./run-manifest-paths.cjs');
 
 /**
  * The hour the proof rule landed. Every ledger written before it carries completed items and
@@ -47,9 +51,9 @@ function itemProved(item) {
   return Number.isNaN(completed) || completed < PROOF_RULE_LANDED;
 }
 
-/** The same for the item review: owed by every item completed after this host's cutover. */
+/** The same for the item review, clean or settled: owed by every item completed after this host's cutover. */
 function itemReviewed(item, since) {
-  return item.review === 'clean' || completedBeforeReviewRule(item.completed_at, since);
+  return reviewLands(item.review) || completedBeforeReviewRule(item.completed_at, since);
 }
 
 function itemIntegrated(item, since) {
@@ -75,8 +79,9 @@ function codexProject(tree) {
 }
 
 function loadItems(tree, intent) {
+  // A deferred item is out of this intent (state-defer.cjs): never validated, never offered.
   return intent.items
-    .filter((item) => !isComplete(item.status))
+    .filter((item) => !isComplete(item.status) && !isDeferred(item.status))
     .map((item) => {
       const spec = lib.readItemSpec(tree, intent.id, item.id);
       const manifest = spec.manifest || {};
@@ -88,11 +93,14 @@ function loadItems(tree, intent) {
         depends_on: item.depends_on,
         review: item.review,
         review_tier: item.review_tier,
+        review_misses: item.review_misses,
         review_rejections: item.review_rejections,
         review_weight: item.review_weight,
         context: manifest.context || {},
         ownership: manifest.ownership || {},
         reads: manifest.reads,
+        writes: manifest.writes,
+        design_contract: manifest.design_contract,
         provides: manifest.provides,
         consumes: manifest.consumes,
         probes: manifest.probes,
@@ -117,26 +125,40 @@ function completedManifests(tree, intent) {
   });
 }
 
-/** The contract check, plus the one team-scheduler cannot make: the paths have to exist. */
-function contractErrors(tree, items) {
+/**
+ * The items a builder already took: logged by dispatch-log, or reviewed, recorded or only
+ * written. Their diagnosis probe measured the tree before their own fix, so it is stale by
+ * design. A tree outside git keeps no dispatch log, so there only the review counts.
+ */
+function startedItems(tree, intentId, items) {
+  let logged = [];
+  try {
+    const log = path.join(lib.cacheDir(tree), 'dispatch', `${intentId}.log`);
+    if (fs.existsSync(log)) {
+      logged = fs.readFileSync(log, 'utf8').split('\n').map((line) => line.split('\t'))
+        .filter((fields) => fields[1] === intentId).map((fields) => fields[2]);
+    }
+  } catch (error) {
+    if (error.code !== 'NO_REPO') throw error;
+  }
+  const started = (item) => Boolean(item.review) || logged.includes(item.id) ||
+    fs.existsSync(path.join(tree, reviewPath(intentId, item.id)));
+  return new Set(items.filter(started).map((item) => item.id));
+}
+
+/**
+ * The contract check, plus the one team-scheduler cannot make: the paths have to exist, or be
+ * owned by an item this one depends on that has not completed yet (run-manifest-paths.cjs).
+ */
+function contractErrors(tree, intent, items) {
   const errors = [];
+  const editableOf = editableReader(tree, intent.id, items.map((item) => [item.id, [].concat(item.ownership.editable || [])]));
   for (const item of items) {
     errors.push(...scheduler.validateWorkItem(item).errors);
     errors.push(...probes.shapeErrors(item.id, item.probes));
     errors.push(...probes.diagnosisErrors(item));
-    for (const entry of item.context.required || []) {
-      const target = entry && entry.path;
-      if (target && !fs.existsSync(path.join(tree, target))) {
-        errors.push(`${item.id}: context.required path does not exist: ${target}`);
-      }
-    }
-    // A declared read names the module holding it, so the same existence check applies.
-    for (const entry of Array.isArray(item.reads) ? item.reads : []) {
-      const target = entry && entry.path;
-      if (target && !fs.existsSync(path.join(tree, target))) {
-        errors.push(`${item.id}: reads path does not exist: ${target}`);
-      }
-    }
+    errors.push(...writes.writesErrors(item.id, item.writes));
+    errors.push(...pathErrors(tree, item, intent.items, editableOf));
   }
   return errors;
 }
@@ -152,7 +174,11 @@ function frontier(intentId, options) {
   const since = reviewRuleSince(tree);
   const integrated = (item) => itemIntegrated(item, since);
 
-  const errors = contractErrors(tree, items);
+  // The plan's form comes first: a finding goes back to the planner before anything is ready.
+  const planFindings = frontierFindings(tree, intent, config);
+  if (planFindings.length > 0) return { exit: 2, payload: { ok: false, errors: planFindings }, out: planFindings };
+
+  const errors = contractErrors(tree, intent, items);
   if (errors.length === 0) errors.push(...wiringErrors(tree, intent.id, items, [...items, ...completedManifests(tree, intent)], config));
   if (errors.length > 0) {
     return { exit: 2, payload: { ok: false, errors }, out: errors.map((error) => `INVALID ${error}`) };
@@ -164,17 +190,29 @@ function frontier(intentId, options) {
   // itself deleted. Without a proof it holds its successors instead, until an integration
   // proves the tree it landed on (2026-09-09).
   const held = intent.items.filter((item) => isComplete(item.status) && !integrated(item));
-  const ready = items.filter((item) => item.depends_on.every((id) => completedIds.has(id)));
+  const unblocked = items.filter((item) => item.depends_on.every((id) => completedIds.has(id)));
+  // An item whose review ladder ended waits for the user, and only it: every item that does not
+  // depend on it is given out, and one that does waits, since it never completes meanwhile.
+  const blocked = unblocked.filter(isBlocked);
+  const open = unblocked.filter((item) => !blocked.includes(item));
 
   // The evidence a corrective item was planned on, replayed on the tree it is about to be
   // built in. Stale evidence is a cause nobody measured here, and dispatching on it is how a
-  // plan asserted a pixel cause it had never seen (2026-09-09).
-  const stale = probes.replayErrors(tree, ready);
-  if (stale.length > 0) {
+  // plan asserted a pixel cause it had never seen (2026-09-09). Only an item nobody dispatched
+  // or reviewed is about to be built on it. A stale probe holds its own item: on 2026-11-10 the
+  // stale probes of three built items stopped the whole frontier and hid the two truly ready.
+  const started = startedItems(tree, intent.id, open);
+  const stale = [];
+  const ready = open.filter((item) => {
+    const errors = started.has(item.id) ? [] : probes.replayErrors(tree, [item]);
+    stale.push(...errors);
+    return errors.length === 0;
+  });
+  if (stale.length > 0 && ready.length === 0) {
     return { exit: 2, payload: { ok: false, errors: stale }, out: stale.map((error) => `INVALID ${error}`) };
   }
 
-  const waiting = items.filter((item) => !ready.includes(item));
+  const waiting = items.filter((item) => !unblocked.includes(item));
   const owns = (item) => item.ownership.editable || [];
   const shares = (entry, other) => owns(other).some((owned) => lib.overlaps(entry, owned, tree));
 
@@ -211,28 +249,40 @@ function frontier(intentId, options) {
     return { id: item.id, complexity: item.complexity, kind: item.kind, tier: actor, model: hostActor(actor, config).model };
   };
   const out = held.map((item) => heldLine(item, tree, since, intent.id));
+  for (const item of blocked) {
+    out.push(`blocked ${item.id}: the ladder ended at miss ${LAST_MISS}, so no builder takes it until the user answers`);
+    out.push(nextLine(item.id, item, config));
+  }
   for (const item of ready) {
     out.push(`ready ${item.id} ${item.complexity} ${item.kind || 'unset'} ${actorLabel(item, config)}`);
     if (item.review === 'fix') out.push(nextLine(item.id, item, config));
   }
-  for (const item of waiting) out.push(`waiting ${item.id} on ${item.depends_on.join(', ')}`);
+  const deferred = intent.items.filter((item) => isDeferred(item.status));
+  const dependency = (id) => (deferred.some((item) => item.id === id) ? `${id} (deferred)` : id);
+  for (const item of waiting) out.push(`waiting ${item.id} on ${item.depends_on.map(dependency).join(', ')}`);
   for (const pair of serialize) out.push(`serialize ${pair.items.join(' + ')} (shares ${pair.shared.join(', ')})`);
   for (const group2 of batch) out.push(`batch ${group2.join(',')}`);
-  // The ownership the planner missed: a file outside the item that names what the item owns.
-  const closure = ownership.candidates(tree, ready, items);
+  // The ownership the planner missed: a file outside the item that names what the item owns,
+  // and a caller the item does not cite of a function it writes through.
+  const closure = writes.addCallers(tree, ready, items, ownership.candidates(tree, ready, items));
   out.push(...ownership.candidateLines(closure));
+  out.push(...stale.map((error) => `INVALID ${error}`));
   if (out.length === 0) out.push('no item left in this intent');
+  for (const item of deferred) out.push(`deferred ${item.id}: ${item.deferred_reason || 'no reason recorded'}`);
   return {
     exit: held.length > 0 ? 3 : 0,
     payload: {
       ready: ready.map(shape),
       waiting: waiting.map(shape),
       held: held.map((item) => item.id),
+      blocked: blocked.map((item) => item.id),
+      deferred: deferred.map((item) => ({ id: item.id, reason: item.deferred_reason })),
       serialize,
       dispatch,
       batch,
       candidates: closure.found,
       skipped: closure.skipped,
+      invalid: stale,
     },
     out,
   };

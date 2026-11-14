@@ -75,3 +75,15 @@ test("probes hands each builder the rule for the configured helpers, written and
     "integration/lib/**", "integration/*.test.mjs",
   ]);
 });
+
+test("on a host with real_app.prove probes tells each builder that verify-item runs what it changed there, green", () => {
+  const tree = frontier.fixture();
+  write(tree.root, ".specs-inferno/config.yaml", 'real_app:\n  paths: ["integration/**"]\n  prove: "node integration/prove.mjs"\n');
+  const result = frontier.run(tree, ["probes", "a-panel"]);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.deepEqual(realAppLines(result.out), [
+    "real-app a-panel: when this piece changes a screen, update the helpers and case texts under " +
+      "integration/** that drive the real app; never run them yourself: verify-item runs the ones you change " +
+      "with real_app.prove, and they must be green there",
+  ]);
+});

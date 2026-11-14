@@ -8,15 +8,16 @@
  *
  * It sits apart from run-lib.cjs so the config reader and the job plumbing can both name the
  * lanes without requiring each other. A lane may also set `accept_check`, the host's own check
- * that an instrument red may be accepted, `stop`, and `red_line`, a pattern.
+ * that an instrument red may be accepted, `stop`, `red_line`, a pattern, and `verdicts`, the file
+ * where the lane writes which of its red tests it proved intermittent (run-lanes-intermittent.cjs).
  */
 
 const { RunError } = require('./run-error.cjs');
 
 const LANES = ['smoke', 'windows'];
-/** The optional lane keys: the host's check before an accept, its stop command, and the line pattern that marks a red. */
+/** The optional lane keys: the host's check before an accept, its stop command, the line pattern that marks a red, and its verdicts file. */
 const COMMANDS = ['accept_check', 'stop'];
-const OPTIONAL = [...COMMANDS, 'red_line'];
+const OPTIONAL = [...COMMANDS, 'red_line', 'verdicts'];
 
 const filled = (text) => typeof text === 'string' && text.trim().length > 0;
 
@@ -35,7 +36,8 @@ function validLane(value) {
     Array.isArray(value.scope) && value.scope.length > 0 &&
     value.scope.every((glob) => typeof glob === 'string' && glob.length > 0) &&
     COMMANDS.every((key) => value[key] === undefined || filled(value[key])) &&
-    (value.red_line === undefined || (filled(value.red_line) && compiles(value.red_line)));
+    (value.red_line === undefined || (filled(value.red_line) && compiles(value.red_line))) &&
+    (value.verdicts === undefined || filled(value.verdicts));
 }
 
 function validateLanes(verification, file) {
@@ -43,7 +45,7 @@ function validateLanes(verification, file) {
     if (verification[lane] === undefined || validLane(verification[lane])) continue;
     throw new RunError(
       `verification.${lane} in ${file} must be a map with command, one shell command, and scope, a list of path globs, ` +
-        'and may set accept_check and stop, each one shell command, and red_line, a pattern: ' +
+        "and may set accept_check and stop, each one shell command, red_line, a pattern, and verdicts, the path of the lane's verdicts file: " +
         `"${lane}:" then "command: <shell command>" and "scope: [\\"src/**\\"]" indented under it.`,
       'BAD_CONFIG'
     );

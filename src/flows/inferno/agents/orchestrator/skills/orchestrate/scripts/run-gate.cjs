@@ -6,18 +6,23 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const proofs = require('./run-proofs.cjs');
-const { attribute } = require('./run-attribute.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const jobs = require('./run-jobs.cjs');
 const lanes = require('./run-lanes.cjs');
 const intentReview = require('./run-intent-owed.cjs');
+const { asideLines } = require('./run-review-aside.cjs');
 const { gateStartCall, gateWaitCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const cases = require('./run-cases.cjs');
 const slot = require('./run-slot.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
-const { lanesSince, startLanesOnly } = require('./run-lanes-only.cjs');
+const { lanesSince, startLanesOnly, startOneLane } = require('./run-lanes-only.cjs');
 const supersede = require('./run-supersede.cjs');
+const { foldBlockers, refuseDirt } = require('./run-dirt.cjs');
+const { withMarks } = require('./run-gate-marks.cjs');
+const { checkRounds, closeLeft } = require('./run-check-session.cjs');
+const { noVerdictLine } = require('./run-check-refused.cjs');
+const { NO_VERDICT } = require('./run-exit.cjs');
 
 const { RunError } = lib;
 
@@ -25,9 +30,19 @@ function treeOf(options) {
   return options.tree || lib.repoRoot(options.cwd);
 }
 
-/** Refuse a dirty tree, after restoring a mutant a killed `mutate` left; returns that restore's lines. */
+/**
+ * Refuse a dirty tree, after closing a host session a killed integrate or gate left open
+ * (run-check-session.cjs) and restoring a mutant a killed `mutate` left; returns what those did.
+ */
 function refuseDirty(tree) {
-  const restored = recoverInterrupted(tree);
+  const left = closeLeft(tree);
+  let restored;
+  try {
+    restored = [...left, ...recoverInterrupted(tree)];
+  } catch (error) {
+    if (error instanceof RunError) error.message = afterRecovery(left, error.message);
+    throw error;
+  }
   const dirty = lib.dirtyPaths(tree);
   if (dirty.length > 0) {
     throw new RunError(afterRecovery(restored,
@@ -53,7 +68,9 @@ function mergeBase(tree, base) {
  * the tree ship merges. Without it every intent whose base moved while it was open paid two
  * gates: one here, one after ship folded the base in and found the marker stale (2026-09-03).
  * Commits that reached origin but not the local base are folded too. A conflict stops here with
- * the files named and the merge left in the worktree to resolve.
+ * the files named and the merge left in the worktree to resolve. A merge git refuses before it
+ * starts, over an uncommitted file the incoming commits change or a staged file, names that file
+ * instead, and one that failed with neither never claims a conflict.
  */
 function foldBase(tree, base) {
   const branch = lib.currentBranch(tree);
@@ -66,6 +83,12 @@ function foldBase(tree, base) {
   for (const ref of refs) {
     if (lib.git(tree, ['merge', '--no-edit', ref], { tolerate: true }) === null) {
       const conflicts = lib.gitLines(tree, ['diff', '--name-only', '--diff-filter=U'], { tolerate: true });
+      if (conflicts.length === 0) {
+        refuseDirt(foldBlockers(tree, ref), `refusing to fold ${ref} into ${branch} over uncommitted files git will not merge across (one its commits change, or a staged one)`,
+          'Commit or discard them, or wait until the work that writes them is committed, then run the step again.');
+        throw new RunError(`merging ${ref} into ${branch} failed with no conflicted file; run git merge ${ref} in ${tree} to see why, ` +
+          'fix that, then run the step again.', 'FOLD_FAILED');
+      }
       throw new RunError(
         `conflict folding ${ref} into ${branch}: ${conflicts.slice(0, 10).join(', ')}. ` +
           'Resolve them in the worktree so both sides\' goals survive, commit, then run the step again.',
@@ -74,100 +97,6 @@ function foldBase(tree, base) {
     }
   }
   return lib.git(tree, ['rev-parse', 'HEAD']) === before ? [] : [`folded ${base} into ${branch}`];
-}
-
-// ---------------------------------------------------------------------------
-// verify-item
-// ---------------------------------------------------------------------------
-
-/** The items under review: one id, or the explicitly batched chain in `--items a,b`. */
-function reviewed(ledger, itemId, options) {
-  const ids = options.items
-    ? String(options.items).split(',').map((id) => id.trim()).filter((id) => id.length > 0)
-    : [itemId];
-  return ids.map((id) => {
-    const intent = options.intent
-      ? lib.findIntent(ledger, options.intent)
-      : ledger.intents.find((entry) => entry.items.some((item) => item.id === id));
-    if (!intent) throw new RunError(`work item not found in the live ledger: ${id}`, 'ITEM_NOT_FOUND');
-    return { id, intent: intent.id };
-  });
-}
-
-/** Every path changed since `since` that the union of the reviewed items does not own. */
-function sinceOutside(tree, since, editable) {
-  return changedPaths(tree, since).filter(
-    (file) => !file.startsWith(`${lib.SPECS_DIR}/`) && !lib.ownedBy(file, editable, tree)
-  );
-}
-
-/**
- * One item's own check plus its ownership. A batch is reviewed as the unit it was built as:
- * each item against its own dispatch, so a change one item of the batch reported is that
- * item's, and under `--since` against the union of its items' editable lists.
- */
-function verifyItem(itemId, options) {
-  const tree = treeOf(options);
-  const ledger = lib.readLedger(tree);
-  const items = reviewed(ledger, itemId, options).map((entry) => ({
-    ...entry,
-    spec: lib.readItemSpec(tree, entry.intent, entry.id),
-  }));
-  const label = items.map((entry) => entry.id).join(', ');
-  const editable = [
-    ...new Set(
-      items.flatMap((entry) => (entry.spec.manifest.ownership && entry.spec.manifest.ownership.editable) || [])
-    ),
-  ];
-  // `--since` names the baseline by hand; without it each item answers to its own dispatch,
-  // and an item the runner before signed records dispatched is checked the old way.
-  const out = [];
-  let attribution = options.since ? null
-    : attribute(tree, items, { ...options, base: options.base || resolveBase(lib.readConfig(tree, options.config), null, tree) });
-  if (attribution && attribution.legacy) {
-    out.push(`no signed dispatch for ${attribution.legacy.join(', ')}: checked since HEAD as the runner before signed records did`);
-    attribution = null;
-  }
-  const since = attribution ? attribution.since : options.since || 'HEAD';
-  const outside = attribution ? attribution.outside : sinceOutside(tree, since, editable);
-  const unreported = attribution ? attribution.unreported : [];
-  const attributed = attribution ? attribution.attributed : [];
-  let failed = outside.length > 0;
-  const checks = [];
-  for (const entry of items) {
-    if (!entry.spec.manifest.finalize_check) {
-      out.push(`PASS ${entry.id} carries no finalize_check`);
-      continue;
-    }
-    const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `verify-${entry.id}-${lib.stamp()}.log`);
-    const check = lib.runShell(entry.spec.manifest.finalize_check, tree, log);
-    checks.push({ item: entry.id, ...check });
-    out.push(
-      check.code === 0
-        ? `PASS ${check.seconds}s ${check.command}`
-        : `FAIL ${check.seconds}s ${check.command} -> ${log}`
-    );
-    if (check.code !== 0) {
-      out.push(...lib.tail(log, 5));
-      failed = true;
-    }
-  }
-
-  if (outside.length > 0) {
-    out.push(`outside ${label} ownership.editable: ${outside.slice(0, 10).join(', ')}`);
-  } else {
-    out.push(`ownership clean since ${since}`);
-  }
-  if (unreported.length > 0) {
-    out.push(`owned but not in changed_files: ${unreported.slice(0, 10).join(', ')}. If this item wrote them, run dispatch-log ` +
-      'for it again and accept-dispatch its full list, or each sibling\'s review names them outside');
-  }
-
-  return {
-    exit: failed ? 2 : 0,
-    payload: { items: items.map((entry) => entry.id), item: items[0].id, intent: items[0].intent, since, outside, unreported, checks, dispatches: attributed },
-    out,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -181,6 +110,7 @@ function describe(results) {
     if (entry.result === 'skip') out.push(`SKIP ${entry.command} (no path in scope changed)`);
     else if (entry.result === 'green') out.push(`GREEN ${entry.seconds}s ${entry.command} (unchanged since ${entry.stamp})`);
     else if (entry.result === 'pass') out.push(`PASS ${entry.seconds}s ${entry.command}`);
+    else if (entry.result === 'refused') out.push(`NO VERDICT ${entry.command} -> ${entry.log}`, entry.line);
     else {
       out.push(`FAIL ${entry.seconds}s ${entry.command} -> ${entry.log}`);
       out.push(...lib.tail(entry.log, 5));
@@ -188,6 +118,9 @@ function describe(results) {
   }
   return out;
 }
+
+/** The last line of a gate whose commands the host's wrapper ran nothing for twice. */
+const gateNoVerdict = (tree, payload) => noVerdictLine('finalize', payload.no_verdict.length, payload.results.length, gateStartCall(tree));
 
 function gateCommands(tree, selected) {
   const config = lib.readConfig(tree, selected);
@@ -226,6 +159,7 @@ function gateNow(options) {
   }
   const unreviewed = intentReview.gateRefusal(tree, config, intent, before, shown);
   if (unreviewed) return unreviewed;
+  shown.push(...asideLines(tree, intent, { withdrawn: true }));
   // Reject a verdict if the inputs change while the gate runs.
   const codeHash = lib.codeTreeHash(tree);
   const started = proofs.scopeHash(tree);
@@ -233,28 +167,43 @@ function gateNow(options) {
   const branch = lib.currentBranch(tree);
   const dir = path.join(lib.cacheDir(tree), branch, `gate-${lib.stamp()}`);
 
-  const results = [];
-  // A failed command is red on its first failure: no rerun mints a proof.
-  for (const [index, command] of commands.entries()) {
-    const result = proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), Boolean(options.force));
-    results.push(result);
-    if (result.result === 'fail') {
-      const out = [...shown, ...describe(results)];
-      if (result.moved) out.push('the code changed while the gate ran. Re-run the gate.');
-      return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results }, out };
+  // A failed command is red on its first failure: no rerun mints a proof. With
+  // verification.session the commands it reaches share one host session, closed there too. A
+  // command the host's wrapper ran nothing for runs once more in a fresh session, and is no
+  // verdict after a second refusal (run-check-refused.cjs).
+  const checked = checkRounds(tree, config, dir, (check) => {
+    const ran = [];
+    for (const [index, command] of commands.entries()) {
+      const result = check(index, (shell) => proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), Boolean(options.force), shell));
+      ran.push(result);
+      if (result.result === 'fail') return { ran, failed: result };
     }
+    return { ran, failed: null };
+  });
+  const { notes } = checked;
+  const { ran: results, failed } = checked.value;
+  // The close's lines ride in the result too, so a detached gate's --wait prints them.
+  const noted = notes.length > 0 ? { notes } : {};
+  if (failed) {
+    const out = [...shown, ...describe(results), ...notes];
+    if (failed.moved) out.push('the code changed while the gate ran. Re-run the gate.');
+    return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, ...noted }, out };
+  }
+  if (checked.refused.length > 0) {
+    const payload = { ok: false, tree, branch, folded: folded.length > 0, results, no_verdict: checked.refused.map((entry) => entry.command), ...noted };
+    return { exit: NO_VERDICT, payload, out: [...shown, ...describe(results), ...notes, gateNoVerdict(tree, payload)] };
   }
 
   if (proofs.scopeHash(tree) !== started ||
       JSON.stringify(lib.readConfig(tree, options.config).verification) !== definition) {
-    const out = [...shown, ...describe(results), 'the code changed while the gate ran. Re-run the gate.'];
-    return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, moved: true }, out };
+    const out = [...shown, ...describe(results), ...notes, 'the code changed while the gate ran. Re-run the gate.'];
+    return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, moved: true, ...noted }, out };
   }
 
   return {
     exit: 0,
-    payload: { ok: true, tree, branch, folded: folded.length > 0, results, hash: codeHash },
-    out: [...shown, ...describe(results), `green ${codeHash}`],
+    payload: { ok: true, tree, branch, folded: folded.length > 0, results, hash: codeHash, ...noted },
+    out: [...shown, ...describe(results), ...notes, `green ${codeHash}`],
   };
 }
 
@@ -307,6 +256,7 @@ function gateDetach(options) {
   // Refused here too, or the child dies refusing and --wait reports a gate with no result.
   const unreviewed = intentReview.gateRefusal(tree, current, intent, before, folded);
   if (unreviewed) return unreviewed;
+  folded.push(...asideLines(tree, intent, { withdrawn: true }));
   const laneStart = lanes.startLanes(tree, options, current, changedPaths(tree, mergeBase(tree, base)));
   const args = ['gate', '--tree', tree, '--json'];
   if (options.base) args.push('--base', options.base);
@@ -328,8 +278,9 @@ function gateDetach(options) {
 function finished(job) {
   const result = jobs.readJson(job.result);
   if (result && Array.isArray(result.results)) {
-    const out = describe(result.results);
+    const out = [...describe(result.results), ...(Array.isArray(result.notes) ? result.notes : [])];
     if (result.ok) out.push(`green ${result.hash}`);
+    if (Array.isArray(result.no_verdict)) return { exit: NO_VERDICT, payload: result, out: [...out, gateNoVerdict(job.tree, result)] };
     return { exit: result.ok ? 0 : 2, payload: result, out };
   }
   return {
@@ -379,12 +330,28 @@ function gateWait(options) {
   return lanes.waitAll(job, options, deadline, () => finished(job), turn.lead);
 }
 
+/** gate --detach --lane <name>: walk that one lane again on its own, on a clean tree, with no fold and no ticket. */
+function laneDetach(options) {
+  const tree = treeOf(options);
+  const restored = refuseDirty(tree);
+  return startOneLane(tree, options, lib.readConfig(tree, options.config), restored);
+}
+
+/** Route a gate call; a verdict carries the marked criteria beside it (run-gate-marks.cjs). */
 function gate(options) {
+  return withMarks(options, gateCall(options));
+}
+
+function gateCall(options) {
   if (options.detach && options.wait) throw new RunError('gate takes --detach or --wait, not both', 'BAD_ARGS', 1);
+  if (options.lane && options.detach && (options.lanes_only || options.supersede)) {
+    throw new RunError('gate takes --lane with --detach alone, not with --lanes-only or --supersede', 'BAD_ARGS', 1);
+  }
   if (options.lanes_only && !options.detach) throw new RunError('gate takes --lanes-only only with --detach', 'BAD_ARGS', 1);
   if (options.since && !options.lanes_only) throw new RunError('gate takes --since only with --detach --lanes-only', 'BAD_ARGS', 1);
   if (options.holder && !options.lanes_only) throw new RunError('gate takes --holder only with --detach --lanes-only', 'BAD_ARGS', 1);
   if (options.supersede && !options.detach) throw new RunError('gate takes --supersede only with --detach', 'BAD_ARGS', 1);
+  if (options.lane && options.detach) return laneDetach(options);
   if (options.lane) return lanes.laneNow(options);
   if (options.detach) return gateDetach(options);
   if (options.wait) return gateWait(options);
@@ -406,7 +373,11 @@ function green(options) {
   const smoke = lanes.smokeOwed(tree, config, options.config, changedPaths(tree, mergeBase(tree, base)));
   const owed = [...merge.owed, ...smoke.owed];
   const out = [...restored, ...merge.out, ...smoke.out];
-  if (missing.length === 0 && owed.length === 0) return { exit: 0, payload: { green: true, hash }, out: [...restored, ...smoke.out, `green ${hash}`] };
+  if (missing.length === 0 && owed.length === 0) {
+    // An after_ship path is no merge's to wait for: the payload carries it so the ship prints it as owed.
+    const payload = merge.after.length > 0 ? { green: true, hash, after_ship: merge.after } : { green: true, hash };
+    return { exit: 0, payload, out: [...restored, ...smoke.out, `green ${hash}`] };
+  }
   if (missing.length > 0) out.push(`no green marker for ${hash}`, 'run gate first');
   return { exit: 3, payload: { green: false, hash, missing, owed }, out };
 }
@@ -420,5 +391,4 @@ module.exports = {
   mergeBase,
   refuseDirty,
   treeOf,
-  verifyItem,
 };

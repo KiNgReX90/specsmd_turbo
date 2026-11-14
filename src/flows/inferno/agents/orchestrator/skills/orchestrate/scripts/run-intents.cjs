@@ -16,6 +16,7 @@ const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
 const writer = require('./state-transition.cjs');
 const dispatch = require('./run-dispatch.cjs');
+const { standardsFor } = require('./run-standards.cjs');
 const { frontier, tierOf } = require('./run-frontier.cjs');
 const { archivePaths, archivedIds } = require('./state-archive.cjs');
 const { PARKED_VALUES } = require('./state-ledger.cjs');
@@ -24,6 +25,8 @@ const { recordOwnership } = require('./run-processes.cjs');
 const { teardownCall } = require('./run-call.cjs');
 const { ownership } = require('./run-owner.cjs');
 const { resolveBudget } = require('./run-budget.cjs');
+const { dispatchOracle, isOracleDispatch } = require('./run-oracle-route.cjs');
+const { shippedOwed } = require('./run-after-ship.cjs');
 
 /** An in_progress intent counts as abandoned after this long with no process, edit or commit in its worktree. */
 const DEFAULT_IDLE_MINUTES = 60;
@@ -58,12 +61,14 @@ function unmetPrerequisites(ledger, intent) {
 }
 
 function grades(intent) {
-  const open = intent.items.filter((item) => !isComplete(item.status));
+  const open = intent.items.filter((item) => !isComplete(item.status) && !writer.isDeferred(item.status));
   const counted = ['low', 'medium', 'high']
     .map((grade) => [grade, open.filter((item) => item.complexity === grade).length])
     .filter(([, count]) => count > 0)
     .map(([grade, count]) => `${count} ${grade}`);
-  return `${open.length} items${counted.length > 0 ? `: ${counted.join(', ')}` : ''}`;
+  // A deferred item is counted apart: it waits for a later plan, and nothing in this one builds it.
+  const deferred = intent.items.filter((item) => writer.isDeferred(item.status)).length;
+  return `${open.length} items${counted.length > 0 ? `: ${counted.join(', ')}` : ''}${deferred > 0 ? `; ${deferred} deferred` : ''}`;
 }
 
 /** Tester cases the intent names, from its ledger field or from its own prose. */
@@ -155,6 +160,8 @@ function select(options) {
     ? null
     : resolveBase(config, null, root);
   const leftovers = base ? leftoverWorktrees(root, ledger, base) : [];
+  // A shipped intent whose after_ship proof has no evidence yet, so the session on the base branch finds it.
+  const owed = shippedOwed(root, ledger, archivedIds(archivePaths(ledger.file).archiveFile));
 
   const out = [];
   out.push(claimable.length > 0 ? 'claimable' : 'no claimable intent');
@@ -176,7 +183,8 @@ function select(options) {
   for (const entry of leftovers) {
     out.push(`leftover ${entry.id}  ${entry.path}  merged into ${base}; run ${teardownCall(entry.path)}`);
   }
-  return { exit: 0, payload: { claimable, blocked, parked, running, recovery, leftovers }, out };
+  for (const entry of owed) out.push(`owed ${entry.id}  after ship: ${entry.where} -> ${entry.evidence}`);
+  return { exit: 0, payload: { claimable, blocked, parked, running, recovery, leftovers, owed }, out };
 }
 
 // ---------------------------------------------------------------------------
@@ -332,6 +340,8 @@ function worktree(intentId, options) {
  * they are a record of one run's dispatches, never work anyone builds from.
  */
 function dispatchLog(intentId, options) {
+  // An oracle ask is graded, routed and logged, and takes no baseline: an oracle edits nothing.
+  if (isOracleDispatch(options)) return dispatchOracle(intentId, options);
   const requested = options.items ? String(options.items).split(',').map((id) => id.trim()).filter(Boolean) : [options.item].filter(Boolean);
   if (requested.length === 0 || !options.tier || !options.agent) {
     throw new RunError('dispatch-log requires --item (or --items a,b for a chain one builder builds), --tier and --agent', 'BAD_ARGS', 1);
@@ -345,6 +355,8 @@ function dispatchLog(intentId, options) {
     const spec = lib.readItemSpec(tree, intentId, id);
     for (const entry of (spec.manifest.ownership && spec.manifest.ownership.editable) || []) editable.add(entry);
   }
+  // The project's rule files that apply to these paths, read before the record so a bad block refuses the dispatch.
+  const standards = standardsFor(tree, [...editable], { config: options.config }).map((file) => `standards ${file}`);
   const record = dispatch.recordDispatch(tree, {
     intent: intentId,
     items,
@@ -360,7 +372,7 @@ function dispatchLog(intentId, options) {
   return {
     exit: 0,
     payload: { log, line: lines[0], dispatch_id: record.dispatchId, tree },
-    out: [`logged ${items.join(', ')} -> ${log}`, `dispatch ${record.dispatchId}`],
+    out: [`logged ${items.join(', ')} -> ${log}`, `dispatch ${record.dispatchId}`, ...standards],
   };
 }
 

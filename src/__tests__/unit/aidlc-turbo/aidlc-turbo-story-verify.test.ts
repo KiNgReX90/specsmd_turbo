@@ -11,7 +11,10 @@
  * - one summary line, exit 1 when a command fails;
  * - sandbox mode is production here too: the same diff hash and tests_changed;
  * - tests_changed: the existing test files the story modified or deleted, and
- *   every added line that switches a test off, which fails the proof.
+ *   every added line that switches a test off, which fails the proof;
+ * - a later proof of the same story keeps the `mutants` and `criteria`
+ *   story-mutate.cjs wrote, so a fix round reruns only the open mutants and
+ *   the proof still holds a result per criterion.
  */
 
 import { describe, it, expect, afterAll } from 'vitest';
@@ -155,6 +158,23 @@ describe('aidlc-turbo story-verify', () => {
     }
     expect(out.error).toContain('git add -N failed');
     expect(existsSync(p.proof)).toBe(false);
+  });
+
+  it('keeps the mutants and the per-criterion results of the story\'s earlier proof', () => {
+    const p = project(['node test.js']);
+    expect(run(p.app, 'auth', '1', '--code-root', '.').status).toBe(0);
+    const first = JSON.parse(readFileSync(p.proof, 'utf8'));
+    expect(first).not.toHaveProperty('mutants');
+    expect(first).not.toHaveProperty('criteria');
+    const mutants = [{ id: 'M1', criterion: '1: the sum', result: 'killed', exit: 1 }];
+    const criteria = [{ criterion: 1, result: 'killed', mutants: ['M1'] }];
+    writeFileSync(p.proof, JSON.stringify({ ...first, mutants, criteria }));
+    writeFileSync(path.join(p.app, 'src/app.txt'), 'fixed\n');
+    expect(run(p.app, 'auth', '1', '--code-root', '.').status).toBe(0);
+    const next = JSON.parse(readFileSync(p.proof, 'utf8'));
+    expect(next.diff_sha).not.toBe(first.diff_sha);
+    expect(next.mutants).toEqual(mutants);
+    expect(next.criteria).toEqual(criteria);
   });
 
   it('runs the full verification at finish as story "intent"', () => {

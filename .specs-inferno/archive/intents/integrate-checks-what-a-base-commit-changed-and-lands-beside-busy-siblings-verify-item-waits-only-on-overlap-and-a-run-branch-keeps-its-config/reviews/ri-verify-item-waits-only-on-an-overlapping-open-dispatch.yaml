@@ -1,0 +1,60 @@
+item: ri-verify-item-waits-only-on-an-overlapping-open-dispatch
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-attribute.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-peers.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-attribution.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-attribution-peers.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-attribution-open.test.cjs
+mutants:
+  - criterion: "1: verifies beside an open dispatch with disjoint frozen ownership"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-attribute.cjs:209 every open dispatch overlaps)"
+    caught: yes
+  - criterion: "2: run-attribution.test.cjs:101 verifies an item beside a disjoint open dispatch, and waits on nothing once it is accepted"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution.test.cjs (run-attribute.cjs:209 every open dispatch overlaps)"
+    caught: yes
+  - criterion: "2: run-attribution-peers.test.cjs:121 verify('b') exits 0 with outside [] while c is open"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-peers.test.cjs (run-attribute.cjs:209 every open dispatch overlaps)"
+    caught: yes
+  - criterion: "1: verify-item still waits on an open dispatch whose frozen ownership overlaps"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-attribute.cjs:210 overlap never refuses)"
+    caught: yes
+  - criterion: "1: verify-item still waits on an open dispatch whose frozen ownership overlaps"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-peers.cjs:28 ownershipOverlaps always false)"
+    caught: yes
+  - criterion: "1: verify-item still waits on an open dispatch whose frozen ownership overlaps"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs at d7ffe547 (run-attribute.cjs:207 frozen drops the record's list; the narrowed-spec case fails)"
+    caught: yes
+  - criterion: "1: verify-item still waits on an open dispatch whose frozen ownership overlaps"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs at d7ffe547 (run-attribute.cjs:207 frozen drops the spec editable; the widened-spec case fails)"
+    caught: yes
+  - criterion: "1: a change no dispatch claims beside an open one waits for it"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-attribute.cjs:212 unclaimed wait never fires)"
+    caught: yes
+  - criterion: "1: a change no dispatch claims beside an open one waits for it"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-attribute.cjs:117 unclaimed always empty)"
+    caught: yes
+  - criterion: "1: a ledger change beside a disjoint open dispatch is no reason to wait"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-attribute.cjs:212 a ledger path also waits)"
+    caught: yes
+  - criterion: "1: verifies beside an open dispatch with disjoint frozen ownership"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-attribute.cjs:211 open records never reach verifyDispatch)"
+    caught: yes
+  - criterion: "1: a correction of a landed item beside a disjoint open one is explained by that item's accepted attempt"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs at d7ffe547 (run-peers.cjs:68 an open lineage gets no frozen claim; cases 1, 4 and 7 fail)"
+    caught: yes
+  - criterion: "1: verifies beside an open dispatch with disjoint frozen ownership"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-peers.cjs:104, :96 at 04055970, open records validated as accepted)"
+    caught: yes
+  - criterion: "1: verifies beside an open dispatch with disjoint frozen ownership"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs (run-peers.cjs:105, :97 at 04055970, open and accepted windows swapped)"
+    caught: yes
+  - criterion: "the item's own escape into an open sibling's file is named outside it, not an overlap (correction of the earlier blocker)"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs at d7ffe547 (run-peers.cjs:128 a frozen claim never yields to the item's claim)"
+    caught: yes
+  - criterion: "a restarted open dispatch claims what its first attempt wrote inside its frozen ownership (correction of the earlier minor)"
+    test: "remote-run.sh auto <tree> node --test S/run-attribution-open.test.cjs at d7ffe547 (run-peers.cjs:73 the walk stops at the tail)"
+    caught: yes
+tree: cfa1360e38424959c21bb92d345003c91ea8fc6c29c43ad6488a180ee37ea29b
+commit: d7ffe547889a0f55791be6faa6625b99d1b3d923
+reviewer: a4bfe35291f6ceafc

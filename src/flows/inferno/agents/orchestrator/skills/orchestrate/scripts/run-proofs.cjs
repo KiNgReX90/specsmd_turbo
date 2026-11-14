@@ -5,6 +5,7 @@ const path = require('path');
 const { createHash } = require('crypto');
 const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
+const { readRun } = require('./run-check-refused.cjs');
 
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -20,18 +21,19 @@ function gitFields(tree, args) {
  * of literal paths instead, which is how an item review binds exactly the files it read: a
  * glob without a slash would match the same name in every folder. A file `options.skip`
  * returns true for is left out, which is how the intent review leaves out a kb the base synced.
+ * With `options.ref` it hashes that commit as committed, with no working-tree file on top.
  */
 function scopeHash(tree, scope, options = {}) {
   const inScope = (file) => (options.exact ? scope.includes(file) : lib.matchesAny(file, scope));
   const included = (file) => file !== lib.SPECS_DIR && !file.startsWith(`${lib.SPECS_DIR}/`) &&
     (!scope || inScope(file)) && !(options.skip && options.skip(file));
   const entries = new Map();
-  for (const row of gitFields(tree, ['ls-tree', '-rz', 'HEAD'])) {
+  for (const row of gitFields(tree, ['ls-tree', '-rz', options.ref || 'HEAD'])) {
     const separator = row.indexOf('\t');
     const file = row.slice(separator + 1);
     if (included(file)) entries.set(file, row.slice(0, separator));
   }
-  const dirty = new Set([
+  const dirty = options.ref ? new Set() : new Set([
     ...gitFields(tree, ['diff', '--name-only', '--no-renames', '-z', 'HEAD']),
     ...gitFields(tree, ['ls-files', '--others', '--exclude-standard', '-z']),
   ]);
@@ -151,14 +153,18 @@ function readProof(proof) {
 /**
  * Only a successful command on unchanged inputs can mint a proof. `force` reruns a command
  * whose proof still holds, and revokes that proof first so a run that never finishes cannot
- * leave the old success standing.
+ * leave the old success standing. `shell` runs the command as lib.runShell does, which a host
+ * session replaces (run-check-session.cjs); the proof is keyed the same either way. A run that
+ * exits non-zero with the host's `verification.refused` line in what it wrote is `refused`: the
+ * wrapper ran nothing, so it is no verdict and no failure (run-check-refused.cjs).
  */
-function runCommand(tree, config, selected, command, log, force = false) {
+function runCommand(tree, config, selected, command, log, force = false, shell = lib.runShell) {
   const proof = commandProof(tree, config, selected, command);
   const previous = readProof(proof);
   if (previous && !force) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
   fs.rmSync(proof.file, { force: true });
-  const run = lib.runShell(command, tree, log);
+  const { run, line } = readRun(config, shell, command, tree, log);
+  if (line) return { command, result: 'refused', seconds: run.seconds, log: run.log, line };
   const moved = run.code === 0 && commandProof(tree, lib.readConfig(tree, selected), selected, command).file !== proof.file;
   if (run.code !== 0 || moved) {
     if (moved) fs.appendFileSync(log, '\nverification inputs changed while the command ran. Run it again.\n');

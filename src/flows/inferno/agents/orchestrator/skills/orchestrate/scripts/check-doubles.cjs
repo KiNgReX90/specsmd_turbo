@@ -18,6 +18,8 @@ const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
 const gate = require('./run-gate.cjs');
 const { resolveBase } = require('./run-intents.cjs');
+const { sinceCommit } = require('./run-since.cjs');
+const { exitAfter } = require('./run-exit.cjs');
 
 const { RunError } = lib;
 
@@ -104,12 +106,16 @@ const LISTED = 20;
  * the local base, so commits that reached origin and not the local base are the base's, never
  * the branch's. No merge base at all is refused: counting against a tip would credit the
  * branch with everything the base did since.
+ *
+ * On the base branch itself the merge base is HEAD, so the count is held to `since`: the
+ * landing's first commit, which integrate reads from --since or origin/<base>.
  */
-function baseline(tree, base) {
+function baseline(tree, base, since) {
   if (base === lib.currentBranch(tree)) {
+    if (since) return sinceCommit(tree, since);
     throw new RunError(
       `doubles: the base branch resolves to ${base}, the branch being checked, so HEAD would be counted against itself. ` +
-        'Set delivery.base_branch in the config or pass --base <branch>.',
+        'Set delivery.base_branch in the config or pass --base <branch>, or pass --since <the commit before your edit>.',
       'BAD_CONFIG'
     );
   }
@@ -125,8 +131,8 @@ function baseline(tree, base) {
 }
 
 /**
- * Count at HEAD against the merge base. Integrate passes the config it read after the fold;
- * run alone, the check reads it here.
+ * Count at HEAD against the merge base, or against `options.since` on the base branch.
+ * Integrate passes the config it read after the fold; run alone, the check reads it here.
  */
 function checkDoubles(options, config) {
   const tree = gate.treeOf(options);
@@ -137,7 +143,11 @@ function checkDoubles(options, config) {
   }
   const rules = settings(read, label);
   const base = options.base || resolveBase(read, null, tree);
-  const before = matching(tree, baseline(tree, base), rules);
+  const point = baseline(tree, base, options.since);
+  // On the base the count is held to the since commit, so the line names that commit, never the
+  // base it would read as counted against itself.
+  const from = base === lib.currentBranch(tree) ? lib.git(tree, ['rev-parse', '--short', point]) : base;
+  const before = matching(tree, point, rules);
   const now = matching(tree, 'HEAD', rules);
   const payload = { ok: now.length <= before.length, base: before.length, head: now.length };
   if (payload.ok) {
@@ -149,7 +159,7 @@ function checkDoubles(options, config) {
     exit: 2,
     payload,
     out: [
-      `FAIL doubles ${before.length} -> ${now.length} against ${base}: more files match ${rules.pattern}.`,
+      `FAIL doubles ${before.length} -> ${now.length} against ${from}: more files match ${rules.pattern}.`,
       RULE,
       ...payload.added.slice(0, LISTED).map((file) => `  new: ${file}`),
       ...(payload.added.length > LISTED ? [`  and ${payload.added.length - LISTED} more`] : []),
@@ -162,11 +172,11 @@ if (require.main === module) {
   const options = { cwd: process.cwd() };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--json') options.json = true;
-    else if (['--tree', '--config', '--base'].includes(argv[i]) && argv[i + 1]) {
+    else if (['--tree', '--config', '--base', '--since'].includes(argv[i]) && argv[i + 1]) {
       options[argv[i].slice(2)] = argv[i + 1];
       i += 1;
     } else {
-      process.stderr.write('usage: node check-doubles.cjs [--tree <dir>] [--config <file>] [--base <branch>] [--json]\n');
+      process.stderr.write('usage: node check-doubles.cjs [--tree <dir>] [--config <file>] [--base <branch>] [--since <ref>] [--json]\n');
       process.exit(1);
     }
   }
@@ -174,11 +184,11 @@ if (require.main === module) {
   try {
     const result = checkDoubles(options);
     process.stdout.write(options.json ? `${JSON.stringify(result.payload)}\n` : `${lib.capLines(result.out).join('\n')}\n`);
-    process.exit(result.exit);
+    exitAfter(process.stdout, result.exit);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
     process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
-    process.exit(error.exit);
+    exitAfter(process.stderr, error.exit);
   }
 }
 

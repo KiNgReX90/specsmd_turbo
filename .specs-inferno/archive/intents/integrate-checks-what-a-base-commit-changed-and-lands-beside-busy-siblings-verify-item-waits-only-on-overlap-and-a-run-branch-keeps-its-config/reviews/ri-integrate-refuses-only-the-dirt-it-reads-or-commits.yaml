@@ -1,0 +1,29 @@
+item: ri-integrate-refuses-only-the-dirt-it-reads-or-commits
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-dirt.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-review.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-beside.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-e2e-impact.cjs
+findings: []
+mutants:
+  - criterion: 1
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
+    line: 225
+    find: "dirt.reads(read, file)"
+    replace: "!dirt.reads(read, file)"
+    test: "node --test --test-name-pattern=\"integrates beside a sibling\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-beside.test.cjs"
+    caught: yes
+  - criterion: 2
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
+    line: 153
+    find: "scopes[command] || null"
+    replace: "scopes[command] || []"
+    test: "node --test --test-name-pattern=\"refuses a dirty path an unscoped check reads\" src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.test.cjs"
+    caught: yes
+tree: 49b0512c56186d9caa896ac37404c96b19c20260d81d042f76d3c9bfe73b224b
+commit: 6196a5e6f1ab22b661ea999a1f0886f5ef182aaf
+reviewer: a152fc7753e22d304

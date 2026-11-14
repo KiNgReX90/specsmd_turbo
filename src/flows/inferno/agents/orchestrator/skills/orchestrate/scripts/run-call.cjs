@@ -75,12 +75,22 @@ const itemReviewCall = (tree, id, intent = null) => runCall('review', tree, inte
 
 /**
  * Record the item review its reviewer wrote, under that reviewer's agent id, which only the
- * host knows; of `intent` when it is not the caller's.
+ * host knows; of `intent` when it is not the caller's. With `quality` the quality lens wrote
+ * its own file beside it, recorded under its own reviewer's id.
  */
-const itemRecordCall = (tree, id, intent = null) => runCall('review', tree, intent, ['--item', id, '--reviewer', '<agent-id>']);
+const itemRecordCall = (tree, id, intent = null, quality = false) => runCall('review', tree, intent,
+  ['--item', id, '--reviewer', '<agent-id>', ...(quality ? ['--quality-reviewer', '<quality-agent-id>'] : [])]);
+
+/** The check and the proof of one item, or of the batch `ids` names, as verify-item checks it. */
+const verifyItemCall = (tree, ids) => runCall('verify-item', tree, null, ids.length > 1 ? ['--items', ids.join(',')] : [ids[0]]);
 
 /** Land one item: fold, the cheap checks, then its completion; of `intent` when it is not the caller's. */
 const integrateCall = (tree, id, intent = null) => runCall('integrate', tree, intent, ['--item', id]);
+
+/** Run integrate again as it was called: the one item, the chain or no item, with the --since it named. */
+const integrateAgainCall = (tree, ids, since = null) => runCall('integrate', tree, null, [
+  ...(ids.length > 1 ? ['--items', ids.join(',')] : ids.map((id) => `--item ${id}`)), ...(since ? ['--since', since] : []),
+]);
 
 /** The cold review of the whole intent. */
 const intentReviewCall = (tree) => runCall('review', tree, null);
@@ -90,10 +100,34 @@ const intentRecordCall = (tree) => runCall('review', tree, null, ['--reviewer', 
 
 /**
  * The scan before the intent review, or its collect. Given the plan's intent it is the
- * plan-time scan, which asks the wiring question alone.
+ * plan-time cross-check.
  */
 function scanCall(tree, plan = null, collect = false) {
-  return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), ...(plan ? ['--only', 'wiring', '--plan', plan] : [])]);
+  return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), ...(plan ? ['--plan', plan] : [])]);
+}
+
+/** The slice check of one item just before its dispatch, or its collect. */
+function itemScanCall(tree, id, collect = false) {
+  return runCall('scan', tree, null, [...(collect ? ['--collect'] : []), '--item', id]);
+}
+
+/**
+ * The oracle ask of a cross-check finding still open after both fix rounds: complexity high
+ * earlier by the rubric, the impact the asker grades. The plan's intent is the positional one,
+ * so the call carries no other.
+ */
+function planOracleCall(tree, plan) {
+  const complexity = '"high earlier: <GAP id> stayed open through both fix rounds of the cross-check"';
+  return `${RUNNER} dispatch-log ${plan} --tier oracle --impact "<grade>: <line>" --complexity ${complexity} --tree ${tree}` +
+    flag('config', called.config);
+}
+
+/**
+ * One dispatch-log for the items `ids` names, so one builder builds them as a chain; of the
+ * intent the site names, the positional one, so the call carries no other.
+ */
+function chainDispatchCall(tree, intent, ids) {
+  return `${RUNNER} dispatch-log ${intent} --items ${ids.join(',')} --tier <tier> --agent <agent> --tree ${tree}${flag('config', called.config)}`;
 }
 
 /** The real-app check over a review's range, read from the item's own paths when one is named. */
@@ -104,6 +138,13 @@ const teardownCall = (tree) => runCall('teardown', tree, null);
 
 /** Accept a lane's instrument red against a harness fix, by the runner's own path. */
 const laneAcceptCall = (lane, tree) => nodeCall(lane, tree, null, ['--accept', '--harness-fix', '<sha>']);
+
+/** One word for a POSIX shell, whatever quotes or dollar signs a test name carries. */
+const shellWord = (text) => `'${text.replace(/'/g, "'\\''")}'`;
+
+/** Accept a lane's product red its verdicts proved intermittent, naming each red test, by the runner's own path. */
+const laneIntermittentCall = (lane, tree, tests) => nodeCall(lane, tree, null,
+  ['--accept-intermittent', ...tests.flatMap((test) => ['--test', shellWord(test)]), '--reason', '"<why>"', '--by', '<who>']);
 
 /**
  * A merge slot call for a holder by the runner's own path, for a driver that holds its own
@@ -120,7 +161,12 @@ const blockIntentCall = (intent) => writerCall('block-intent', intent, ['--reaso
 /** Give back a claim nothing was built on. */
 const unclaimIntentCall = (intent) => writerCall('unclaim-intent', intent);
 
+/** Defer an item out of its intent, with a new edge to name for each dependent it leaves. */
+const deferItemCall = (intent, item, dependents = []) => writerCall('defer-item', intent,
+  ['--item', item, '--reason', '"<why it waits for a later plan>"', ...dependents.map((id) => `--rewire ${id}=<new-dep>`)]);
+
 module.exports = {
-  RUNNER, RUNNER_PATH, caller, blockIntentCall, closeIntentCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateCall, intentRecordCall,
-  intentReviewCall, itemRecordCall, itemReviewCall, laneAcceptCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
+  RUNNER, RUNNER_PATH, caller, blockIntentCall, chainDispatchCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateAgainCall, integrateCall, intentRecordCall,
+  intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, laneIntermittentCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
+  verifyItemCall,
 };

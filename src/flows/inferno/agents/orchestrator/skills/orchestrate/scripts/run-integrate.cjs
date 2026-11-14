@@ -27,7 +27,13 @@ const { resolveBase } = require('./run-intents.cjs');
 const { checkDoubles } = require('./check-doubles.cjs');
 const cases = require('./run-cases.cjs');
 const { owedReviews } = require('./run-review.cjs');
-const { afterRecovery } = require('./run-mutate.cjs');
+const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
+const { landingSince, sinceCommit } = require('./run-since.cjs');
+const dirt = require('./run-dirt.cjs');
+const { checkRounds, closeLeft } = require('./run-check-session.cjs');
+const { noVerdictLine } = require('./run-check-refused.cjs');
+const { NO_VERDICT } = require('./run-exit.cjs');
+const { integrateAgainCall } = require('./run-call.cjs');
 
 const { RunError } = lib;
 
@@ -48,16 +54,18 @@ function intentOf(ledger, itemId, options) {
   return intent;
 }
 
-/** Commit the ledger the completion just wrote, so the next step meets a clean tree. */
-function commitLedger(tree, intentIds, message) {
-  const paths = [
-    path.join(lib.SPECS_DIR, 'state.yaml'),
-    ...intentIds.map((id) => path.join(lib.SPECS_DIR, 'intents', id)),
-  ].filter((rel) => fs.existsSync(path.join(tree, rel)));
+/**
+ * Commit the files the completion wrote: the ledger and each work-item file it rewrote. The
+ * list is exact and goes through a pathspec, so a review another reviewer writes while
+ * integrate runs, or a file staged beside it, stays out of the commit.
+ */
+function commitLedger(tree, written, message) {
+  const paths = [path.join(lib.SPECS_DIR, 'state.yaml'), ...written]
+    .filter((rel) => fs.existsSync(path.join(tree, rel)));
   if (paths.length === 0) return [];
   lib.git(tree, ['add', '--', ...paths]);
-  if (lib.gitLines(tree, ['diff', '--cached', '--name-only'], { tolerate: true }).length === 0) return [];
-  lib.git(tree, ['commit', '-q', '-m', message]);
+  if (lib.gitLines(tree, ['diff', '--cached', '--name-only', '--', ...paths], { tolerate: true }).length === 0) return [];
+  lib.git(tree, ['commit', '-q', '-m', message, '--', ...paths]);
   return [`ledger commit ${lib.git(tree, ['rev-parse', '--short', 'HEAD'])}`];
 }
 
@@ -71,15 +79,17 @@ function completeItems(tree, ids, options) {
   const ledger = lib.readLedger(tree);
   const proof = lib.git(tree, ['rev-parse', '--short', 'HEAD']);
   const intentIds = new Set();
+  const written = [];
   const out = [];
   for (const id of ids) {
     const intent = intentOf(ledger, id, options);
     intentIds.add(intent.id);
     const result = writer.completeItem({ file: ledger.file, intent: intent.id, item: id, proof, tree });
+    if (result.markdown) written.push(result.markdown);
     out.push(result.changed ? `completed ${id} at ${proof}` : `${id} ${result.note}`);
   }
   const label = ids.length === 1 ? ids[0] : ids.join(', ');
-  out.push(...commitLedger(tree, [...intentIds], `specsmd(${[...intentIds].join(', ')}): complete ${label} integrated at ${proof}`));
+  out.push(...commitLedger(tree, written, `specsmd(${[...intentIds].join(', ')}): complete ${label} integrated at ${proof}`));
   return { proof, out };
 }
 
@@ -110,19 +120,77 @@ function e2eSelection(tree, config, ids, options, anchor) {
     }
   }
   const since = impact.sinceRef(tree, ledger, { items: ids, anchor });
-  const changed = since ? impact.changedSince(tree, since) : [];
+  // Integrate selects from the paths the intent committed inside the selection's own range; the
+  // work tree never enters the selection. A committed path a sibling has dirty again selects the
+  // step, and the step then refuses that file as what it reads.
+  const changed = since ? impact.committedSince(tree, since) : [];
   return impact.select({ changed, manifests, config });
+}
+
+/**
+ * What a landing owns or commits: every file of its items' `ownership.editable`, and, when it
+ * lands an item, the ledger and each item's work-item file, which the completion rewrites and
+ * the ledger commit stages. An id the live ledger lacks owns nothing here; integrate refuses it
+ * once a dead mutant is back.
+ */
+function landingFiles(tree, ids, options) {
+  if (ids.length === 0) return () => false;
+  const ledger = ledgerOf(tree);
+  const written = new Set([path.posix.join(lib.SPECS_DIR, 'state.yaml')]);
+  const editable = [];
+  for (const id of ids) {
+    const intent = ledger.intents.find((entry) =>
+      (!options.intent || entry.id === options.intent) && entry.items.some((item) => item.id === id));
+    if (!intent) continue;
+    written.add(path.posix.join(lib.SPECS_DIR, 'intents', intent.id, 'work-items', `${id}.md`));
+    const manifest = lib.readItemSpec(tree, intent.id, id).manifest || {};
+    editable.push(...((manifest.ownership && manifest.ownership.editable) || []));
+  }
+  return (file) => written.has(file) || lib.ownedBy(file, editable, tree);
+}
+
+/**
+ * What the integrate checks of `config` read: those `runs` keeps, the browser step whole when it
+ * runs. Before the fold nothing says which run, so every configured one counts.
+ */
+function checksRead(config, runs = () => true, e2e = Boolean(impact.section(config))) {
+  const verification = config.verification || {};
+  const scopes = verification.finalize_scopes || {};
+  const commands = (verification.integrate || []).filter(runs);
+  return dirt.scopeOf([...commands.map((command) => scopes[command] || null), ...(e2e ? [null] : [])]);
 }
 
 /**
  * Integrate runs the selected checks and retains each successful command's proof. A leftover
  * of a killed mutate is put back first, and every way out says so, a refusal included.
+ *
+ * Sibling builders and reviewers work in the same tree, so integrate refuses only the
+ * uncommitted files it would read or commit: here what the landing owns or commits, after the
+ * fold what a check it runs reads. One sibling file anywhere used to hold every landing
+ * (2026-11-09). A live mutant holds it only in such a file, or inside any configured check's
+ * scope, since the running set is known only after the fold.
  */
 function integrate(options) {
   const tree = gate.treeOf(options);
-  const restored = gate.refuseDirty(tree);
+  // A host session a killed integrate or gate left open is closed first (run-check-session.cjs).
+  const left = closeLeft(tree);
   try {
-    const result = checkAndLand(tree, options);
+    const result = integrateTree(tree, options);
+    return { ...result, out: [...left, ...result.out] };
+  } catch (error) {
+    if (error instanceof RunError) error.message = afterRecovery(left, error.message);
+    throw error;
+  }
+}
+
+function integrateTree(tree, options) {
+  const { initial, landing } = readLanding(tree, options);
+  const configured = checksRead(initial);
+  const restored = recoverInterrupted(tree, { keepLive: (file) => !landing(file) && !dirt.reads(configured, file) });
+  try {
+    dirt.refuseDirt(dirt.dirtyFiles(tree).filter(landing), 'refusing to integrate over uncommitted files this landing owns or commits',
+      'Commit or discard them, then run integrate again.');
+    const result = checkAndLand(tree, options, initial);
     return { ...result, out: [...restored, ...result.out] };
   } catch (error) {
     if (error instanceof RunError) error.message = afterRecovery(restored, error.message);
@@ -130,8 +198,22 @@ function integrate(options) {
   }
 }
 
-function checkAndLand(tree, options) {
-  const initial = lib.readConfig(tree, options.config);
+/**
+ * The config and what the landing owns or commits, read before integrate knows what to keep a
+ * live mutant for. A refusal here still puts a dead mutant back first and says so; a live one is
+ * left to its run, since this call reads nothing more.
+ */
+function readLanding(tree, options) {
+  try {
+    const initial = lib.readConfig(tree, options.config);
+    return { initial, landing: landingFiles(tree, itemIds(options), options) };
+  } catch (error) {
+    if (error instanceof RunError) error.message = afterRecovery(recoverInterrupted(tree, { keepLive: () => true }), error.message);
+    throw error;
+  }
+}
+
+function checkAndLand(tree, options, initial) {
   const base = options.base || resolveBase(initial, null, tree);
   const ids = itemIds(options);
   // Every id first, before the fold and before any write: an item lands only over a clean
@@ -140,13 +222,20 @@ function checkAndLand(tree, options) {
   if (owed.length > 0) {
     throw new RunError(`item review owed, nothing integrated: ${owed.join('; ')}`, 'ITEM_REVIEW_OWED', 3);
   }
+  // A --since is read before the fold moves HEAD, so `HEAD~1` names the commit before the edit
+  // and a typo is refused before anything merges.
+  const named = options.since ? sinceCommit(tree, options.since) : null;
   // Preserve the branch position before folding the base. Only the browser selection reads it,
   // so a project that configures none reads no git history for it.
   const anchor = impact.section(initial) ? impact.anchorFor(tree, base) : null;
   const folded = gate.foldBase(tree, base);
+  // origin/<base> is read after the fold, which merged it: on the base branch the diff from it
+  // is then exactly the unpushed commits. Off the base the merge base stays the anchor.
+  const landing = landingSince(tree, base, named);
+  const since = landing ? landing.ref : gate.mergeBase(tree, base);
+  const lead = [...folded, ...(landing ? landing.out : [])];
   const config = lib.readConfig(tree, options.config);
   const commands = (config.verification && config.verification.integrate) || [];
-  const started = proofs.scopeHash(tree);
   const definition = JSON.stringify(config.verification);
   const branch = lib.currentBranch(tree);
   const dir = path.join(lib.cacheDir(tree), branch, `integrate-${lib.stamp()}`);
@@ -154,59 +243,80 @@ function checkAndLand(tree, options) {
   // A command with a `finalize_scopes` entry runs here only when the branch touched one of its
   // globs. Without it the cargo tree was left out of this list
   // for cost, and an item merged eight broken Rust cases through a green integrate that the
-  // next builder found (2026-09-10).
+  // next builder found (2026-09-10). On the base branch the merge base is HEAD, so a direct
+  // build skipped every scoped check after a commit inside its scope (2026-11-09); with no diff
+  // to read there, `changed` is null and every scoped command runs. Only committed paths count,
+  // so a sibling's uncommitted file never selects a check.
   const scopes = (config.verification && config.verification.finalize_scopes) || {};
-  const changed = gate.changedPaths(tree, gate.mergeBase(tree, base));
+  const changed = landing && landing.all ? null : lib.gitLines(tree, ['diff', '--name-only', '--no-renames', since, 'HEAD'], { tolerate: true });
+  const runs = (command) => !scopes[command] || !changed || changed.some((file) => lib.matchesAny(file, scopes[command]));
+  const selection = e2eSelection(tree, config, ids, options, anchor);
+  // A check reads the tree it runs in, a sibling's uncommitted bytes included, and a remote run
+  // mirrors them, so such a file is refused before any check runs. The same scopes are what the
+  // landing must not move under: a sibling writing outside them leaves the landing standing.
+  const read = checksRead(config, runs, Boolean(selection && selection.command));
+  dirt.refuseDirt(dirt.dirtyFiles(tree).filter((file) => dirt.reads(read, file)),
+    'refusing to integrate over uncommitted files a check this landing runs reads',
+    'Commit or discard them, or wait until the work that writes them is committed, then run integrate again.');
+  const started = proofs.scopeHash(tree, read);
 
   const red = (out) => ({ exit: 2, payload: { ok: false, tree, branch, items: ids, folded: folded.length > 0, results }, out });
 
   // The double ratchet runs first: a branch that fakes more of the app is refused before any
-  // command spends time proving it.
-  const doubles = config.doubles === undefined ? null : checkDoubles({ ...options, tree, base }, config);
-  if (doubles && doubles.exit !== 0) return red([...folded, ...doubles.out]);
+  // command spends time proving it. On the base with no landing there is nothing to count, so
+  // it skips and says why, never a PASS that held HEAD to itself.
+  const doubles = config.doubles === undefined ? null
+    : landing && landing.all ? { exit: 0, out: [`SKIP doubles (on ${base} with no unpushed commit and no --since: no landing to count)`] }
+      : checkDoubles({ ...options, tree, base, since: landing ? landing.ref : undefined }, config);
+  if (doubles && doubles.exit !== 0) return red([...lead, ...doubles.out]);
   // The tester cases the branch changes the truth of are edited or answered before any command runs.
-  const stale = cases.refusal(tree, config, `${gate.mergeBase(tree, base)}..HEAD`);
-  if (stale) return red([...folded, ...stale.out]);
+  const stale = cases.refusal(tree, config, `${since || gate.mergeBase(tree, base)}..HEAD`);
+  if (stale) return red([...lead, ...stale.out]);
 
   // Every command runs, red or not, and one red result names every failure. Stopping at the
   // first failure cost one orchestrator round trip and one builder correction per failing
   // command: an item that broke check, definitions and cargo paid three integrate runs and
   // three followups to learn what one run could have said.
-  for (const [index, command] of commands.entries()) {
-    const scope = scopes[command];
-    if (scope && !changed.some((file) => lib.matchesAny(file, scope))) {
-      results.push({ command, result: 'skip' });
-      continue;
-    }
-    results.push(proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`)));
-  }
+  // With verification.session the commands it reaches run in one session of the host's wrapper,
+  // closed before anything is reported; the browser step runs only after every command passed.
+  // A check the wrapper ran nothing for runs once more in a fresh session (run-check-refused.cjs).
+  const checked = checkRounds(tree, config, dir, (check) => {
+    const ran = commands.map((command, index) => (runs(command)
+      ? check(index, (shell) => proofs.runCommand(tree, config, options.config, command, path.join(dir, `${index}.log`), false, shell))
+      : { command, result: 'skip' }));
+    if (ran.some((entry) => entry.result === 'fail' || entry.result === 'refused') || !(selection && selection.command)) return { ran, e2e: null };
+    return { ran, e2e: check('e2e', (shell) => proofs.runCommand(tree, config, options.config, selection.command, path.join(dir, 'e2e.log'), false, shell)) };
+  });
+  results.push(...checked.value.ran);
   const failures = results.filter((entry) => entry.result === 'fail');
   if (failures.length > 0) {
     return red([
-      ...folded,
+      ...lead,
       ...gate.describe(results),
+      ...checked.notes,
       `${failures.length} of ${commands.length} integrate command(s) failed; send every failure above to the builder in one correction.`,
     ]);
   }
+  const unrun = noVerdict(results, checked, lead, ids, options, { tree, branch, folded, total: commands.length });
+  if (unrun) return unrun;
 
-  const out = [...folded, ...(doubles ? doubles.out : [])];
+  const out = [...lead, ...(doubles ? doubles.out : [])];
   if (commands.length === 0) {
     out.push(`no verification.integrate list in ${lib.SPECS_DIR}/config.yaml: folded ${base} only`);
   } else {
     out.push(...gate.describe(results));
   }
 
-  const selection = e2eSelection(tree, config, ids, options, anchor);
-  if (selection && selection.command) {
-    const result = proofs.runCommand(tree, config, options.config, selection.command, path.join(dir, 'e2e.log'));
-    results.push(result);
+  if (checked.value.e2e) {
+    results.push(checked.value.e2e);
     out.push(...gate.describe(results.slice(-1)));
-    if (result.result === 'fail') return red(out);
+    if (checked.value.e2e.result === 'fail') return red([...out, ...checked.notes]);
   } else if (selection) {
     out.push(`SKIP e2e (${selection.reason})`);
   }
+  out.push(...checked.notes);
 
-  if (proofs.scopeHash(tree) !== started ||
+  if (proofs.scopeHash(tree, read) !== started ||
       JSON.stringify(lib.readConfig(tree, options.config).verification) !== definition) {
     return red([...out, 'the code changed while integrate ran. Re-run integrate.']);
   }
@@ -219,6 +329,22 @@ function checkAndLand(tree, options) {
     exit: 0,
     payload: { ok: true, tree, branch, items: ids, proof: completion.proof, folded: folded.length > 0, results },
     out: [...out, ...completion.out],
+  };
+}
+
+/**
+ * The end of an integrate whose checks the host's wrapper ran nothing for twice: no FAIL, no
+ * builder, no proof of theirs, its own exit and the call that runs the step again. Null when every
+ * check reached a verdict.
+ */
+function noVerdict(results, checked, lead, ids, options, { tree, branch, folded, total }) {
+  if (checked.refused.length === 0) return null;
+  const all = checked.value.e2e ? [...results, checked.value.e2e] : results;
+  return {
+    exit: NO_VERDICT,
+    payload: { ok: false, tree, branch, items: ids, folded: folded.length > 0, results: all, no_verdict: checked.refused.map((entry) => entry.command) },
+    out: [...lead, ...gate.describe(all), ...checked.notes,
+      noVerdictLine('integrate', checked.refused.length, total + (checked.value.e2e ? 1 : 0), integrateAgainCall(tree, ids, options.since))],
   };
 }
 

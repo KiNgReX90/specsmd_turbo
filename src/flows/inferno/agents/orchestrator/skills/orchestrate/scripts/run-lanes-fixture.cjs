@@ -2,11 +2,13 @@
 
 /**
  * Test fixtures for the smoke and Windows lanes: a throwaway host repo on an intent branch whose
- * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | redwait | file>`.
+ * lanes are stub commands, `node lane.cjs <name> <exit code | wait | movewait | redwait | file | verdicts>`.
  * `wait` holds until the release file exists, `movewait` then writes an in-scope file, `redwait`
- * first prints a product red class line and then holds like `wait`, and `file` exits
- * with the code written to the code file outside the tree. Every lane run appends its name and
- * INFERNO_GATE_CONFIG to the lane-env file outside the tree. A lane's `accept_check` stub,
+ * first prints a product red class line and then holds like `wait`, `file` exits
+ * with the code written to the code file outside the tree, and `verdicts` copies the verdicts-next
+ * file outside the tree to the verdicts file beside it and exits 10. Every lane run appends its name and
+ * INFERNO_GATE_CONFIG to the lane-env file outside the tree. The finalize stub `node proof.cjs hold`
+ * holds until the release file exists, so the gate job stays in its finalize commands. A lane's `accept_check` stub,
  * `node check.cjs <exit>`, writes its INFERNO_* environment to the check-env file outside the
  * tree, prints its verdict as its last line and exits with that code.
  */
@@ -20,6 +22,7 @@ const RUN = path.join(__dirname, 'run.cjs');
 const { tempDir } = require('./test-temp.cjs');
 const { writeFile } = require('./test-write.cjs');
 const { reviewBefore } = require('./review-fixture.cjs');
+const jobs = require('./run-jobs.cjs');
 
 const BRANCH = 'inferno-intent/demo-00000000T000000Z';
 const DEFAULT = '.specs-inferno/config.yaml';
@@ -51,10 +54,69 @@ function config(lanes = { smoke: '0' }, finalize = [whole], scope = ['src/**'], 
   return `delivery:\n  base_branch: main\nverification:\n  finalize:\n${finalize.map((c) => `    - ${c}\n`).join('')}${blocks}`;
 }
 
+/** Every job file under a fixture's cache, whatever branch dir it sits in. */
+function jobFiles(cache) {
+  if (!fs.existsSync(cache)) return [];
+  return fs.readdirSync(cache, { recursive: true, encoding: 'utf8' })
+    .filter((rel) => rel.endsWith('-job.json'))
+    .map((rel) => path.join(cache, rel));
+}
+
+/** Has every process of the group ended, or is it a zombie no signal reaches. */
+function groupGone(pid) {
+  try {
+    process.kill(-pid, 0);
+    return false;
+  } catch (error) {
+    return error.code === 'ESRCH';
+  }
+}
+
+/**
+ * A job run.cjs detached in this fixture's tree: it leads its own process group and runs in the
+ * tree. A job file a test wrote by hand for a process of its own names neither, and is left alone.
+ */
+function detachedHere(job, tree) {
+  if (!jobs.alive(job)) return false;
+  try {
+    const stat = fs.readFileSync(`/proc/${job.pid}/stat`, 'utf8');
+    const group = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
+    return group === job.pid && fs.readlinkSync(`/proc/${job.pid}/cwd`) === fs.realpathSync(tree);
+  } catch (error) {
+    return false;
+  }
+}
+
+/**
+ * Stop every gate and lane job a test detached in this fixture, by the pid its job file records,
+ * and wait until its whole process group is gone. A job outlives the run.cjs call that detached
+ * it: the gate job folds the base and runs its finalize commands in the tree, which append to
+ * `.runs`, and a lane job reads the tree with git once its command ends. A cleanup that removes
+ * the dir while one still runs fails with ENOTEMPTY. The pass repeats until no job is alive.
+ */
+function stopJobs(cache, tree) {
+  for (let pass = 0; pass < 10; pass += 1) {
+    const running = jobFiles(cache).map(jobs.readJson).filter((job) => detachedHere(job, tree));
+    if (running.length === 0) return;
+    for (const job of running) {
+      try {
+        // The lane command and its children share the job's group, so they die with it.
+        process.kill(-job.pid, 'SIGKILL');
+      } catch (error) {
+        if (error.code !== 'ESRCH') throw error;
+      }
+    }
+    for (const job of running) {
+      for (let i = 0; i < 100 && !groupGone(job.pid); i += 1) jobs.sleepSync(50);
+    }
+  }
+}
+
 function fixture(t, source = config()) {
   const dir = tempDir('inferno-lanes-');
   t.after(() => {
     writeFile(path.join(dir, 'release'), '');
+    stopJobs(path.join(dir, 'cache'), path.join(dir, 'app'));
     fs.rmSync(dir, { recursive: true, force: true });
   });
   const tree = path.join(dir, 'app');
@@ -71,12 +133,17 @@ function fixture(t, source = config()) {
   write(tree, 'proof.cjs', `const fs = require('node:fs');
 fs.appendFileSync('.runs', process.argv[2] + '\\n');
 if (process.argv[2] === 'red') process.exit(1);
+while (process.argv[2] === 'hold' && !fs.existsSync('../release')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
 `);
   write(tree, 'lane.cjs', `const fs = require('node:fs');
 const [name, code, release] = process.argv.slice(2);
 fs.appendFileSync('.lane-runs', name + '\\n');
 fs.appendFileSync('../lane-env', name + ' ' + (process.env.INFERNO_GATE_CONFIG || '') + '\\n');
 if (code === 'redwait') console.log('PRODUCT RED demo: red on the branch');
+if (code === 'verdicts') {
+  fs.copyFileSync('../verdicts-next.json', '../verdicts.json');
+  process.exit(10);
+}
 if (code === 'wait' || code === 'movewait' || code === 'redwait') {
   while (!fs.existsSync(release) && fs.existsSync('lane.cjs')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
   if (code === 'movewait') fs.writeFileSync('src/moved.txt', 'moved\\n');
@@ -97,8 +164,18 @@ process.exit(code);
   git(tree, 'checkout', '-qb', BRANCH);
   return {
     tree, release, code, cache: path.join(dir, 'cache'), checkEnv: path.join(dir, 'check-env'), laneEnv: path.join(dir, 'lane-env'),
+    next: path.join(dir, 'verdicts-next.json'), verdicts: path.join(dir, 'verdicts.json'),
   };
 }
+
+/** The verdicts the `verdicts` stub writes on its next run: each red test as `[name, base, again]`. */
+function nextVerdicts(f, red) {
+  writeFile(f.next, `${JSON.stringify({ red: red.map(([name, base, again]) => ({ name, base, again })) })}\n`);
+}
+
+/** A config whose smoke lane runs `token` and names the verdicts file the `verdicts` stub writes. */
+const withVerdicts = (token = 'verdicts', lanes = {}) =>
+  config({ smoke: token, ...lanes }, [whole], ['src/**'], { smoke: { verdicts: '../verdicts.json' } });
 
 function run(f, ...args) {
   reviewBefore(args, f.tree);
@@ -129,14 +206,17 @@ function gated(f, ...extra) {
   return run(f, 'gate', '--wait', '--minutes', '0.5', ...extra);
 }
 
-/** A harness fix committed on main and folded into the branch; returns its sha. */
-function harnessFix(f) {
+/**
+ * A harness fix to `files` (one path or a list) committed on main, and folded into the branch
+ * unless `fold` is false; returns its sha. By default the one file lies outside the lanes' scope.
+ */
+function harnessFix(f, files = 'harness.txt', fold = true) {
   git(f.tree, 'checkout', '-q', 'main');
-  write(f.tree, 'harness.txt', `${Date.now()}\n`);
+  for (const file of [].concat(files)) write(f.tree, file, `${Date.now()}-${Math.random()}\n`);
   commit(f.tree, 'harness fix');
   const fix = git(f.tree, 'rev-parse', 'HEAD');
   git(f.tree, 'checkout', '-q', BRANCH);
-  git(f.tree, 'merge', '-q', '--no-edit', 'main');
+  if (fold) git(f.tree, 'merge', '-q', '--no-edit', 'main');
   return fix;
 }
 
@@ -148,5 +228,6 @@ function cacheOf(f) {
 }
 
 module.exports = {
-  BRANCH, acceptLine, cacheOf, commit, config, fixture, gated, git, harnessFix, laneRuns, passed, red, run, touch, whole, write,
+  BRANCH, acceptLine, cacheOf, commit, config, fixture, gated, git, harnessFix, laneRuns, nextVerdicts, passed, red, run, touch, whole,
+  withVerdicts, write,
 };

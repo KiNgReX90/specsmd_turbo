@@ -70,25 +70,56 @@ test("review-item writes the verdict, the hash, the commit, the tier and the cou
   const result = review(file);
 
   assert.equal(result.changed, true);
-  assert.equal(result.rejections, 1);
+  assert.equal(result.misses, 1);
   assert.match(
     block(file),
     new RegExp(
       `status: pending\\n\\s+review: fix\\n\\s+review_hash: ${HASH}\\n\\s+review_commit: abc1234\\n` +
-        `\\s+review_tier: cheap\\n\\s+review_rejections: 1\\n\\s+review_weight: serious\\n\\s+reviewed_at: ${NOW}`,
+        `\\s+review_tier: cheap\\n\\s+review_misses: 1\\n\\s+review_weight: serious\\n\\s+reviewed_at: ${NOW}`,
     ),
   );
   assert.match(fs.readFileSync(file, "utf8"), /# load-bearing comment/);
 });
 
-test("review-item counts rejections per tier and starts over when the tier changes", () => {
+test("review-item counts misses per item and never starts over when the tier changes", () => {
   const { file } = sandbox();
   review(file);
-  assert.equal(review(file, { tier: "strong" }).rejections, 1);
-  assert.equal(review(file, { tier: "strong" }).rejections, 2);
-  assert.equal(review(file, { tier: "strong", verdict: "clean" }).rejections, 2);
-  assert.equal(review(file, { tier: "escalate", verdict: "clean" }).rejections, 0);
-  assert.equal((block(file).match(/review_rejections:/g) || []).length, 1, "one line per field");
+  assert.equal(review(file, { tier: "strong" }).misses, 2);
+  assert.equal(review(file, { tier: "escalate" }).misses, 3);
+  assert.equal(review(file, { tier: "escalate", verdict: "clean" }).misses, 3);
+  assert.equal(review(file, { tier: "strong", verdict: "clean" }).misses, 3);
+  assert.equal((block(file).match(/review_misses:/g) || []).length, 1, "one line per field");
+});
+
+test("a ledger the released flow wrote counts on from the misses its per-tier count reached", () => {
+  const released = (tier, count) => FIXTURE.replace("        status: pending\n",
+    `        status: pending\n        review: fix\n        review_tier: ${tier}\n        review_rejections: ${count}\n`);
+  // a-one is low: it reached strong after one miss, escalate after three.
+  assert.equal(review(sandbox(released("cheap", 1)).file, { tier: "strong" }).misses, 2);
+  assert.equal(review(sandbox(released("strong", 1)).file, { tier: "strong" }).misses, 3);
+  const { file } = sandbox(released("escalate", 1));
+  assert.equal(review(file, { tier: "escalate", verdict: "clean" }).misses, 4);
+  assert.doesNotMatch(block(file), /review_rejections/, "the old count gives way to the one count");
+  assert.match(fs.readFileSync(file, "utf8"), /# load-bearing comment/);
+});
+
+test("settled lands only on a minor-only fix review, and keeps its count and weight", () => {
+  const { file } = sandbox();
+  const settle = () => review(file, { verdict: "settled", tier: "strong" });
+  assert.throws(settle, (error) => error.code === "NOT_SETTLED" && /last review is none/.test(error.message));
+  review(file);
+  assert.throws(settle, (error) => error.code === "NOT_SETTLED" && /fix weighing serious/.test(error.message));
+  reviewFile(file, findingOf("minor"));
+  review(file, { tier: "strong" });
+  // The ledger says minor and the review file on record must still say so.
+  reviewFile(file, findingOf("major"));
+  assert.throws(settle, (error) => error.code === "NOT_SETTLED" && /weighs serious/.test(error.message));
+  reviewFile(file, findingOf("minor"));
+  const settled = settle();
+  assert.deepEqual([settled.verdict, settled.misses, settled.weight], ["settled", 1, "minor"]);
+  assert.match(block(file), /review: settled\n[\s\S]*review_misses: 1\n\s+review_weight: minor\n/);
+  assert.throws(settle, (error) => error.code === "NOT_SETTLED", "a settled item settles once");
+  assert.equal(completeItem({ file, intent: "alpha", item: "a-one", proof: "abc1234", now: NOW }).changed, true, "complete-item takes settled");
 });
 
 test("a minor-only fix review keeps the count, and a repeat finding weighs repeat whatever it counts", () => {
@@ -96,12 +127,12 @@ test("a minor-only fix review keeps the count, and a repeat finding weighs repea
   review(file, { tier: "strong" });
   reviewFile(file, findingOf("minor"));
   const minor = review(file, { tier: "strong" });
-  assert.equal(minor.rejections, 1);
+  assert.equal(minor.misses, 1);
   assert.equal(minor.weight, "minor");
   reviewFile(file, findingOf("minor", "    repeat: true\n"));
-  assert.deepEqual([review(file, { tier: "strong" }).rejections, block(file).match(/review_weight: (\w+)/)[1]], [1, "repeat"]);
+  assert.deepEqual([review(file, { tier: "strong" }).misses, block(file).match(/review_weight: (\w+)/)[1]], [1, "repeat"]);
   reviewFile(file, findingOf("blocker", "    repeat: true\n"));
-  assert.equal(review(file, { tier: "strong" }).rejections, 2);
+  assert.equal(review(file, { tier: "strong" }).misses, 2);
   assert.equal(review(file, { tier: "strong", verdict: "clean" }).weight, "none");
 });
 
@@ -117,9 +148,17 @@ test("review-item weighs a fix only by its review file, and refuses one it canno
   assert.doesNotMatch(fs.readFileSync(file, "utf8"), /review:/);
 });
 
+test("review-item weighs a fix review that lists a file no longer in the tree, which only makes it stale", () => {
+  const { file } = sandbox();
+  reviewFile(file, findingOf("major").replace("files: [src/a.ts]", "files: [src/a.ts, src/old/legacy.ts]"));
+  const result = review(file);
+  assert.equal(result.weight, "serious");
+  assert.match(block(file), /review: fix/);
+});
+
 test("review-item refuses a verdict, a hash, a tier or a commit it cannot use", () => {
   const { file } = sandbox();
-  assert.throws(() => review(file, { verdict: "maybe" }), /BAD_VERDICT|clean or fix/);
+  assert.throws(() => review(file, { verdict: "maybe" }), /clean, fix or settled, not maybe/);
   assert.throws(() => review(file, { files_hash: "abc" }), /64/);
   assert.throws(() => review(file, { tier: "oracle" }), /cheap, strong or escalate/);
   assert.throws(() => review(file, { commit: "" }), /commit/);

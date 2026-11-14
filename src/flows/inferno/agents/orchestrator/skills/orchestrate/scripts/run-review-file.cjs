@@ -13,11 +13,13 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { SAME_ITEM, deltaProblem } = require('./run-review-delta.cjs');
+const { NO_SAYS, saysProblem } = require('./run-criterion-says.cjs');
 
 const { RunError } = lib;
 
-const ITEM_KEYS = ['item', 'verdict', 'files', 'findings', 'mutants'];
-/** What run.cjs adds when it records a review. A reviewer that writes them is refused. */
+const ITEM_KEYS = ['item', 'verdict', 'files', 'findings', 'mutants', 'pins'];
+/** What run.cjs adds when it records a review. A reviewer that writes them is refused, save the runner's own (runnerKeys). */
 const RECORDED_KEYS = ['tree', 'commit', 'reviewer'];
 /**
  * A reviewer's agent id as the host returns it: the id on Claude, the task path such as
@@ -29,30 +31,103 @@ const FINDING_KEYS = ['criterion', 'file', 'line', 'evidence', 'fix', 'severity'
 const SEVERITIES = ['blocker', 'major', 'minor'];
 const SEVERITY_FIX = 'blocker when the change breaks a criterion or other behaviour, major when a criterion is unproven ' +
   'or a test proves nothing, minor for any other defect';
-const MUTANT_KEYS = ['criterion', 'test', 'caught'];
+/**
+ * A mutant as a reviewer proposes it: the criterion it breaks, a line of a file, the text on that
+ * line and its broken version, and the test that should notice. The runner adds `caught` (yes, no,
+ * or none when the run read no verdict, with `why`) when it runs it; an entry without `caught`
+ * never ran and is owed to the intent review. A file the released flow recorded holds
+ * `{criterion, test, caught}`, a mutant its reviewer ran itself, and still reads.
+ */
+const MUTANT_KEYS = ['criterion', 'file', 'line', 'find', 'replace', 'test'];
+const TARGET_KEYS = ['file', 'line', 'find', 'replace'];
+const RUNNER_KEYS = ['caught', 'why', 'was'];
+const CAUGHT = ['yes', 'no', 'none'];
+
+const PROPOSE = `propose {${MUTANT_KEYS.join(', ')}}; the runner runs it and writes caught`;
+/**
+ * A pin as a reviewer writes it: the criterion its test holds by pinning reader-facing copy
+ * verbatim, the product file the copy stands in, that test file, and the text both hold. The
+ * runner checks it when it records the file (run-review-pins.cjs), and a checked pin counts where
+ * a caught mutant does. The text holds at least `PIN_WORDS` words that hold a letter, so a pin is
+ * copy and never a count, a computed value or a code token, which keep their mutant.
+ */
+const PIN_KEYS = ['criterion', 'file', 'test', 'text'];
+const PIN_WORDS = 4;
+/**
+ * A first item review's mutants and pins also repeat, under `says`, the opening words of the
+ * criterion they name (run-criterion-says.cjs). The key is optional in every other file, so a review
+ * recorded before it existed still reads, and the runner keeps it where it is written.
+ */
+const SAID = (keys) => [keys[0], 'says', ...keys.slice(1)];
+const ITEM_MUTANT_KEYS = SAID(MUTANT_KEYS);
+const ITEM_PIN_KEYS = SAID(PIN_KEYS);
+/** An entry with its `says` placed after its criterion, or left out when it has none. */
+const withSays = (entry, says) => {
+  if (says === undefined) return entry;
+  const { criterion, ...rest } = entry;
+  return { criterion, says, ...rest };
+};
 
 function reviewPath(intentId, itemId) {
   return path.join(lib.SPECS_DIR, 'intents', intentId, 'reviews', `${itemId}.yaml`);
 }
 
 /**
- * The agent id a review is recorded under, so the next review of the same item or intent
- * resumes that reviewer. `call` is the record call to run instead.
+ * The agent id a review is recorded under, the reviewer that wrote it. `call` is the record call
+ * to run instead.
  */
 function reviewerId(value, call) {
   if (typeof value === 'string' && AGENT_ID.test(value)) return value;
   throw new RunError(`refusing to record the review without the agent id of the reviewer that wrote it${value ? `, and ${value} is none` : ''}: ` +
-    `run ${call} with <agent-id> replaced by the id the host returned when it spawned the reviewer, or the id it resumed.`, 'NO_REVIEWER', 2);
+    `run ${call} with <agent-id> replaced by the id the host returned when it spawned the reviewer.`, 'NO_REVIEWER', 2);
 }
 
 /** The reviewer a recorded review names, or null for a record written before reviewers were. */
 const recordedReviewer = (doc) => (typeof doc.reviewer === 'string' && AGENT_ID.test(doc.reviewer) ? doc.reviewer : null);
 
+const SEND_BACK = 'send this back to the reviewer that wrote the file';
+
+/** The refusal of a review file. At its record "the same command" is the record, which runs again once its reviewer answered. */
 function bad(rel, problem) {
-  return new RunError(`${rel}: ${problem}. send this back to the reviewer that wrote the file, then run the same command again.`, 'BAD_REVIEW', 2);
+  const error = new RunError(`${rel}: ${problem}. ${SEND_BACK}, then run the same command again.`, 'BAD_REVIEW', 2);
+  error.refused = `${rel}: ${problem}`;
+  return error;
 }
 
+/**
+ * A refusal of a recorded review read outside its record, by the gate or the ship: it goes back to
+ * its reviewer and `call` records it. Any other error keeps its message.
+ */
+const sentBack = (error, call) => (error.refused ? `${error.refused}. ${SEND_BACK}, then run ${call} to record it.` : error.message);
+
 const isMap = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+/**
+ * The keys of `keys` the runner wrote into `rel` when it last recorded it that `doc`, the file as
+ * it stands, still holds with the value the committed file holds. A recorded file sent back to its
+ * reviewer and edited in place keeps them: they are the runner's own, read past and written anew.
+ * Any other value, or such a key in a file never recorded, is the reviewer's, and refused.
+ */
+function runnerKeys(tree, rel, doc, keys) {
+  // The runner writes one-line values only: a list or a map read twice is never the same value.
+  const held = keys.filter((key) => doc[key] !== undefined);
+  if (held.length === 0) return [];
+  const body = lib.git(tree, ['show', `HEAD:${rel.split(path.sep).join('/')}`], { tolerate: true });
+  let committed = null;
+  try {
+    committed = body === null ? null : lib.parseYaml(body);
+  } catch (error) {
+    committed = null;
+  }
+  return isMap(committed) ? held.filter((key) => committed[key] === doc[key]) : [];
+}
+
+/** The text of the pending `rel` without the runner's own keys (runnerKeys), which its record writes anew. */
+function withoutRunnerKeys(tree, rel, keys) {
+  const text = fs.readFileSync(path.join(tree, rel), 'utf8');
+  const own = runnerKeys(tree, rel, readDoc(tree, rel), keys);
+  return own.length === 0 ? text : text.split('\n').filter((line) => !own.some((key) => line.startsWith(`${key}:`))).join('\n');
+}
 
 /** A value as a refusal names it: the text, or the shape that is no text. */
 function reads(value) {
@@ -99,19 +174,31 @@ function relativePath(rel, file, what) {
   return normal;
 }
 
-/** The files a review binds: paths inside the tree, outside the ledger, present on disk. */
-function boundFiles(tree, rel, doc) {
-  const files = listOf(rel, doc, 'files');
-  if (files.length === 0) throw bad(rel, 'files must list every file the review read for this item');
-  for (const file of files) {
+/**
+ * The files a review binds: paths inside the tree and outside the ledger, and for a fresh file,
+ * one being recorded, present on disk. A listed path under the ledger, such as a host config the
+ * item owns and changed, is left out: the proof holds none (inLedger in run-item-proof.cjs), so
+ * the review binds the same set, and a list of ledger paths alone binds nothing and is refused.
+ * A recorded review keeps a path that left the tree since: a file deleted or renamed after its
+ * review is a file that changed, so the review's hash no longer holds and the review reads as
+ * stale (itemReviewCurrent), never as a malformed file.
+ */
+function boundFiles(tree, rel, doc, { recorded = false } = {}) {
+  const listed = listOf(rel, doc, 'files');
+  const empty = () => bad(rel, 'files must list every file the review read for this item');
+  if (listed.length === 0) throw empty();
+  const files = [];
+  for (const file of listed) {
     if (typeof file !== 'string' || file.trim() === '') throw bad(rel, 'files holds paths only');
     const normal = relativePath(rel, file, 'files');
-    if (normal === lib.SPECS_DIR || normal.startsWith(`${lib.SPECS_DIR}/`)) {
-      throw bad(rel, `files lists ${file}; the ledger is never part of the code a review binds`);
+    if (normal === lib.SPECS_DIR || normal.startsWith(`${lib.SPECS_DIR}/`)) continue;
+    if (!recorded && !fs.existsSync(path.join(tree, normal))) {
+      throw bad(rel, `files lists ${file}, which is not in the tree; list only files the tree holds, never one the change deleted`);
     }
-    if (!fs.existsSync(path.join(tree, normal))) throw bad(rel, `files lists ${file}, which is not in the tree`);
+    files.push(normal);
   }
-  return [...new Set(files.map((file) => path.posix.normalize(file)))];
+  if (files.length === 0) throw empty();
+  return [...new Set(files)];
 }
 
 /** A review file as data; a YAML error goes back to the reviewer like any other. */
@@ -130,16 +217,17 @@ function readDoc(tree, rel) {
  */
 function parseItemReview(tree, rel, itemId, { recorded }) {
   const doc = readDoc(tree, rel);
-  if (!isMap(doc)) throw bad(rel, 'an item review is a map of item, verdict, files, findings and mutants');
+  if (!isMap(doc)) throw bad(rel, `an item review is a map of ${ITEM_KEYS.join(', ')}`);
+  const own = recorded ? RECORDED_KEYS : runnerKeys(tree, rel, doc, RECORDED_KEYS);
   for (const key of Object.keys(doc)) {
-    if (ITEM_KEYS.includes(key) || (recorded && RECORDED_KEYS.includes(key))) continue;
+    if (ITEM_KEYS.includes(key) || own.includes(key)) continue;
     if (RECORDED_KEYS.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
-    throw bad(rel, `unknown key ${key}: an item review holds item, verdict, files, findings and mutants only`);
+    throw bad(rel, `unknown key ${key}: an item review holds ${ITEM_KEYS.join(', ')} only`);
   }
   if (doc.item !== itemId) throw bad(rel, `item reads ${doc.item || 'nothing'}, and this is the review of ${itemId}`);
   if (doc.verdict !== 'clean' && doc.verdict !== 'fix') throw bad(rel, 'verdict must be clean or fix');
 
-  const files = boundFiles(tree, rel, doc);
+  const files = boundFiles(tree, rel, doc, { recorded });
   const { findings, mutants, survivors } = verdictParts(rel, doc, FINDING_KEYS, ['repeat']);
   for (const [index, finding] of findings.entries()) {
     if (finding.repeat !== undefined && finding.repeat !== 'true') {
@@ -147,18 +235,161 @@ function parseItemReview(tree, rel, itemId, { recorded }) {
         'round of this item reported the same kind, or leave it out');
     }
   }
-  return { item: itemId, verdict: doc.verdict, files, findings, mutants, survivors, reviewer: recorded ? recordedReviewer(doc) : null };
+  // A delta review being recorded reads the fix and nothing else (run-review-delta.cjs).
+  const delta = recorded ? null : deltaProblem(tree, rel, findings, SAME_ITEM);
+  if (delta) throw bad(rel, delta);
+  const pins = pinsOf(rel, doc);
+  return { item: itemId, verdict: doc.verdict, files, findings, mutants, survivors, pins, reviewer: recorded ? recordedReviewer(doc) : null };
 }
 
 /**
- * What a fix review weighs on the ladder. It counts when a finding is blocker or major, or a
- * mutant survived; minor findings alone do not. A finding that repeats an earlier round
- * sends the review to the oracle, whatever it counts.
+ * What a fix review weighs on the ladder, read from the one reading of both lenses
+ * (readItemReview in run-review-quality.cjs). It counts when a finding of either lens is blocker
+ * or major, or a mutant survived; minor findings alone do not. A finding that repeats an earlier
+ * round sends the review to the oracle, whatever it counts.
  */
 function weightOf(review) {
   const serious = review.survivors.length > 0 || review.findings.some((finding) => finding.severity !== 'minor');
   const repeat = review.findings.some((finding) => finding.repeat === 'true');
   return { serious, weight: repeat ? 'repeat' : serious ? 'serious' : 'minor' };
+}
+
+/**
+ * The mutants of a review, in either shape: a proposal the runner ran or still owes, or a mutant
+ * the released flow's reviewer ran itself. `replace` may be empty, since dropping text is a mistake.
+ */
+function mutantsOf(rel, doc) {
+  return entries(rel, doc, 'mutants', ['criterion', 'test'], ['says', ...TARGET_KEYS, ...RUNNER_KEYS], ['replace']).map((mutant, index) => {
+    const at = `mutants entry ${index + 1}`;
+    const targeted = TARGET_KEYS.some((key) => mutant[key] !== undefined);
+    if (targeted) {
+      const missing = TARGET_KEYS.find((key) => mutant[key] === undefined);
+      if (missing) throw bad(rel, `${at} has no ${missing}: ${PROPOSE}`);
+      if (typeof mutant.replace !== 'string') throw bad(rel, `${at} replace must be text, empty to drop find`);
+      if (!/^\d+$/.test(mutant.line)) throw bad(rel, `${at} line must be a line number, not ${mutant.line}`);
+    }
+    if (mutant.caught !== undefined && !CAUGHT.includes(mutant.caught)) throw bad(rel, `${at} caught must be yes, no or none`);
+    if (!targeted && mutant.caught !== 'yes' && mutant.caught !== 'no') throw bad(rel, `${at} has no file: ${PROPOSE}`);
+    if ((mutant.why !== undefined) !== (mutant.caught === 'none')) throw bad(rel, `${at} carries why exactly when caught reads none`);
+    return mutant;
+  });
+}
+
+/** The words of a pin's text that hold a letter. */
+const pinWords = (text) => text.split(/\s+/).filter((word) => /\p{L}/u.test(word)).length;
+
+/**
+ * The pins of a review, held to their shape: paths inside the tree and outside the ledger, and a
+ * text of copy. `criterionOf` names what is wrong with a criterion's name, as for a proposal; a
+ * recorded file was named when it was recorded, so its read leaves it out.
+ */
+function pinsOf(rel, doc, criterionOf = () => null) {
+  return entries(rel, doc, 'pins', PIN_KEYS, ['says']).map((pin, index) => {
+    const at = `pins entry ${index + 1}`;
+    const problem = criterionOf(pin.criterion, pin);
+    if (problem) throw bad(rel, `${at} ${problem}`);
+    const [file, test] = [relativePath(rel, pin.file, at), relativePath(rel, pin.test, at)];
+    const ledger = [file, test].find((name) => name === lib.SPECS_DIR || name.startsWith(`${lib.SPECS_DIR}/`));
+    if (ledger) throw bad(rel, `${at} names ${ledger}; a pin reads the code, never the ledger`);
+    const words = pinWords(pin.text);
+    if (words < PIN_WORDS) {
+      throw bad(rel, `${at} text holds ${words} word${words === 1 ? '' : 's'}; a pin holds reader-facing copy of at least ${PIN_WORDS}, ` +
+        'and a pattern, a count or a computed value keeps its mutant');
+    }
+    return withSays({ criterion: pin.criterion, file, test, text: pin.text }, pin.says);
+  });
+}
+
+/** Two pins are one when they name the same criterion, files and text. */
+const samePin = (a, b) => PIN_KEYS.every((key) => (a[key] || '') === (b[key] || ''));
+
+/**
+ * Two mutants are one when they break the same text the same way for the same test; a moved line
+ * is the same mutant, and so is a survivor given another test, which keeps its first as `was`.
+ */
+const testsOf = (mutant) => [mutant.test || '', ...(mutant.was ? [mutant.was] : [])];
+const sameMutant = (a, b) => ['criterion', 'file', 'find', 'replace'].every((key) => (a[key] || '') === (b[key] || '')) &&
+  testsOf(a).some((test) => testsOf(b).includes(test));
+
+/**
+ * The proposals of a review as it is recorded: whole mistakes on code, each named by
+ * `criterionOf` (null when the name holds, else what is wrong with it), one per criterion. What
+ * the runner writes is left out, so a record run twice runs the same proposals. `held` names an
+ * entry the runner holds already, such as one it carried over, which is no proposal.
+ */
+function proposalsOf(rel, doc, criterionOf, held = () => false) {
+  const proposals = mutantsOf(rel, doc).flatMap((mutant, index) => {
+    if (held(mutant)) return [];
+    const at = `mutants entry ${index + 1}`;
+    if (mutant.find === undefined) throw bad(rel, `${at} has no file: ${PROPOSE}`);
+    const problem = criterionOf(mutant.criterion, mutant);
+    if (problem) throw bad(rel, `${at} ${problem}`);
+    const file = relativePath(rel, mutant.file, at);
+    if (file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`)) throw bad(rel, `${at} breaks ${file}; a mutant breaks the code, never the ledger`);
+    return [withSays(Object.fromEntries(MUTANT_KEYS.map((key) => [key, key === 'file' ? file : mutant[key]])), mutant.says)];
+  });
+  const counts = new Map();
+  for (const { criterion } of proposals) counts.set(criterion, (counts.get(criterion) || 0) + 1);
+  const twice = [...counts].find(([, count]) => count > 1);
+  if (twice) throw bad(rel, `criterion ${twice[0]} has ${twice[1]} mutants; propose one per criterion`);
+  return proposals;
+}
+
+/**
+ * The marker that opens a comment line, by the file's extension or its whole name, for the languages
+ * a name tells. A file of any other language is not judged.
+ */
+const COMMENT_MARKERS = new Map([
+  ['#', 'py pyi sh bash zsh rb pl pm r yaml yml toml tf ps1 nix ex exs jl coffee cmake mk makefile dockerfile'],
+  ['//', 'js cjs mjs jsx ts tsx mts cts java kt kts scala groovy gradle c h cc cpp cxx hpp hh cs go rs swift dart php proto zig sol scss less jsonc'],
+  ['--', 'sql lua hs elm ada adb ads vhd vhdl'],
+].flatMap(([marker, names]) => names.split(' ').map((name) => [name, marker])));
+
+/** The comment marker `text`, a line of `file`, opens with after its indent, or null. */
+function commentMarker(file, text) {
+  const name = path.posix.basename(file).toLowerCase();
+  const marker = COMMENT_MARKERS.get(name.slice(name.lastIndexOf('.') + 1));
+  return marker && text.trimStart().startsWith(marker) ? marker : null;
+}
+
+/**
+ * Refuse a proposal on a comment line: no test can tell it from the original, so it survives and
+ * proves nothing. A file or line the tree does not hold is left to the batch's own refusal.
+ */
+function refuseComments(tree, rel, proposals) {
+  proposals.forEach((proposal, index) => {
+    let lines;
+    try {
+      lines = fs.readFileSync(path.join(tree, proposal.file), 'utf8').split('\n');
+    } catch (error) {
+      return;
+    }
+    const marker = commentMarker(proposal.file, lines[Number(proposal.line) - 1] || '');
+    if (marker) {
+      throw bad(rel, `mutants entry ${index + 1} breaks ${proposal.file}:${proposal.line}, a line that opens with the comment marker ${marker}, ` +
+        'so no test can tell; propose a mutant on a line that runs');
+    }
+  });
+}
+
+/**
+ * How a first item review names a criterion: its number alone, among the item's `criteria`, and
+ * under `says` the opening words of the criterion at that number.
+ */
+const itemCriterion = (itemId, criteria) => (text, entry) => {
+  if (!/^\d+$/.test(text)) return `criterion reads ${text}; name the acceptance criterion by its number alone, 1 for the first`;
+  const n = Number(text);
+  if (n < 1 || n > criteria.length) return `names criterion ${n}, and ${itemId} has ${criteria.length} acceptance criteria`;
+  return entry.says === undefined ? NO_SAYS : saysProblem(itemId, criteria, n, entry.says);
+};
+
+/** A delta review holds no mutant the last review did not hold: the runner carries those over itself. */
+function refuseNew(rel, doc, previous) {
+  mutantsOf(rel, doc).forEach((mutant, index) => {
+    if (previous.some((entry) => sameMutant(entry, mutant))) return;
+    throw bad(rel, `mutants entry ${index + 1} is new: a delta review proposes no mutant. Leave mutants out: the runner carries ` +
+      'the last review\'s over and reruns its survivors, and a criterion still without a caught mutant or a checked pin is the intent review\'s');
+  });
 }
 
 /**
@@ -168,31 +399,31 @@ function weightOf(review) {
 function verdictParts(rel, doc, findingKeys, optional = []) {
   // Severity is held below, so a finding without one is refused with the three it may carry.
   const required = findingKeys.filter((key) => key !== 'severity');
-  const findings = entries(rel, doc, 'findings', required, ['severity', ...optional], ['severity', ...optional]);
+  const findings = entries(rel, doc, 'findings', required, ['severity', ...optional, 'mutant'], ['severity', ...optional]);
   for (const [index, finding] of findings.entries()) {
     if (!/^\d+$/.test(finding.line)) throw bad(rel, `finding line must be a line number, not ${finding.line}`);
     if (!SEVERITIES.includes(finding.severity)) {
       throw bad(rel, `findings entry ${index + 1} severity reads ${reads(finding.severity)}; it must be ${SEVERITY_FIX}`);
     }
   }
-  const mutants = entries(rel, doc, 'mutants', MUTANT_KEYS);
-  for (const mutant of mutants) {
-    if (mutant.caught !== 'yes' && mutant.caught !== 'no') throw bad(rel, 'mutant caught must be yes or no');
-  }
+  const mutants = mutantsOf(rel, doc);
   const survivors = mutants.filter((mutant) => mutant.caught === 'no');
   if (doc.verdict === 'clean' && findings.length > 0) {
     throw bad(rel, `verdict clean with ${findings.length} finding(s); a review with a finding says fix`);
   }
   if (doc.verdict === 'clean' && survivors.length > 0) {
-    throw bad(rel, 'verdict clean with a mutant that reads caught: no; a surviving mutant says fix');
+    throw bad(rel, 'verdict clean with a mutant that reads caught: no; a surviving mutant says fix, and the runner writes caught itself, ' +
+      'so a review it records leaves caught out');
   }
-  if (doc.verdict === 'fix' && findings.length === 0 && survivors.length === 0) {
+  // An intent review whose every finding is deferred stays fix while a criterion owes a proof (state-defer-finding.cjs).
+  if (doc.verdict === 'fix' && findings.length === 0 && survivors.length === 0 && listOf(rel, doc, 'deferred').length === 0) {
     throw bad(rel, 'verdict fix with no finding and no surviving mutant; name what to fix or say clean');
   }
   return { findings, mutants, survivors };
 }
 
 module.exports = {
-  FINDING_KEYS, ITEM_KEYS, MUTANT_KEYS, RECORDED_KEYS, SEVERITIES, bad, entries, isMap, parseItemReview, readDoc, recordedReviewer, relativePath,
-  reviewPath, reviewerId, verdictParts, weightOf,
+  FINDING_KEYS, ITEM_KEYS, ITEM_MUTANT_KEYS, ITEM_PIN_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, commentMarker, entries, isMap, itemCriterion, mutantsOf,
+  parseItemReview, pinsOf, proposalsOf, readDoc, recordedReviewer, refuseComments, refuseNew, relativePath, reviewPath, reviewerId, runnerKeys, sameMutant, samePin, sentBack,
+  verdictParts, weightOf, withSays, withoutRunnerKeys,
 };

@@ -1,0 +1,33 @@
+item: ri-integrate-on-the-base-diffs-from-since-or-origin
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-since.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-only.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/check-doubles.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/check-doubles.test.cjs
+findings: []
+mutants:
+  - criterion: "1: a commit on the base selects its scoped checks"
+    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='a commit on the base selects' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-integrate.cjs:174 diffs from the merge base again)"
+    caught: yes
+  - criterion: "1: a docs commit on the base still skips the src check"
+    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='a docs commit on the base' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-since.cjs:33 origin landing made all: true)"
+    caught: yes
+  - criterion: "1: after a push, without --since every scoped check runs"
+    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='after a push' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-since.cjs:36 fallback made all: false)"
+    caught: yes
+  - criterion: "1: --since naming no commit is refused"
+    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='naming no commit is refused' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-integrate.cjs:150 --since never resolved)"
+    caught: yes
+  - criterion: "1: doubles on the base counts HEAD against the landing"
+    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='doubles on the base counts HEAD' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (check-doubles.cjs:114 counts against HEAD)"
+    caught: yes
+  - criterion: "1: doubles on the base counts HEAD against the landing"
+    test: "remote-run.sh auto /home/ruben/dev/specsmd_new-scratch-rbase node --test --test-name-pattern='doubles on the base counts HEAD' src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs (run-integrate.cjs:180 passes no since to checkDoubles)"
+    caught: yes
+tree: 3e69a661ad4860790c33b495910072b3bf105e5ae242857a0799fc78b8600566
+commit: 28a25fdf9f6b2486380af1227676272d231b9992
+reviewer: acd8bb9087b3e3c61

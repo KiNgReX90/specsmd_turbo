@@ -14,6 +14,13 @@ const COMPLETE_VALUES = new Set(['completed', 'done']);
 // non-zero `check`, that noise would stall closes. Only `pending`/`in_progress` are OPEN.
 const PARKED_VALUES = new Set(['superseded', 'on_hold', 'blocked', 'awaiting-manual', 'cancelled', 'abandoned']);
 
+// An item the owner took out of a running intent for a later plan, written by defer-item
+// (state-defer.cjs). It is closed for its intent: close-intent and check pass over it, and
+// nothing builds, reviews or integrates it. It is never complete, so it proves nothing and
+// releases no successor, and the archive keeps it with its reason for the next plan.
+const DEFERRED = 'deferred';
+const CLOSED_VALUES = new Set([...COMPLETE_VALUES, DEFERRED]);
+
 class TransitionError extends Error {
   constructor(message, code) {
     super(message);
@@ -183,9 +190,18 @@ function isComplete(status) {
   return COMPLETE_VALUES.has(status);
 }
 
+function isDeferred(status) {
+  return status === DEFERRED;
+}
+
+/** Closed for its intent: completed, or deferred out of it. What close-intent waits for. */
+function isClosed(status) {
+  return CLOSED_VALUES.has(status);
+}
+
 /** Active, unfinished work. the only thing `check` may call drift. */
 function isOpen(status) {
-  return !isComplete(status) && !PARKED_VALUES.has(status);
+  return !isClosed(status) && !PARKED_VALUES.has(status);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,5 +238,5 @@ function writeState(filePath, lines) {
 module.exports = {
   TransitionError, PARKED_VALUES, indentOf, isSkippable, stripInlineComment, unquote, findKeyLine,
   loadState, locateIntents, locateWorkItems, getIntent, statusOf, isComplete, isOpen,
-  setField, removeField, nowIso, writeState,
+  isDeferred, isClosed, setField, removeField, nowIso, writeState,
 };

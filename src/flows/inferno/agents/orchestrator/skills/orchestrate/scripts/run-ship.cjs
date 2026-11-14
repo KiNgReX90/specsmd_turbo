@@ -16,6 +16,15 @@
  *
  * Both end with the host's `verification.ship_cleanup`, when set: one command run from the primary
  * checkout once the tree and branch are gone. Its failure prints a line and never undoes the ship.
+ * Without it, the branch's cache folder outlives the ship, and one line names it and the key.
+ *
+ * A lane red accepted as intermittent goes into the ship commit as one `exception:` line per lane,
+ * written here so nobody writes it by hand; those lines on the base are the ledger a later accept
+ * reads (run-lanes-intermittent.cjs), and ship refuses an accept the base already holds twice.
+ *
+ * A proof only the landing makes possible, an `after_ship` criterion of the intent review whose
+ * evidence path is missing, never stops the merge: the ship prints one `owed after ship:` line per
+ * entry as its last output, and `run.cjs select` lists it until the path exists (run-after-ship.cjs).
  */
 
 const fs = require('fs');
@@ -25,8 +34,12 @@ const lib = require('./run-lib.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { intentOf, worktreeEntries } = require('./run-worktrees.cjs');
 const { green } = require('./run-gate.cjs');
+const { intermittentHeld } = require('./run-lanes.cjs');
+const { shipExceptions } = require('./run-lanes-intermittent.cjs');
 const { linkedTree, loadOwnership, stopOwnedProcesses } = require('./run-processes.cjs');
 const gates = require('./run-config-gates.cjs');
+const { asideLines } = require('./run-review-aside.cjs');
+const { owedLine } = require('./run-after-ship.cjs');
 
 const { mergeSlot } = gates;
 const slot = require('./run-slot.cjs');
@@ -98,10 +111,20 @@ function ship(intentId, options) {
     out.push(`${branch} is not green after folding ${base} in`, ...proof.out);
     return { exit: 3, payload: { ok: false, step: 'green', hash: proof.payload.hash, owed: proof.payload.owed }, out };
   }
+  // What ships held by an accept rather than walked, so the ship says so.
+  out.push(...proof.out.filter((line) => line.startsWith('ACCEPTED ')));
+
+  // The findings the user put after the release, read before the teardown removes the tree.
+  const deferred = asideLines(tree, intentId);
+  // The proofs only the landing makes possible: the ship's last lines, and select's until each path exists.
+  const after = (proof.payload.after_ship || []).map(owedLine);
+
+  // The lane reds accepted as intermittent, refused before anything merges once the base holds two accepts of a test.
+  const exceptions = shipExceptions(primary, base, intermittentHeld(tree, lib.readConfig(tree, options.config), options.config));
 
   // (3) Merge, from the primary checkout.
   const tip = lib.git(tree, ['rev-parse', 'HEAD']);
-  lib.git(primary, ['merge', '--no-ff', '--autostash', '-m', `Merge branch '${branch}'`, branch]);
+  lib.git(primary, ['merge', '--no-ff', '--autostash', '-m', `Merge branch '${branch}'`, ...exceptions.flatMap((line) => ['-m', line]), branch]);
   const sha = lib.git(primary, ['rev-parse', '--short', 'HEAD']);
   out.push(`merged ${branch} into ${base} as ${sha}`);
 
@@ -123,19 +146,24 @@ function ship(intentId, options) {
     // (6) Teardown, safe because step 5 proved the work is reachable from the base branch.
     cleanup = removeWorktree(primary, tree, branch, out, left, options, gates.shipCleanup(config));
   } catch (error) {
-    out.push(`${error.message}`, `left to do: ${left.join('; ')}`);
-    return { exit: 2, payload: { ok: false, step: 'after-merge', sha, left }, out };
+    out.push(`${error.message}`, `left to do: ${left.join('; ')}`, ...after);
+    return { exit: 2, payload: { ok: false, step: 'after-merge', sha, left, after_ship: proof.payload.after_ship || [] }, out };
   }
 
-  out.push('shipped');
-  return { exit: 0, payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup }, out };
+  out.push(...deferred, 'shipped', ...after);
+  return {
+    exit: 0,
+    payload: { ok: true, intent: intentId, branch, base, sha, tip, cleanup, exceptions, after_ship: proof.payload.after_ship || [] },
+    out,
+  };
 }
 
 /**
  * Stop the processes the run registered in the worktree, remove it, delete its branch, then run
  * the host's ship cleanup when one is set. A process that merely sits in the tree is never
  * signalled; see run-processes.cjs. `left` names what a failure leaves owed. Returns the
- * cleanup's `{ code, log }`, or null without one.
+ * cleanup's `{ code, log }`, or null without one; then a branch cache folder that still stands is
+ * named, since nothing else would ever remove it.
  */
 function removeWorktree(primary, tree, branch, out, left, options, command) {
   // The base holds the branch's work, so its merge slot ticket goes first: a failed removal never holds the slot.
@@ -148,7 +176,11 @@ function removeWorktree(primary, tree, branch, out, left, options, command) {
   left.shift();
   lib.git(primary, ['branch', '-d', branch]);
   left.shift();
-  if (!command) return null;
+  if (!command) {
+    const folder = path.join(lib.cacheDir(primary), branch);
+    if (fs.existsSync(folder)) out.push(`left ${folder}: set verification.ship_cleanup to remove it`);
+    return null;
+  }
   const cleanup = shipCleanup(primary, tree, branch, command, out);
   left.shift();
   return cleanup;

@@ -12,7 +12,9 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const dispatch = require('./run-dispatch.cjs');
-const { unexplainedChanges } = require('./run-peers.cjs');
+const { foldRanges, foldedAlone } = require('./run-fold.cjs');
+const { grantedPaths } = require('./run-grant.cjs');
+const { ownershipOverlaps, unexplainedChanges } = require('./run-peers.cjs');
 
 const { RunError } = lib;
 const refuse = dispatch.refuse;
@@ -22,12 +24,17 @@ function startsFrom(tree, ancestor, head) {
   return ancestor === head || lib.git(tree, ['merge-base', '--is-ancestor', ancestor, head], { tolerate: true }) !== null;
 }
 
-/** Dispatches started at or after this item's first baseline whose results were never accepted. */
+/** The records of dispatches started at or after this item's first baseline whose results were never accepted. */
 function openDispatches(tree, own) {
   return dispatch.currentRecords(tree)
     .filter((entry) => entry.phase !== 'accepted' && !own.ids.has(entry.dispatchId))
-    .filter((entry) => startsFrom(tree, own.before.head_sha, entry.beforeSnapshot.head_sha))
-    .map((entry) => ({ dispatch_id: entry.dispatchId, items: dispatch.itemsOf(entry) }));
+    .filter((entry) => startsFrom(tree, own.before.head_sha, entry.beforeSnapshot.head_sha));
+}
+
+/** The wait for an open dispatch, the one refusal verify-item gives while that builder runs. */
+function stillOpen(record) {
+  return new RunError(`dispatch ${record.dispatchId} for ${dispatch.itemsOf(record).join(', ')} is still open: run accept-dispatch ` +
+    'on every result started since this item\'s baseline, a blocked one with its changed_files as they are, before verify-item', 'DISPATCH_PROOF');
 }
 
 function gitNames(tree, args) {
@@ -36,17 +43,14 @@ function gitNames(tree, args) {
 
 /**
  * Paths the fold of `base` brought in since the baseline at `head` and nothing changed since:
- * what the base changed after the last base commit the baseline held, merged or fast-forwarded.
- * On the base branch itself nothing is a fold.
+ * what the base changed in each fold range (run-fold.cjs), merged or fast-forwarded.
  */
 function foldedSince(tree, head, base) {
-  if (!base || lib.currentBranch(tree) === base) return new Set();
+  const ranges = foldRanges(tree, head, base);
+  if (ranges.length === 0) return new Set();
   const dirty = new Set([...gitNames(tree, ['diff', '--name-only', '--no-renames', 'HEAD']), ...gitNames(tree, ['ls-files', '--others', '--exclude-standard'])]);
   const folded = new Set();
-  for (const ref of [base, `origin/${base}`]) {
-    const tip = lib.git(tree, ['merge-base', 'HEAD', ref], { tolerate: true });
-    const held = tip && lib.git(tree, ['merge-base', head, tip], { tolerate: true });
-    if (!held || held === tip) continue;
+  for (const { held, tip } of ranges) {
     for (const file of gitNames(tree, ['diff', '--name-only', '--no-renames', held, tip])) if (!dirty.has(file)) folded.add(file);
   }
   return folded;
@@ -70,12 +74,15 @@ function newlyHidden(tree, before, now) {
 /**
  * The item's claimed paths outside its ownership, and the changes since its first baseline that
  * no dispatch claims (run-peers.cjs), as `unreported` when owned by the spec and the record and
- * as `outside` otherwise. A path the fold of `options.base` brought in is the base's. Any other
- * commit since the baseline, a sibling's landing or a builder's own, counts like an uncommitted
- * change.
+ * as `outside` otherwise; `unclaimed` lists those changes alone. A path the fold of `options.base`
+ * brought in is the base's. Any other commit since the baseline, a sibling's landing or a
+ * builder's own, counts like an uncommitted change. `options.open` are the records still running
+ * beside the item, each claiming what its frozen ownership covers. A path the orchestrator
+ * granted the dispatch (run-grant.cjs) is the item's as if its spec listed it.
  */
-function verifyDispatch(tree, record, editable, options = {}) {
+function verifyDispatch(tree, record, specEditable, options = {}) {
   dispatch.validateDispatch(tree, record);
+  const editable = [...specEditable, ...grantedPaths(record)];
   const own = dispatch.effective(tree, record);
   for (const entry of own.members.filter((member) => member.phase === 'accepted')) {
     const patch = dispatch.snapshotDelta(entry.beforeSnapshot, entry.acceptedSnapshot);
@@ -89,14 +96,14 @@ function verifyDispatch(tree, record, editable, options = {}) {
       'make it visible to git, then verify again');
   }
   for (const file of own.claimed) {
-    if (!dispatch.same(snapshot, record.acceptedSnapshot, file)) {
+    if (!dispatch.same(snapshot, record.acceptedSnapshot, file) && !foldedAlone(tree, options.base, record.acceptedSnapshot, snapshot, file)) {
       throw refuse(`accepted dispatch bytes changed at ${file}: run dispatch-log before a correction resumes the builder, ` +
         'then accept-dispatch its result');
     }
   }
   const folded = foldedSince(tree, own.before.head_sha, options.base);
   const peers = options.peers || dispatch.currentRecords(tree).filter((entry) => entry.phase === 'accepted');
-  const flagged = unexplainedChanges(tree, own, editable, peers, snapshot, folded);
+  const flagged = unexplainedChanges(tree, own, editable, peers, snapshot, folded, options.open || []);
   const owned = (file) => lib.ownedBy(file, editable, tree) && lib.ownedBy(file, record.assignment.ownership.editable, tree);
   const outside = own.claimed.filter((file) => !owned(file));
   const unreported = [];
@@ -108,6 +115,7 @@ function verifyDispatch(tree, record, editable, options = {}) {
     changed: own.claimed,
     outside: [...new Set(outside)].sort(),
     unreported: unreported.sort(),
+    unclaimed: [...flagged].sort(),
   };
 }
 
@@ -172,7 +180,9 @@ function recordFor(tree, entry, options) {
  * Each reviewed item against the record of the builder that built it, a chain's items against
  * their one shared record, with `options.base` the branch whose fold is excused. Returns `legacy`
  * instead when an item predates signed records. The ledger is the single writer's and never a
- * builder's, so it is never outside.
+ * builder's, so it is never outside. An open dispatch whose frozen ownership overlaps the item's
+ * frozen or spec ownership is waited for. A disjoint one runs beside it, and is waited for only
+ * when a change no dispatch claims remains, which may be that builder's escape.
  */
 function attribute(tree, items, options) {
   if (options.dispatch_id && items.length > 1) {
@@ -193,18 +203,19 @@ function attribute(tree, items, options) {
   const unreported = new Set();
   const attributed = [];
   for (const record of records.values()) {
-    const open = openDispatches(tree, dispatch.effective(tree, record));
-    if (open.length > 0) {
-      throw new RunError(`dispatch ${open[0].dispatch_id} for ${open[0].items.join(', ')} is still open: run accept-dispatch ` +
-        'on every result started since this item\'s baseline, a blocked one with its changed_files as they are, before verify-item', 'DISPATCH_PROOF');
-    }
     const ids = dispatch.itemsOf(record);
-    const result = verifyDispatch(tree, record, editableOf(tree, record.assignment.intent, ids), { peers, base: options.base });
+    const editable = editableOf(tree, record.assignment.intent, ids);
+    const frozen = [...record.assignment.ownership.editable, ...editable];
+    const open = openDispatches(tree, dispatch.effective(tree, record));
+    const overlapping = open.find((entry) => ownershipOverlaps(entry.assignment.ownership.editable, frozen, tree));
+    if (overlapping) throw stillOpen(overlapping);
+    const result = verifyDispatch(tree, record, editable, { peers, base: options.base, open });
+    if (open.length > 0 && result.unclaimed.some((file) => !ledger(file))) throw stillOpen(open[0]);
     for (const file of result.outside) if (!ledger(file)) outside.add(file);
     for (const file of result.unreported) if (!ledger(file)) unreported.add(file);
-    attributed.push({ items: ids, dispatch_id: result.dispatch_id, since: result.since, changed: result.changed });
+    attributed.push({ items: ids, dispatch_id: result.dispatch_id, since: result.since, changed: result.changed, granted: grantedPaths(record) });
   }
   return { since: attributed[0].since, outside: [...outside].sort(), unreported: [...unreported].sort(), attributed };
 }
 
-module.exports = { attribute, verifyDispatch };
+module.exports = { attribute, openDispatches, verifyDispatch };

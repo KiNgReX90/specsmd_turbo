@@ -1,0 +1,12 @@
+item: ri-a-run-branch-keeps-the-config-it-was-given
+verdict: clean
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-config-record.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-gate.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-ship.test.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-proofs.test.cjs
+tree: 9ce86b8d074f3f4f47a07bf15bbe08449892891a477789c76f6e3761691c7bb3
+commit: 5b35acd693bc40fe4b8ab27d5753f7bcf4d184c1
+reviewer: a12a58c95757c64e9

@@ -15,7 +15,8 @@
  *
  * Exit codes: 0 ok, 1 usage, 2 failure (details printed), 3 a step is owed first,
  * 4 gate still running, or queued behind another intent's ticket (gate --wait: call it again),
- * or a slot --take queued behind another holder (take again).
+ * or a slot --take queued behind another holder (take again), 5 no verdict: the host's wrapper ran
+ * nothing for a check of integrate or the gate twice (verification.refused), so the step runs again.
  */
 
 const path = require('path');
@@ -39,7 +40,9 @@ const { ship, teardown } = require('./run-ship.cjs');
 const { TransitionError } = require('./state-transition.cjs');
 const processes = require('./run-processes.cjs');
 const { caller } = require('./run-call.cjs');
+const { exitAfter } = require('./run-exit.cjs');
 const { slotCommand } = require('./run-slot.cjs');
+const runConfig = require('./run-config-record.cjs');
 
 const { RunError } = lib;
 
@@ -50,29 +53,33 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs unclaim <intent-id> [--config <file>]     give back a claim nothing was built on
   node run.cjs worktree <intent-id> [--path <dir>] [--config <file>] open the intent worktree and bootstrap it
   node run.cjs frontier <intent-id> [--tree <dir>] [--config <file>] validate the contracts, print the ready items and who builds each
+  node run.cjs plan-lint <intent-id> [--tree <dir>]     the plan's form, one finding per line: 0 clean or written before the lint, 2 findings
   node run.cjs probes <item-id> [--tree <dir>] [--intent <id>] rerun the item's measurements: 0 they hold, 2 drift
   node run.cjs verify-item <item-id> [--tree <dir>]      the item's own check plus its ownership
   node run.cjs verify-item --items <a,b> [--tree <dir>]  the same for a batch, each item against its dispatch
-  node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] the item's cold review: 3 dispatch the reviewer, 0 clean, 2 fix
+  node run.cjs review --item <id> --tree <dir> [--intent <id>] [--reviewer <agent-id>] [--quality-reviewer <agent-id>] the item's cold review: 3 dispatch its lenses, 0 clean, 2 fix
   node run.cjs scan [--tree <dir>] [--intent <id>]      the four scanner briefs before the intent review: 3 spawn the printed lines
   node run.cjs scan --collect [--tree <dir>]            record and commit scan.yaml: 0 recorded, 3 a result missing, 2 a line without its proof
-  node run.cjs scan [--collect] --only wiring --plan <intent-id> the plan-time scan, one scanner per slice of the plan: 3 spawn or wait on an unmerged intent, then 0 no LEGAL or MAKER gap, 2 every such gap for the planner
+  node run.cjs scan [--collect] --item <id> [--tree <dir>] the slice check of one item before its dispatch, once and only after a predecessor: 3 spawn, then 0 the lines for the dispatch, 2 a conflict for the planner
+  node run.cjs scan [--collect] --plan <intent-id>       the plan-time cross-check, a pass and at most two fix rounds: 3 spawn, wait on an unmerged intent or ask the oracle, then 0 no finding, 2 every finding for the planner or the oracle
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
-  node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] break one line, run the test, restore: caught yes|no
-  node run.cjs mutate --batch <file> [--tree <dir>]      every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
-  node run.cjs integrate --item <id> [--tree <dir>]      fold the base in, run the checks, complete the item
-  node run.cjs integrate --items <a,b> [--tree <dir>]    the same for an explicitly batched chain
-  node run.cjs integrate [--tree <dir>] [--config <file>] fold and check without completing anything
-  node run.cjs doubles [--tree <dir>] [--config <file>] count the test doubles against the merge base: 0 held, 2 rose
+  node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] [--config <file>] break one line, run the test, restore: caught yes|no
+  node run.cjs mutate --batch <file> [--tree <dir>] [--config <file>] every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
+  node run.cjs integrate --item <id> [--since <ref>] [--tree <dir>] fold the base in, run the checks, complete the item
+  node run.cjs integrate --items <a,b> [--since <ref>] [--tree <dir>] the same for an explicitly batched chain
+  node run.cjs integrate [--since <ref>] [--tree <dir>] [--config <file>] fold and check without completing anything
+  node run.cjs doubles [--since <ref>] [--tree <dir>] [--config <file>] count the test doubles against the merge base: 0 held, 2 rose
   node run.cjs real-app --range <from>..<to> [--item <id>] [--tree <dir>] real_app.paths lines naming what the range removed, and files driving what it changed: 0 none stale, 2 stale
   node run.cjs cases --range <from>..<to> [--tree <dir>] [--config <file>] cases the range made stale or reached unanswered, and changed tests no case answers: 0 none, 2 refused
   node run.cjs gate [--tree <dir>] [--config <file>] [--force] run the finalize commands without matching proofs
   node run.cjs gate --detach [--tree <dir>]              start the gate and each lane the branch touched (verification.smoke, .windows) and return; 4 queued behind another intent's ticket (merge_slot)
   node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base, origin/<base> on the base branch): no fold, no finalize command, no ticket
   node run.cjs gate --detach --supersede [--tree <dir>] stop the tree's running lanes a fix touched, prove each stopped by its verification.<lane>.stop, then start the gate: 2 refused or not proven stopped
-  node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane's instrument red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
+  node run.cjs gate --detach --lane <name> [--tree <dir>] walk that one lane again, also while the gate job runs, and make gate --wait wait on it: 2 while that lane still runs
+  node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
+  node run.cjs smoke|windows --accept-intermittent --test "<name>" [--test "<name>" ...] --reason "<why>" --by <who> [--tree <dir>] [--config <file>] accept that lane's product red when its verdicts file proves every red test intermittent, one --test each; refused past two accepts of a test on the base since a "Fixes-intermittent: <name>" commit
   node run.cjs slot [--tree <dir>] [--config <file>]     the merge slot queue, a worktree running without a ticket first
   node run.cjs slot --take --holder <name> [--tree <dir>] take or renew a ticket by hand: 0 at the head, 4 queued behind another holder
   node run.cjs slot --renew --holder <name> [--tree <dir>] mark the holder's ticket active
@@ -81,16 +88,23 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs teardown --tree <dir> [--base <branch>] [--config <file>] remove a worktree and branch the base already holds
   node run.cjs register-process <pid> --tree <dir> --run-id <id> let teardown stop a process the run launched in the tree
   node run.cjs dispatch-log <intent-id> --item <id> | --items <a,b> --tier <tier> --agent <name> [--tree <dir>] record the builder's baseline, print its dispatch id
+  node run.cjs dispatch-log <intent-id> --tier oracle [--item <id>] --impact <grade> --complexity <grade> [--blocked <dispatch-id>] [--tree <dir>] route and log an oracle ask, print its route, model and dispatch id
   node run.cjs accept-dispatch <dispatch-id> --changed-paths <json-array> [--tree <dir>] freeze the result it reported
+  node run.cjs grant <dispatch-id> --path <file> [--tree <dir>] add one file to a running dispatch's ownership, signed by the orchestrator
+  node run.cjs tools [--write <id,id>] [--tree <dir>] [--config <file>] the tools that fit the stack, one proposal per line; --write writes the named ones into the config
 
 Options
   --json            machine-readable output
   --tree <dir>      the worktree to operate in (default: the repository of the cwd)
-  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, integrate, doubles, real-app, cases, gate, green, slot, ship and teardown: selected host config relative to the command's root (default .specs-inferno/config.yaml)
+  --config <file>   select, claim, unclaim, worktree, frontier, scan, review, mutate, integrate, doubles, real-app, cases, gate, green, slot, ship, teardown and tools: selected host config relative to the command's root (default .specs-inferno/config.yaml);
+                    on an intent run branch, worktree, integrate, gate, green, ship and the lane accepts default to the config
+                    claim, worktree, integrate or gate last recorded for that branch
   --base <branch>   integrate, doubles, gate, ship and teardown: the base branch to fold in (default: the config's base)
   --since <ref>     verify-item: compare against this ref instead of the item's accepted dispatch;
                     gate --detach --lanes-only: pick the lanes from the diff since this ref (default the merge base,
-                    or origin/<base> on the base branch)
+                    or origin/<base> on the base branch);
+                    integrate: diff the landing from this ref (on the base branch the default is origin/<base>; with neither, every scoped check runs);
+                    doubles: on the base branch, count against this ref
   --lanes-only      gate --detach: start only the lanes, for a driver that holds its own slot ticket
   --supersede       gate --detach: stop the running lanes the fix touched first, proven by each lane's stop command
   --holder <name>   slot: the holder whose ticket is taken, renewed or released;
@@ -98,20 +112,24 @@ Options
   --dispatch-id <id> verify-item: the accepted dispatch to check (default the item's latest)
   --peers <json>    verify-item: the dispatch ids that may explain a sibling's change (default every accepted one)
   --item <id>       integrate: the item this landing completes once the checks are green; review: the item reviewed;
-                    real-app: the item whose own paths the removals are read from
+                    real-app: the item whose own paths the removals are read from; scan: the item its slice check reads
   --range <a..b>    real-app: the diff whose removed test ids, labels and routes it looks for; cases: the landing it checks
   --items <a,b>     integrate, verify-item and dispatch-log: the batched chain, treated as one unit
+  --impact <grade>  dispatch-log --tier oracle: "high <clause>: <rubric line>" or "low: <rubric line>", as is --complexity
+  --blocked <id>    dispatch-log --tier oracle: the normal oracle that returned blocked, asked once more on the hard route
   --intent <id>     verify-item, integrate, review and probes: the intent owning the item, when the id is ambiguous;
                     scan, review, gate and green: the intent a tree on no intent branch builds
   --force           gate: rerun every finalize command, revoking each proof before its run
   --minutes <n>     gate --wait: how long one call blocks before exiting 4 (default 9)
-  --only wiring     scan with --plan: the one question the plan-time scan asks, its default
-  --plan <id>       scan: ask of the captured plan of this intent instead of its diff
-  --lane <name>     gate: run one configured lane in this process, as gate --detach starts it
+  --plan <id>       scan: cross-check the captured plan of this intent instead of scanning its diff
+  --lane <name>     gate: run one configured lane in this process, as gate --detach starts it; with --detach, start that lane alone as its own job
   --harness-fix <sha> smoke|windows --accept: the harness fix on the base branch the instrument red is accepted against
+  --test <name>     smoke|windows --accept-intermittent: a red test of the lane's verdicts file, once per test; mutate: the test command
+  --reason <why>    smoke|windows --accept-intermittent: why the red is accepted, written into the ship commit
+  --by <who>        smoke|windows --accept-intermittent: the role that signs the accept
   --batch <file>    mutate: a JSON or YAML list of {criterion, file, line, find, replace, test}; find occurs once on that line
 
-Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder.`;
+Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder, 5 integrate or gate got no verdict, the host ran nothing twice: run the step again.`;
 
 function required(value, usage) {
   if (!value) throw new RunError(`usage: node run.cjs ${usage}`, 'BAD_ARGS', 1);
@@ -137,9 +155,10 @@ const COMMANDS = {
   unclaim: (args, options) => intents.unclaim(required(args[0], 'unclaim <intent-id>'), options),
   worktree: (args, options) => intents.worktree(required(args[0], 'worktree <intent-id>'), options),
   frontier: (args, options) => intents.frontier(required(args[0], 'frontier <intent-id>'), options),
+  'plan-lint': (args, options) => require('./run-plan-lint.cjs').planLint(required(args[0], 'plan-lint <intent-id>'), options),
   probes: (args, options) => probes(required(args[0], 'probes <item-id>'), options),
   'verify-item': (args, options) =>
-    gate.verifyItem(required(args[0] || options.items, 'verify-item <item-id> | verify-item --items <a,b>'), options),
+    require('./run-item-proof.cjs').verifyItem(required(args[0] || options.items, 'verify-item <item-id> | verify-item --items <a,b>'), options),
   integrate: (args, options) => integrate(options),
   doubles: (args, options) => checkDoubles(options),
   'real-app': (args, options) => realApp(options),
@@ -158,6 +177,8 @@ const COMMANDS = {
     intents.dispatchLog(required(args[0], 'dispatch-log <intent-id> --item <id> --tier <tier> --agent <name>'), options),
   'accept-dispatch': (args, options) =>
     intents.acceptDispatch(required(args[0], 'accept-dispatch <dispatch-id> --changed-paths <json-array>'), options),
+  grant: (args, options) => require('./run-grant.cjs').grant(args[0], options),
+  tools: (args, options) => require('./run-tools.cjs').tools(options),
   // One accept per lane, so the `<lane> --accept` line gate --wait prints always names a real command.
   ...Object.fromEntries(LANES.map((lane) => [lane, (args, options) => accept(lane, options)])),
 };
@@ -166,7 +187,11 @@ const COMMANDS = {
 const OWNING = new Set(['frontier', 'probes', 'verify-item', 'scan', 'review', 'integrate', 'gate', 'green', 'ship', 'dispatch-log', 'accept-dispatch', ...LANES]);
 
 /** Options that take no value. Everything else starting with `--` takes the next argument. */
-const FLAGS = new Set(['--json', '--detach', '--wait', '--force', '--collect', '--accept', '--take', '--renew', '--release', '--lanes-only', '--supersede']);
+const FLAGS = new Set([
+  '--json', '--detach', '--wait', '--force', '--collect', '--accept', '--accept-intermittent', '--take', '--renew', '--release', '--lanes-only', '--supersede',
+]);
+/** Options that may repeat: each value is also kept, in order, under the plural name. */
+const REPEATED = new Set(['--test']);
 
 function parseArgs(argv) {
   const options = { cwd: process.cwd() };
@@ -185,7 +210,9 @@ function parseArgs(argv) {
     if (value === undefined || value.startsWith('--')) {
       throw new RunError(`missing value for ${arg}`, 'BAD_ARGS', 1);
     }
-    options[arg.slice(2).replace(/-/g, '_')] = value;
+    const key = arg.slice(2).replace(/-/g, '_');
+    options[key] = value;
+    if (REPEATED.has(arg)) options[`${key}s`] = [...(options[`${key}s`] || []), value];
     i += 1;
   }
   if (options.tree) options.tree = path.resolve(options.cwd, options.tree);
@@ -195,6 +222,9 @@ function parseArgs(argv) {
 
 function main(argv) {
   const { command, args, options } = parseArgs(argv);
+  // The --config this call names becomes its run branch's record; a call naming none reads it.
+  const named = options.config;
+  runConfig.recallInto(command, args, options);
   caller(options);
 
   if (!command || ['--help', '-h', 'help'].includes(command)) {
@@ -215,8 +245,12 @@ function main(argv) {
   if (OWNING.has(command) && options.tree && !options.plan) recordOwner(options.tree, command);
   const result = handler(args, options);
   // A batch mutate yields to the event loop between its runs, so its result is a promise.
-  if (result && typeof result.then === 'function') return result.then((done) => finish(command, options, done));
-  return finish(command, options, result);
+  const done = (returned) => {
+    runConfig.rememberFrom(command, options, named, returned);
+    return finish(command, options, returned);
+  };
+  if (result && typeof result.then === 'function') return result.then(done);
+  return done(result);
 }
 
 function finish(command, options, result) {
@@ -228,23 +262,18 @@ function finish(command, options, result) {
 }
 
 function fail(error) {
-  if (error instanceof RunError) {
-    process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
-    process.exit(error.exit);
-  }
   // A refusal from the single writer is this run's failure too, not a crash.
-  if (error instanceof TransitionError) {
-    process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
-    process.exit(2);
-  }
-  throw error;
+  const code = error instanceof RunError ? error.exit : error instanceof TransitionError ? 2 : null;
+  if (code === null) throw error;
+  process.stderr.write(`ERROR [${error.code}] ${error.message}\n`);
+  exitAfter(process.stderr, code);
 }
 
+// The runner exits once its answer has left the process, so a reader that pipes it reads it whole
+// (run-exit.cjs). A batch mutate yields to the event loop between its runs, so main may return a promise.
 if (require.main === module) {
   try {
-    const exit = main(process.argv.slice(2));
-    if (exit && typeof exit.then === 'function') exit.then((code) => process.exit(code), fail);
-    else process.exit(exit);
+    Promise.resolve(main(process.argv.slice(2))).then((code) => exitAfter(process.stdout, code), fail);
   } catch (error) {
     fail(error);
   }

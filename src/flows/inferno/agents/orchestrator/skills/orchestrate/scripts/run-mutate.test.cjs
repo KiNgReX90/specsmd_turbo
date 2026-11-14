@@ -13,7 +13,9 @@ const ORIGINAL = "module.exports = 1;\n";
 const { tempDir } = require("./test-temp.cjs");
 const { writeFile } = require("./test-write.cjs");
 const { untilMutant } = require("./review-fixture.cjs");
-const CHECK = "node -e \"process.exit(require('./src/m.js') === 1 ? 0 : 1)\"";
+// The check prints node --test's failing summary when it is red, as a real runner does: a red run
+// without one reads no verdict.
+const CHECK = "node -e \"process.exit(require('./src/m.js') === 1 ? 0 : 1)\" || { s=$?; echo '# fail 1'; exit $s; }";
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();

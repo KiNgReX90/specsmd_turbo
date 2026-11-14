@@ -11,7 +11,12 @@
  * what the mutate wrote, and never looks for a mutant by its text: that guess rewrites lines
  * nobody mutated. A file that already holds its original is left as it is. Any other file, an
  * edit since, a missing file or a journal short of a field, is refused with the journal kept,
- * since a leftover never clears by waiting.
+ * since a leftover never clears by waiting. Both shapes may carry the paths a reseal changed
+ * (run-mutate-seal.cjs), which recovery puts back by the same rule. A reseal may rewrite a mutated
+ * file itself, so the mutant's hash is the one the reseal left, and when putting the original
+ * lines back does not give the original's hash, HEAD's copy is written only if it does. A batch's
+ * journal also holds the host session it has open (run-mutate-session.cjs), which recovery
+ * closes first.
  */
 
 const crypto = require('crypto');
@@ -19,6 +24,8 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { committed, putBackSeal, sealPaths, unseal } = require('./run-mutate-seal.cjs');
+const { closeLeft } = require('./run-mutate-session.cjs');
 
 const { RunError } = lib;
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
@@ -66,6 +73,17 @@ function owner() {
   return { pid: process.pid, start: self && self.start };
 }
 
+/**
+ * The original of a file a dead mutate left, or null: `rebuilt` (the mutant with its original
+ * lines back) when it hashes to `before`, else HEAD's copy when that does, which is the case once a
+ * reseal rewrote more of the file than the mutant's lines.
+ */
+function originalOf(tree, rel, rebuilt, before) {
+  if (sha(rebuilt) === before) return rebuilt;
+  const head = committed(tree, rel);
+  return head !== null && sha(head) === before ? head : null;
+}
+
 /** Put back the one line a dead single mutate wrote, and say what happened. */
 function putBack(tree, entry, journal) {
   const abs = path.join(tree, entry.file);
@@ -78,8 +96,11 @@ function putBack(tree, entry, journal) {
   if (complete && now !== null && sha(now) === entry.mutant) {
     const lines = now.toString('utf8').split('\n');
     lines.splice(entry.line - 1, entry.replace.split('\n').length, entry.original);
-    fs.writeFileSync(abs, lines.join('\n'));
-    return `restored ${entry.file} from an interrupted mutate`;
+    const back = originalOf(tree, entry.file, Buffer.from(lines.join('\n'), 'utf8'), entry.before);
+    if (back) {
+      fs.writeFileSync(abs, back);
+      return `restored ${entry.file} from an interrupted mutate`;
+    }
   }
   const why = !complete ? 'its journal lacks what a restore needs' : now === null ? 'the file is gone' : 'the file changed since';
   const wrote = Number.isInteger(entry.line) ? ` line ${entry.line} of` : '';
@@ -105,8 +126,8 @@ function putBackFile(tree, record) {
   if (sha(now) === record.mutant) {
     const text = now.toString('utf8').split('\n');
     for (const { line, original } of lines) text[line - 1] = original;
-    const back = Buffer.from(text.join('\n'), 'utf8');
-    if (sha(back) === record.before) {
+    const back = originalOf(tree, record.file, Buffer.from(text.join('\n'), 'utf8'), record.before);
+    if (back) {
       fs.writeFileSync(abs, back);
       return { ok: true, line: `restored ${record.file} from an interrupted mutate` };
     }
@@ -121,9 +142,8 @@ function describe(record, why) {
   return `an interrupted batch mutate rewrote${which} ${record && record.file}${was ? ` (${was})` : ''}, and ${why}`;
 }
 
-/** Put back every file a dead batch wrote. The files it cannot put back stay in the journal and are refused. */
-function putBackFiles(tree, entry, journal) {
-  const done = [];
+/** Put back every file a dead batch wrote, after the lines in `done`. The files it cannot put back stay in the journal and are refused. */
+function putBackFiles(tree, entry, journal, done = []) {
   const refused = [];
   for (const record of entry.files) {
     const result = putBackFile(tree, record);
@@ -161,14 +181,28 @@ function recoverInterrupted(tree, options = {}) {
   }
   const files = batch ? entry.files.map((record) => String(record && record.file)) : [entry.file];
   if (Number.isInteger(entry.pid) && entry.pid !== process.pid && alive(entry)) {
-    if (options.keepLive && files.every((file) => options.keepLive(file))) return [];
+    if (options.keepLive && [...files, ...sealPaths(entry.seal)].every((file) => options.keepLive(file))) return [];
     throw new RunError(
       `another mutate (pid ${entry.pid}) is running on ${files.join(', ') || 'no file yet'}; wait for it, then run this again; ` +
         `if no mutate is running, delete ${journal}`,
       'MUTATE_RUNNING'
     );
   }
-  const lines = batch ? putBackFiles(tree, entry, journal) : [putBack(tree, entry, journal)];
+  // The session closes first, so a refused file keeps no host slot taken.
+  const closed = closeLeft(tree, entry, journal);
+  // The seal goes next, so a refused file leaves no reseal behind; a record that holds its original again is skipped.
+  const seal = putBackSeal(tree, entry.seal);
+  const lines = [...(batch ? putBackFiles(tree, entry, journal, [...closed]) : [putBack(tree, entry, journal)]), ...seal.done];
+  if (seal.refused.length > 0 || seal.running) {
+    const left = { running: seal.running, paths: seal.refused.map((item) => item.record) };
+    fs.writeFileSync(journal, `${JSON.stringify({ pid: entry.pid, start: entry.start, files: [], seal: left })}\n`);
+    const why = [
+      ...seal.refused.map((item) => `a reseal of an interrupted mutate rewrote ${item.record && item.record.file}, and ${item.why}`),
+      ...(seal.running ? [`an interrupted mutate was killed while its reseal (${seal.running}) ran, so the paths it changed are unknown`] : []),
+    ];
+    throw new RunError(afterRecovery(lines, `${why.join('; ')}. Put back from HEAD what the reseal changed, ` +
+      `run the reseal again on the clean tree for a seal git ignores, keep every other change, then delete ${journal}`), 'MUTATE_LEFTOVER');
+  }
   fs.rmSync(journal, { force: true });
   return lines;
 }
@@ -219,7 +253,8 @@ function holdSignals() {
  * The files one batch mutates, with the journal that covers all of them. `write` records a
  * file's new lines in the journal before it writes them; `putBack` writes the original back;
  * `received` names a signal held since the start; `close` restores every file it touched, drops
- * the journal when all are whole, and releases the signals.
+ * the journal when all are whole, and releases the signals. `seal`, `save` and `rehash` let the
+ * reseal record what it changed (run-mutate-seal.cjs), and `hold` records the host session open now.
  */
 function openSession(tree) {
   const journal = journalPath(tree);
@@ -227,9 +262,11 @@ function openSession(tree) {
   const stamp = `${lib.stamp()}-${process.pid}`;
   const who = owner();
   const files = new Map();
+  const seal = { running: null, paths: [] };
+  let held = null;
   const save = () => {
     const records = [...files.values()].filter((file) => file.record).map((file) => file.record);
-    fs.writeFileSync(journal, `${JSON.stringify({ ...who, files: records })}\n`);
+    fs.writeFileSync(journal, `${JSON.stringify({ ...who, files: records, seal, ...(held ? { session: held } : {}) })}\n`);
   };
   const touch = (rel) => {
     if (!files.has(rel)) files.set(rel, { abs: path.join(tree, rel), original: fs.readFileSync(path.join(tree, rel)), record: null });
@@ -239,6 +276,8 @@ function openSession(tree) {
   const release = holdSignals();
   return {
     tree,
+    seal,
+    save,
     /** The first signal held so far, read after a tick of the event loop. */
     async received() {
       await new Promise((resolve) => setImmediate(resolve));
@@ -260,6 +299,15 @@ function openSession(tree) {
       save();
       fs.writeFileSync(file.abs, mutant);
     },
+    /** Record `record` ({close, dir}) as the host session open now, or none with null. */
+    hold(record) {
+      held = record;
+      save();
+    },
+    /** Record `hash`, what a reseal left in the mutated file `rel`, as its mutant. */
+    rehash(rel, hash) {
+      files.get(rel).record.mutant = hash;
+    },
     putBack(rel) {
       const file = files.get(rel);
       if (!file || !file.record) return;
@@ -274,6 +322,7 @@ function openSession(tree) {
         if (why) failed.push(why);
         else file.record = null;
       }
+      failed.push(...unseal({ tree, seal, save }));
       if (failed.length === 0) fs.rmSync(journal, { force: true });
       else save();
       release();
@@ -282,4 +331,4 @@ function openSession(tree) {
   };
 }
 
-module.exports = { afterRecovery, holdSignals, journalPath, openSession, owner, recoverInterrupted, restore, sha };
+module.exports = { afterRecovery, alive, holdSignals, journalPath, openSession, owner, recoverInterrupted, restore, sha };

@@ -7,12 +7,12 @@
  * Its own module beside state-transition.cjs, the way state-block.cjs is: the writer stands
  * near the ceiling, and a review is a question of its own. Claim and complete say who builds
  * the item and how far it got. This says whether a cold reviewer found the item meets its
- * brief, which tier built the version it read, and how often that tier was sent back.
+ * brief, which tier built the version it read, and how often a review sent the item back.
  */
 
 const path = require('path');
 const {
-  TransitionError, findKeyLine, unquote, loadState, locateWorkItems, getIntent, setField, nowIso, writeState,
+  TransitionError, findKeyLine, unquote, loadState, locateWorkItems, getIntent, setField, removeField, nowIso, writeState,
 } = require('./state-ledger.cjs');
 const { itemRecordCall, itemReviewCall } = require('./run-call.cjs');
 const { ruleSince } = require('./flow-lock-rules.cjs');
@@ -34,6 +34,29 @@ function reviewRuleSince(root) {
 }
 
 const TIERS = new Set(['cheap', 'strong', 'escalate']);
+
+/**
+ * The review states an item lands on: `clean`, and `settled`, a fix review whose findings were
+ * all minor and whose correction stayed inside the files it lists (run-review.cjs). Every reader
+ * of the ledger's `review` field asks this, never `=== 'clean'`.
+ */
+const LANDING = new Set(['clean', 'settled']);
+const reviewLands = (review) => LANDING.has(review);
+
+/**
+ * The misses on record for an item: the fix reviews that weighed serious, counted once per item
+ * and never restarted. A ledger the released flow wrote holds no `review_misses`: it counted in
+ * `review_rejections` per tier and started over on each. Its count on the recorded tier plus the
+ * misses that climbed to that tier is the miss count it reached: cheap to strong took one,
+ * strong to escalate two. `item` holds the ledger fields as text or numbers.
+ */
+function missCount(item) {
+  const recorded = item.review_misses;
+  if (recorded !== null && recorded !== undefined && String(recorded).trim() !== '') return Number(recorded) || 0;
+  const fromCheap = String(item.complexity || '').toLowerCase() === 'low' ? 1 : 0;
+  const below = { cheap: 0, strong: fromCheap, escalate: 2 + fromCheap };
+  return (Number(item.review_rejections) || 0) + (below[item.review_tier] || 0);
+}
 
 /** One field of a ledger entry as a plain string, or null when the entry has none. */
 function entryField(lines, entry, key) {
@@ -58,7 +81,7 @@ function completedBeforeReviewRule(completedAt, since) {
  * record.
  */
 function refuseUnreviewed(lines, item, itemId, alreadyComplete, stateFile, options = {}) {
-  if (entryField(lines, item, 'review') === 'clean') return;
+  if (reviewLands(entryField(lines, item, 'review'))) return;
   const since = reviewRuleSince(path.dirname(path.dirname(path.resolve(stateFile))));
   if (alreadyComplete && completedBeforeReviewRule(entryField(lines, item, 'completed_at'), since)) return;
   throw new TransitionError(
@@ -70,20 +93,21 @@ function refuseUnreviewed(lines, item, itemId, alreadyComplete, stateFile, optio
 }
 
 /**
- * Record one review verdict on a work item.
+ * Record one review verdict on a work item: `clean`, `fix`, or `settled` over a minor-only fix.
  *
- * The count of rejections is kept per tier, because the ladder asks how often the builder
- * now holding the item was sent back: it goes up by one on a `fix` that weighs serious and
- * starts over when the tier that built the reviewed version is not the one recorded. The
- * weight comes from the review file itself (weightOf in run-review-file.cjs), so no caller
- * can forget it. `run.cjs review --item` is the caller: it validates the reviewer's file and
- * hashes the files the review binds first.
+ * The miss count is kept per item and never starts over: it goes up by one on a `fix` that
+ * weighs serious, whichever tier built the version the review read, because the ladder asks how
+ * often a review sent the item back. The weight comes from the review file itself (weightOf in
+ * run-review-file.cjs), so no caller can forget it. `settled` is written only over a recorded
+ * `fix` that weighs minor, and its review file must still say so; it keeps the count and the
+ * weight. `run.cjs review --item` is the caller: it validates the reviewer's file and hashes the
+ * files the review binds first, and for `settled` it checks the correction stayed inside them.
  */
 function reviewItem(options) {
   const file = options.file || DEFAULT_STATE_PATH;
   const verdict = String(options.verdict || '');
-  if (verdict !== 'clean' && verdict !== 'fix') {
-    throw new TransitionError(`refusing review-item: --verdict must be clean or fix, not ${verdict || 'empty'}.`, 'BAD_VERDICT');
+  if (verdict !== 'clean' && verdict !== 'fix' && verdict !== 'settled') {
+    throw new TransitionError(`refusing review-item: --verdict must be clean, fix or settled, not ${verdict || 'empty'}.`, 'BAD_VERDICT');
   }
   const hash = String(options.files_hash || '');
   if (!/^[0-9a-f]{64}$/.test(hash)) {
@@ -105,54 +129,76 @@ function reviewItem(options) {
     throw new TransitionError(`work item not found: ${options.item} in intent ${options.intent}.`, 'ITEM_NOT_FOUND');
   }
 
-  const { serious, weight } = verdict === 'fix' ? fixWeight(file, options) : { serious: false, weight: 'none' };
-  const previous = entryField(lines, item, 'review_tier') === tier
-    ? Number(entryField(lines, item, 'review_rejections')) || 0
-    : 0;
-  const rejections = previous + (serious ? 1 : 0);
+  const field = (key) => entryField(lines, item, key);
+  if (verdict === 'settled') refuseUnsettled(file, options, field);
+  const { serious, weight } = verdict === 'clean' ? { serious: false, weight: 'none' } : fixWeight(file, options);
+  const previous = missCount({
+    review_misses: field('review_misses'), review_rejections: field('review_rejections'),
+    review_tier: field('review_tier'), complexity: field('complexity'),
+  });
+  const misses = previous + (serious ? 1 : 0);
   const reviewedAt = nowIso(options.now);
   // Each insert lands directly under `status:`, so write back to front to leave the order
-  // review, review_hash, review_commit, review_tier, review_rejections, review_weight, reviewed_at.
+  // review, review_hash, review_commit, review_tier, review_misses, review_weight, reviewed_at.
   for (const [key, value] of [
     ['reviewed_at', reviewedAt],
     ['review_weight', weight],
-    ['review_rejections', String(rejections)],
+    ['review_misses', String(misses)],
     ['review_tier', tier],
     ['review_commit', commit],
     ['review_hash', hash],
     ['review', verdict],
   ]) {
-    const before = lines.length;
+    const count = lines.length;
     setField(lines, item, key, value);
-    item.end += lines.length - before;
+    item.end += lines.length - count;
   }
+  // The per-tier count of the released flow gives way to the one count.
+  removeField(lines, item, 'review_rejections');
   writeState(file, lines);
 
-  return { changed: true, item: options.item, verdict, tier, rejections, weight, reviewed_at: reviewedAt };
+  return { changed: true, item: options.item, verdict, tier, misses, weight, reviewed_at: reviewedAt };
+}
+
+/** A settle lands only on a recorded fix review whose findings were all minor. */
+function refuseUnsettled(file, options, field) {
+  const [review, weight] = [field('review'), field('review_weight')];
+  if (review === 'fix' && weight === 'minor') return;
+  const root = path.dirname(path.dirname(path.resolve(file)));
+  throw new TransitionError(`refusing to settle ${options.item}: its last review is ${review || 'none'}` +
+    `${review === 'fix' ? ` weighing ${weight || 'nothing'}` : ''}, and only a fix review whose every finding is minor settles. ` +
+    `Run ${itemReviewCall(root, options.item, options.intent)}, which settles the item when it may.`, 'NOT_SETTLED');
 }
 
 /**
- * The weight of a fix verdict, read from the item's review file beside the ledger: whether
- * it counts, and whether it weighs minor, serious or repeat. Required here, not at the top: run-review-file loads run-lib, which
- * loads the writer that loads this file.
+ * The weight of a fix verdict, or of the fix review a settle lands on, read from the item's
+ * review beside the ledger, the one reading of its contract file and its quality file: whether
+ * it counts, and whether it weighs minor, serious or repeat. Required here, not at the top:
+ * run-review-file loads run-lib, which loads the writer that loads this file.
  */
 function fixWeight(file, options) {
-  const { parseItemReview, reviewPath, weightOf } = require('./run-review-file.cjs');
+  const { reviewPath, weightOf } = require('./run-review-file.cjs');
+  const { readItemReview } = require('./run-review-quality.cjs');
   const root = path.dirname(path.dirname(path.resolve(file)));
   const rel = reviewPath(options.intent, options.item);
   const fix = `Record the review through ${itemRecordCall(root, options.item, options.intent)}, which validates the file first.`;
   let review;
   try {
-    review = parseItemReview(root, rel, options.item, { recorded: true });
+    review = readItemReview(root, options.intent, options.item, { recorded: true });
   } catch (error) {
     if (error.code !== 'BAD_REVIEW' && error.code !== 'ENOENT') throw error;
     throw new TransitionError(`refusing review-item: a fix verdict is weighed by the findings in ${rel}, which cannot be read. ${fix}`,
       'NO_REVIEW_FILE');
   }
   if (review.verdict !== 'fix') {
-    throw new TransitionError(`refusing review-item: --verdict fix, and ${rel} says ${review.verdict}. ${fix}`, 'VERDICT_MISMATCH');
+    throw new TransitionError(`refusing review-item: --verdict ${options.verdict}, and ${rel} says ${review.verdict}. ${fix}`, 'VERDICT_MISMATCH');
   }
-  return weightOf(review);
+  const weighed = weightOf(review);
+  if (options.verdict === 'settled' && weighed.weight !== 'minor') {
+    throw new TransitionError(`refusing to settle ${options.item}: ${rel} weighs ${weighed.weight}, and only a minor-only fix review settles. ${fix}`,
+      'NOT_SETTLED');
+  }
+  return weighed;
 }
 
-module.exports = { REINSTALL, completedBeforeReviewRule, refuseUnreviewed, reviewItem, reviewRuleSince };
+module.exports = { REINSTALL, completedBeforeReviewRule, missCount, refuseUnreviewed, reviewItem, reviewLands, reviewRuleSince };

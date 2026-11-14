@@ -8,15 +8,26 @@
  * A control run then proves each distinct test green with every switch off. A switch the build
  * refuses is blamed from the compiler's file:line and moved to its own build, and the control
  * runs again. A test that is red with every switch off stops the batch with no verdict at all,
- * because it is red before any mistake. Then each entry's test runs with only its own switch on:
+ * because it is red before any mistake. A control run the machine killed (a compiler or a test a
+ * signal ended) stops it too, before it builds anything more: building each mutant alone on that
+ * machine would only be killed again, so the same command runs again once it has room. Then each entry's test runs with only its own switch on:
  * the build is done, so a red run is the test noticing. An entry no switch can hold (an
  * attribute line, a string, a const item, a switch that did not compile) takes a classic
- * in-place build of its own, and every other language runs its test once in place.
+ * in-place build of its own, and every other language runs its test once in place. When the host
+ * names a session of its test wrapper (run-mutate-session.cjs), every entry whose test goes through
+ * that wrapper runs in one session of it for the whole batch instead: the control and the switched
+ * runs of the shared build, each entry on a build of its own in its turn, then the other entries,
+ * after every entry that runs in place.
+ * Every test runs through the host's `mutate.run` wrapper when it names one, and a red run of a
+ * check the host lists reads caught when it printed its finding line (run-mutate-host.cjs).
  *
  * A clean tree only, every touched file restored in a finally, and signals held until then.
  * A held signal is read before every run, so the batch starts no run after it, and every entry
  * still to run reads not run. One journal covers every file (run-mutate-journal.cjs), so a run
- * killed outright is put back by the next step that reads the tree.
+ * killed outright is put back by the next step that reads the tree. A file the host seals is
+ * resealed after each write, and its seal goes back before the next reseal and in the finally
+ * (run-mutate-seal.cjs). A reseal that a signal or the timeout ended stops the batch, as a seal
+ * that could not go back does, so no test runs against a stale seal.
  */
 
 const fs = require('fs');
@@ -25,18 +36,32 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { afterRecovery, openSession, recoverInterrupted } = require('./run-mutate-journal.cjs');
 const { readBatch } = require('./run-mutate-entries.cjs');
-const { applySwitches, blame, planRust } = require('./run-mutate-rust.cjs');
+const { applySwitches, blame, planRust, runsCompiled } = require('./run-mutate-rust.cjs');
 const { readLog, verdictOf } = require('./run-mutate-verdict.cjs');
+const { reseal, sealOf } = require('./run-mutate-seal.cjs');
+const {
+  closeOnce, hostSession, inSession, noVerdict, openOnce, runIn, sessionOf, sessionTests, syncBack, syncBuild, unsealedVerdict,
+} = require('./run-mutate-session.cjs');
+const { commandOf, hostOf } = require('./run-mutate-host.cjs');
+const { leftBehind, settle, snapshot } = require('./run-mutate-left.cjs');
 
 const { RunError } = lib;
 const OFF = 'unset INFERNO_MUTANT; ';
 const ON = (k) => `export INFERNO_MUTANT=${k}; `;
 
-/** The plan of every entry: a switch for the Rust ones that can hold one, the classic build otherwise. */
-function planAll(tree, entries) {
-  const plans = new Map(entries.filter((e) => !e.rust).map((e) => [e.k, { form: 'classic' }]));
-  for (const rel of [...new Set(entries.filter((e) => e.rust).map((e) => e.rel))]) {
-    const mine = entries.filter((e) => e.rust && e.rel === rel);
+const SOURCE_READ = 'its test starts no cargo run, so it reads the source in place';
+
+/**
+ * The plan of every entry: a switch for the Rust ones that can hold one and whose test runs
+ * compiled code (run-mutate-rust.cjs `runsCompiled`, through `hosted`'s wrapper too), the classic
+ * build otherwise.
+ */
+function planAll(tree, entries, hosted) {
+  // `why` is shown for a Rust entry only: every other language runs in place anyway.
+  const plans = new Map(entries.map((e) => [e.k, { form: 'classic', why: SOURCE_READ }]));
+  const switchable = entries.filter((e) => e.rust && runsCompiled(e.test, hosted && hosted.match));
+  for (const rel of [...new Set(switchable.map((e) => e.rel))]) {
+    const mine = switchable.filter((e) => e.rel === rel);
     const text = fs.readFileSync(path.join(tree, rel), 'utf8');
     planRust(text, mine).forEach((plan, index) => plans.set(mine[index].k, plan));
   }
@@ -59,17 +84,35 @@ async function signalled(session) {
   return signal ? `the batch stopped on ${signal}, so every entry still to run reads not run` : null;
 }
 
-/** Each distinct test once with every switch off: ok, the failed build's text, or a reason to stop. */
-async function control(session, switched, round) {
-  const tests = [...new Set(switched.map((e) => e.test))];
-  for (const [index, test] of tests.entries()) {
+/** Run entry `e`'s test behind `prefix`: in the session when it serves `e`, null when it serves `e` but reads no verdict now. */
+function runOf(hs, e, prefix, label) {
+  if (!hs.tests.has(e.k)) return lib.runShell(prefix + e.command, hs.session.tree, hs.session.log(label));
+  return noVerdict(hs) ? null : runIn(hs, e, prefix, label);
+}
+
+/**
+ * Each distinct test once with every switch off: ok, the failed build's text, or a reason to stop,
+ * `killed` when the machine ended the run.
+ */
+async function control(hs, switched, round) {
+  const { session, checks } = hs;
+  const tests = [...new Map(switched.map((e) => [e.test, e])).values()];
+  const files = [...new Set(switched.map((e) => e.abs))];
+  for (const [index, e] of tests.entries()) {
     const signal = await signalled(session);
     if (signal) return { signal };
-    const run = lib.runShell(OFF + test, session.tree, session.log(`control-${round}-${index + 1}`));
-    if (run.code === 0 && !run.signal) continue;
+    const run = runOf(hs, e, OFF, `control-${round}-${index + 1}`);
+    if (!run || (run.code === 0 && !run.signal)) continue;
+    const { test } = e;
     const text = readLog(run.log);
-    const verdict = verdictOf(run, text, null);
+    const verdict = verdictOf(run, text, null, { files, test, checks });
     if (verdict.why === 'did not build') return { text };
+    if (/^(?:killed|ended on)\b/.test(verdict.why || '')) {
+      return {
+        killed: true,
+        stop: `the run of ${test} with every switch off reads ${verdict.why} (-> ${run.log}): the machine ended it, so the batch stopped before it built any mutant alone`,
+      };
+    }
     if (verdict.caught) {
       return { stop: `the test ${test} is red with every switch off (exit ${run.code} -> ${run.log}), so it is red before any mistake and no entry has a verdict` };
     }
@@ -78,47 +121,113 @@ async function control(session, switched, round) {
   return { ok: true };
 }
 
-function execute(session, e, prefix, label) {
-  const run = lib.runShell(prefix + e.test, session.tree, session.log(label));
-  return { ...verdictOf(run, readLog(run.log), e.abs), code: run.code, log: run.log, signal: run.signal };
+function execute(hs, e, prefix, label) {
+  const run = runOf(hs, e, prefix, label);
+  if (!run) return { caught: null, ...noVerdict(hs) };
+  return { ...verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks }), code: run.code, log: run.log, signal: run.signal };
 }
 
-async function runAll(session, entries, plans) {
-  const verdicts = new Map();
-  let builds = 0;
+/**
+ * The switched Rust entries on one shared build. When the session serves one of them it opens
+ * first, on a whole tree, and gets every path a build changed once per build and back once after.
+ */
+async function runSwitched(hs, entries, plans, state) {
+  const { session, sealed, verdicts } = hs;
   let switched = entries.filter((e) => plans.get(e.k).form === 'switch');
+  const served = () => switched.some((e) => hs.tests.has(e.k));
+  if (served()) {
+    const signal = await signalled(session);
+    if (signal) return { stopped: signal };
+    const opened = openOnce(hs);
+    if (opened.stopped) return opened;
+  }
   let written = new Set();
+  const touched = new Set();
   while (switched.length > 0) {
     written = writeSwitches(session, switched, plans, written);
-    builds += 1;
-    const result = await control(session, switched, builds);
+    for (const rel of written) touched.add(rel);
+    const failed = reseal(session, sealed, [...written], `build-${state.builds + 1}`);
+    if (failed) {
+      for (const e of switched) verdicts.set(e.k, unsealedVerdict(failed));
+      if (failed.signal) return { stopped: `the reseal of the switched entries ended on ${failed.signal}, so the batch stopped` };
+      switched = [];
+      break;
+    }
+    for (const record of session.seal.paths) touched.add(record.file);
+    const synced = served() ? syncBuild(hs, [...touched], `send-build-${state.builds + 1}`) : {};
+    if (synced.stopped) return synced;
+    // A build every test of which the session serves while it reads no verdict is never run.
+    const idle = noVerdict(hs) && switched.every((e) => hs.tests.has(e.k));
+    const result = await control(hs, switched, state.builds + 1);
+    if (!idle) state.builds += 1;
     if (result.ok) break;
-    if (result.signal) return { builds, verdicts, stopped: result.signal };
-    if (result.stop) return { builds, stopped: result.stop };
+    if (result.signal) return { stopped: result.signal };
+    if (result.stop) return { stopped: result.stop, killed: result.killed, bare: true };
     const blamed = new Set(blame(result.text, switched));
     for (const k of blamed) plans.set(k, { form: 'classic', why: 'its switch did not compile' });
     switched = switched.filter((e) => !blamed.has(e.k));
   }
   for (const e of switched) {
     const signal = await signalled(session);
-    if (signal) return { builds, verdicts, stopped: signal };
-    const verdict = execute(session, e, ON(e.k), `switch-${e.k}`);
+    if (signal) return { stopped: signal };
+    const verdict = execute(hs, e, ON(e.k), `switch-${e.k}`);
     verdicts.set(e.k, verdict);
-    if (verdict.signal) return { builds, verdicts, stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
+    if (verdict.signal) return { stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
   for (const rel of written) session.putBack(rel);
+  return syncBack(hs, [...touched]);
+}
+
+/** Every entry on a build or a run of its own: in place, or in the session when it serves the entry. */
+async function runOwn(hs, entries, plans, state) {
+  const { session, sealed, verdicts, checks } = hs;
   for (const e of entries.filter((item) => plans.get(item.k).form === 'classic')) {
+    if (hs.tests.has(e.k)) {
+      const out = await inSession(hs, e, OFF);
+      if (e.rust && out.ran) state.builds += 1;
+      if (out.stopped) return out;
+      continue;
+    }
     const signal = await signalled(session);
-    if (signal) return { builds, verdicts, stopped: signal };
+    if (signal) return { stopped: signal };
     const line = session.original(e.rel).split('\n')[e.n - 1];
     session.write(e.rel, new Map([[e.n, line.slice(0, e.col) + e.replace + line.slice(e.col + e.find.length)]]));
-    const verdict = execute(session, e, OFF, `own-${e.k}`);
+    const failed = reseal(session, sealed, [e.rel], `own-${e.k}`);
+    if (failed && failed.left) return { stopped: `the batch stopped, since ${failed.why}` };
+    const verdict = failed ? unsealedVerdict(failed) : execute(hs, e, OFF, `own-${e.k}`);
     session.putBack(e.rel);
-    if (e.rust) builds += 1;
+    if (e.rust) state.builds += 1;
     verdicts.set(e.k, verdict);
-    if (verdict.signal) return { builds, verdicts, stopped: `the test of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
+    const what = failed ? 'reseal' : 'test';
+    if (verdict.signal) return { stopped: `the ${what} of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
-  return { builds, verdicts };
+  for (const e of entries.filter((item) => plans.get(item.k).form === 'session')) {
+    const out = await inSession(hs, e);
+    if (out.stopped) return out;
+  }
+  return {};
+}
+
+/**
+ * The switched entries, then every entry on its own; the host's one session closes after the last
+ * entry it serves, on every exit. A stop that comes `bare` leaves every entry with no verdict.
+ */
+async function runAll(session, sealed, entries, plans, groups) {
+  const verdicts = new Map();
+  const hs = hostSession({ session, sealed, hosted: groups.hosted, tests: groups.tests, checks: groups.host.checks, verdicts, signalled });
+  const state = { builds: 0 };
+  let out = {};
+  try {
+    out = await runSwitched(hs, entries, plans, state);
+    if (!out.stopped) out = await runOwn(hs, entries, plans, state);
+  } finally {
+    const closed = closeOnce(hs);
+    if (closed.stopped && !out.stopped) out = closed;
+  }
+  return {
+    builds: state.builds, verdicts: out.bare ? undefined : verdicts, stopped: out.stopped, killed: out.killed,
+    sessions: hs.sessions, notes: hs.notes, served: hs.tests,
+  };
 }
 
 const yamlText = (text) => `"${String(text).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
@@ -138,25 +247,41 @@ function lineOf(row) {
 
 function report(session, recovered, entries, plans, result) {
   if (!result.verdicts) {
-    return { exit: 2, payload: { stopped: result.stopped, builds: result.builds, restored: true }, out: [...recovered, result.stopped, 'every file is restored'] };
+    const again = result.killed ? ['run the same command again'] : [];
+    const notes = result.notes || [];
+    return {
+      exit: 2, payload: { stopped: result.stopped, builds: result.builds, restored: true, ...(notes.length > 0 ? { notes } : {}) },
+      out: [...recovered, result.stopped, ...notes, 'every file is restored', ...again],
+    };
   }
   const rows = entries.map((e) => rowOf(e, plans.get(e.k), result.verdicts.get(e.k)));
   const rust = entries.filter((e) => e.rust);
   const switched = rust.filter((e) => plans.get(e.k).form === 'switch').length;
-  const others = entries.length - rust.length;
+  const hosted = rows.filter((row) => row.form === 'session');
+  const others = entries.length - rust.length - hosted.length;
+  const served = rust.filter((e) => result.served && result.served.has(e.k)).length;
+  const sharing = [
+    served > 0 ? plural(served, 'Rust entry', 'Rust entries') : '',
+    hosted.length > 0 ? plural(hosted.length, 'other entry', 'other entries') : '',
+  ].filter(Boolean).join(' and ');
   const counted = `${plural(result.builds, 'build', 'builds')} for ${plural(rust.length, 'Rust entry', 'Rust entries')} ` +
     `(${switched} switched, ${rust.length - switched} on a build of their own)` +
-    (others > 0 ? `; ${plural(others, 'other entry', 'other entries')} ran a test once in place` : '');
+    (others > 0 ? `; ${plural(others, 'other entry', 'other entries')} ran a test once in place` : '') +
+    (result.sessions > 0 && sharing ? `; ${sharing} shared ${plural(result.sessions, 'session', 'sessions')} of the host's wrapper` : '');
+  const notes = result.notes || [];
   const paste = rows.filter((row) => row.caught !== null)
     .flatMap((row) => [`  - criterion: ${yamlText(row.criterion)}`, `    test: ${yamlText(row.test)}`, `    caught: ${row.caught ? 'yes' : 'no'}`]);
   const file = session.log('mutants').replace(/\.log$/, '.yaml');
   fs.writeFileSync(file, paste.length > 0 ? `${paste.join('\n')}\n` : '');
-  const out = [...recovered, ...rows.map(lineOf), counted, ...(result.stopped ? [result.stopped] : [])];
+  const out = [...recovered, ...rows.map(lineOf), counted, ...notes, ...(result.stopped ? [result.stopped] : [])];
   if (paste.length > 0 && out.length + paste.length + 1 <= 30) out.push('paste under mutants:', ...paste);
   else if (paste.length > 0) out.push(`paste under mutants: the lines in ${file}`);
   return {
     exit: result.stopped ? 2 : 0,
-    payload: { builds: result.builds, rust: rust.length, switched, entries: rows, paste: file, restored: true, stopped: result.stopped },
+    payload: {
+      builds: result.builds, rust: rust.length, switched, entries: rows, paste: file, restored: true, stopped: result.stopped,
+      ...(result.sessions > 0 ? { sessions: result.sessions } : {}), ...(notes.length > 0 ? { notes } : {}),
+    },
     out,
   };
 }
@@ -165,25 +290,35 @@ function report(session, recovered, entries, plans, result) {
 async function batch(options) {
   const tree = options.tree || lib.repoRoot(options.cwd);
   const file = path.resolve(options.cwd || process.cwd(), options.batch);
+  const config = lib.readConfig(tree, options.config);
+  const sealed = sealOf(config);
   const recovered = recoverInterrupted(tree);
   const rel = path.relative(tree, file).split(path.sep).join('/');
-  const dirty = lib.dirtyPaths(tree, rel.startsWith('../') || path.isAbsolute(rel) ? [] : [rel]);
+  // `pending`: the review file a record step is recording, which runs this batch before it commits.
+  const dirty = lib.dirtyPaths(tree, [...(rel.startsWith('../') || path.isAbsolute(rel) ? [] : [rel]), ...(options.pending || [])]);
   if (dirty.length > 0) {
     throw new RunError(afterRecovery(recovered,
       `refusing to mutate a dirty tree: ${dirty.slice(0, 5).join(', ')} is uncommitted. Mutate once the tree is clean.`), 'DIRTY');
   }
-  const entries = readBatch(tree, file);
-  const plans = planAll(tree, entries);
+  const host = hostOf(config);
+  const entries = readBatch(tree, file).map((e) => ({ ...e, command: commandOf(host, tree, e.test) }));
+  const hosted = sessionOf(config);
+  const plans = planAll(tree, entries, hosted);
+  const groups = { hosted, host, tests: sessionTests(hosted, entries, plans) };
+  // What git calls changed before the first write: the batch file and the review being recorded.
+  const before = snapshot(tree);
   const session = openSession(tree);
   let result = null;
   let failed = [];
   try {
-    result = await runAll(session, entries, plans);
+    result = await runAll(session, sealed, entries, plans, groups);
   } finally {
     failed = session.close();
   }
-  if (failed.length > 0) return { exit: 2, payload: { restored: false, failed }, out: [...recovered, ...failed] };
-  return report(session, recovered, entries, plans, result);
+  // A batch that stopped says why, before the paths it could not put back.
+  const stopped = result && result.stopped ? [result.stopped] : [];
+  if (failed.length > 0) return { exit: 2, payload: { restored: false, failed, stopped: stopped[0] }, out: [...recovered, ...stopped, ...failed] };
+  return settle(report(session, recovered, entries, plans, result), leftBehind(tree, before));
 }
 
 module.exports = { batch };

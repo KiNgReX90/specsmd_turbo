@@ -11,12 +11,14 @@ host: claude                      # claude or codex: the fleet this file configu
 autonomy:
   level: full                     # full or review; accepted for compatibility, the planner never pauses either way
 
-# Model per builder tier. Values are passed VERBATIM as the per-dispatch model override,
+# Model per builder tier and oracle route. Values are passed VERBATIM as the per-dispatch model override,
 # so use a form the host accepts (full model IDs keep a tier pinned to a release).
 models:
   strong: claude-opus-5-5         # builders on complexity medium and high
   cheap: claude-sonnet-5-5        # builders on complexity low
-  escalate: claude-opus-5-5       # the fresh builder that takes over an item after two strong-tier rejections
+  escalate: claude-opus-5-5       # the fresh builder that takes over an item at its second miss, cause first
+  oracle: claude-opus-5-5         # the oracle on the normal route, every ask whose impact and complexity are not both high; absent, roles.oracle, else the oracle's own pin. Its effort is the oracle role's, xhigh by default
+  # oracle_hard: claude-fable-5-2 # the oracle on the hard route, an ask graded high on both; set it only when the account has that tier: without it every ask takes the normal route. Codex has no hard route, its oracle's pin is the host's top tier
 
 # Optional: model and effort per role, rendered into the installed agent and command
 # files at the next install, so a host never edits an installed file. A role or key
@@ -28,6 +30,7 @@ models:
 #   config: {model: claude-sonnet-5-5, effort: high}
 #   oracle: {model: claude-opus-5-5, effort: xhigh}
 #   planner: {model: claude-opus-5-5, effort: xhigh}
+#   reviewer-quality: {model: claude-opus-5-5, effort: high}   # the quality lens beside the contract review of every item
 #   scanner: {model: claude-opus-5-5, effort: high}
 
 # planner:
@@ -38,7 +41,7 @@ models:
 
 review:
   model: claude-opus-5-5          # the cold reviewer run.cjs review dispatches after every item and before the gate
-  # outside: ["wiki/**"]          # optional: globs of a knowledge base the base branch syncs; a folded change there that the intent never touched keeps the intent review current; without it any folded change voids the review
+  # outside: ["wiki/**"]          # optional: path globs where a change a fold of the base brings in keeps the intent review current while the intent never touched the file, such as a knowledge base the base branch syncs; ["**"] binds the review to the files the intent changed, so only a fold that changes one of them voids it, and the delta review's dispatch names those files and the base's change to read; without it any folded change voids the review; a --config file inherits it
 
 scan:
   model: claude-opus-5-5          # the four cold scanners run.cjs scan dispatches before the intent review; absent, roles.scanner, else the scanner role's own pin. On Codex the role entry alone decides
@@ -49,23 +52,35 @@ verification:
     - cargo test --workspace
     - npm run test:e2e
   # merge_slot: true              # optional: gate --detach folds and starts only when its ticket heads one queue shared by every worktree of the repository; without it every gate folds and starts at once
-  # ship_cleanup: "node scripts/ship-cleanup.mjs"   # optional: the host command ship and teardown run from the primary checkout once the worktree and branch are gone, with INFERNO_BRANCH and INFERNO_TREE set; a failure prints its line and never undoes the ship; without it ship ends at the teardown
+  # ship_cleanup: "node scripts/ship-cleanup.mjs"   # optional: the host command ship and teardown run from the primary checkout once the worktree and branch are gone, with INFERNO_BRANCH and INFERNO_TREE set; a failure prints its line and never undoes the ship; without it ship and teardown leave the branch's cache folder and print a line naming it
+  # lint:                         # optional: lint and analysis commands the quality reviewer runs once per item review, in the worktree; its dispatch carries one lint line per command, and it takes over only what they report on lines the item added
+  #   - npm run lint
   integrate:                      # optional: the cheap checks, run by `run.cjs integrate` after every item lands, on the committed tree with the base folded in; a red goes back to the warm builder instead of waiting for the gate
     - npm run check
   finalize_scopes:                # optional: a listed command runs only when the diff since the merge base touches a matching path, an unlisted command always runs
     "cargo test --workspace": ["src-tauri/**", "Cargo.*"]
     "npm run test:e2e": ["src/**", "src-tauri/**", "e2e/**", "package.json", "package-lock.json", "playwright.config.*"]
+  # session:                      # optional: for checks that run through a wrapper which syncs the tree to another machine and waits there for a slot; the commands of one integrate, or of one gate's finalize list, that match reaches run back to back in one session of the wrapper, so the tree is synced and the slot taken once, not once per command, and each keeps its own proof as without the key; a command match does not reach runs here as before; the session opens at the first such command that runs, so skipped and still-green checks open nothing; each command runs in the tree under bash with INFERNO_TREE and INFERNO_SESSION, an empty directory of this session outside the tree for the wrapper's own state; a session that does not open fails every command it would run, and none of them runs; a --config file inherits it
+  #   match: '^tools/remote-test\.sh \S+ '    # a regex in single quotes that marks a command as going through the wrapper when it matches at its start; the rest of the command is the check the session runs, and a gate mark may name it
+  #   open: "tools/remote-test.sh open"        # copies the whole tree as it stands into a fresh session and takes the slot
+  #   run: "tools/remote-test.sh run"          # runs INFERNO_TEST, the check, in the session; its output and exit code are the check's
+  #   close: "tools/remote-test.sh close"      # gives the session and the slot up; it runs on every exit once open started, and in the next integrate, gate, or verify-item with run in the tree when a kill skipped it, so it exits 0 when nothing is open
+  # refused: '^remote-run: REFUSED '   # optional: a regex in single quotes of the line the host's wrapper prints when it ran nothing (machine gone, session slot ended); a check, or a session open, that exits non-zero with such a line is no verdict, mints no proof and runs once more, in a fresh session where it has one; a second refusal ends integrate or the gate with exit 5 and a line to run the step again, and no FAIL; a non-zero exit without the line fails as before; a regex an empty line matches is refused; a --config file inherits it
+  # run: "tools/remote-test.sh {tree} {test}"   # optional: the wrapper an item's own check (its finalize_check) runs through in run.cjs verify-item, so it goes where the host's tests go; the shape of mutate.run: {tree} and {test} each go in once as one single-quoted shell word after the wrapper's own words, and a check that already starts with those words runs as written; with session the placed check takes the session's slot and its run gets the bare check, with refused a check refused twice exits 5 and leaves the last proof as it was; it first closes a session a killed run left open, as integrate does; the proof and the PASS or FAIL line hold the command as it ran; without it the check runs here as before; a --config file inherits it
+  # wrapped: '^(?:\w+=\S* +)*"?(?:~|/home/dev/acme-shop)/tools/remote-test\.sh"? '   # optional, beside run: a regex in single quotes of the other ways an item's check already spells the wrapper (an environment prefix, its absolute path or its path under ~, in double quotes); a check it matches at its start runs as written; a regex an empty check matches is refused
   # Lanes, optional: gate --detach starts each lane whose scope the diff since the merge base touched, gate --wait waits
   # for it, and green owes the smoke lane while it is in scope. A --config file inherits each lane it does not set.
   # Exit contract of a lane command: 0 green, 10 product red, 11 instrument red, and any other code is instrument red.
   # The host runner retries once itself and the flow never retries a lane. An instrument red passes only against a
-  # harness fix already on the base branch, through the step gate --wait prints.
+  # harness fix already on the base branch, and a product red only when the lane's verdicts prove it intermittent, each
+  # through the step gate --wait prints. gate --detach --lane <name> walks one lane again, also while the gate job runs.
   smoke:                          # a short smoke run of the built app
     command: npm run smoke
     scope: ["src/**", "src-tauri/**"]
-    # accept_check: npm run smoke:accept   # optional: the host check an instrument red must pass to be accepted. It runs in the tree with INFERNO_LANE, INFERNO_LANE_LOG, INFERNO_LANE_RUN and INFERNO_GATE_CONFIG set. Exit 0 accepts, and any other exit refuses with its last line. Without it the harness fix alone accepts.
+    # accept_check: npm run smoke:accept   # optional: the host check an instrument red must pass to be accepted. It runs in the tree with INFERNO_LANE, INFERNO_LANE_LOG, INFERNO_LANE_RUN, INFERNO_HARNESS_FIX (the fix sha) and INFERNO_GATE_CONFIG set. Exit 0 accepts, and any other exit refuses with its last line. Without it the harness fix alone accepts.
     # stop: npm run smoke:stop             # optional: the host command that stops a superseded walk wherever it runs outside the flow's process groups, such as on another machine, and exits 0 only once that walk is gone. It runs in the tree with INFERNO_LANE, INFERNO_LANE_PID, INFERNO_LANE_LOG and INFERNO_GATE_CONFIG set, once the flow has sent SIGTERM to the lane job's process group and SIGKILL to that group if a member outlives the grace period. Any other exit keeps the supersede pending and prints its last line. Without it gate --detach --supersede refuses and the lane is waited on.
     # red_line: '^PRODUCT RED '            # optional: a regex in single quotes; a log line matching it turns gate --wait red while the lane walks on; without it a red shows when the lane ends
+    # verdicts: ../smoke-verdicts.json     # optional: the file, relative to the tree, the lane command writes on a product red, as {"red": [{"name": "<test>", "base": "green", "again": "green"}]}: one entry per test red on the branch, with its walk on the base and its second walk on the branch. Only while the file was written since the run started and every entry reads green twice does run.cjs smoke --accept-intermittent accept the red, naming each test, its reason and its signer. Ship writes the accept into the ship commit as one exception: line; past two accepts of a test on the base, the next waits for a commit there carrying "Fixes-intermittent: <test>". Without it a product red has no accept.
   windows:                        # the suite on a Windows machine
     command: npm run test:windows
     scope: ["src/**", "src-tauri/**"]
@@ -83,6 +98,7 @@ wiring:                           # optional: per kind (command, table or event)
 
 # real_app:                       # optional: globs of the helpers and case texts that drive the real app binary; probes tells each builder to update them, and the reviewer dispatch carries the check that lists every line there still naming a test id, label or route the diff removed and every file there that drives a screen the diff changed; a --config file inherits it
 #   paths: ["integration/lib/**", "integration/*.test.mjs"]
+#   prove: "node integration/prove-journeys.mjs"   # optional: the command that runs, on the real app binary, the journeys an item changed; verify-item runs it in the tree, with INFERNO_TREE and INFERNO_JOURNEYS (a file listing the item's changed paths under paths that the tree still holds, one per line), whenever there is one, records the run in the item's proof, fails on a red, and the item's review waits for that run; without it no item runs a journey and the gate's lanes run a new case first
 
 # cases:                          # optional: the tester case texts every landing answers for; integrate, the gate and `run.cjs cases --range` refuse a range that leaves a case naming a removed label, reaches a case it neither edits nor names on a "Cases: TC-1, TC-2" commit line, or changes a test with no case edited and no Cases line ("Cases: none" answers that rule only); a --config file inherits it
 #   files:
@@ -95,6 +111,29 @@ wiring:                           # optional: per kind (command, table or event)
 #   sources: ["src/**", "src-tauri/src/**"]   # product source; the tests and case files are never source
 #   expectations: ["e2e/**", "src/**/*.test.ts"]   # tests whose changed lines a case may describe
 
+# mutate:                         # optional: how run.cjs mutate runs a mutant on this host; a --config file inherits it
+#   reseal_seconds: 300           # optional: the most seconds one reseal may run; past it, mutate ends the reseal and every process it started (default 300)
+#   sealed:                       # optional: files the host seals with a manifest of their digests; run.cjs mutate runs the reseal after a mutant lands in one, so the test sees a valid seal; every other path the reseal changed gets its bytes from before back after the revert, on every exit; a reseal that exits non-zero reads no verdict, and one that a signal ended or that ran past reseal_seconds reads no verdict and stops the run
+#     - paths: ["definitions/**"]                          # globs of the sealed files and of the seal; a seal git ignores goes back only when these globs cover it
+#       reseal: "node scripts/lib/definitions/pack.mjs --write"   # the command that rewrites the seal, run in the tree
+#   session:                      # optional: for tests that run through a wrapper which syncs the tree to another machine and waits there for a slot; every mutant of a batch whose test command goes through it shares one session of the wrapper, whatever its test, so the tree is synced and the slot taken once per batch, not once per mutant; per mutant the changed file (and every path its reseal changed) is sent, its own test runs, and the file is put back and sent again, and a shared Rust build sends its switched files once and runs its control and its switched runs there; each command runs in the tree under bash with INFERNO_TREE and INFERNO_SESSION, an empty directory of this session outside the tree for the wrapper's own state; a session that does not open, or a send that fails, reads no verdict, a send back that fails leaves the session's remaining mutants with no verdict, and a command a signal ended stops the run
+#     match: '^tools/remote-test\.sh \S+ '    # a regex in single quotes that marks a test command as going through the wrapper when it matches at its start; the rest of the command is the test the session runs
+#     open: "tools/remote-test.sh open"        # copies the whole tree as it stands into a fresh session and takes the slot
+#     send: "tools/remote-test.sh send"        # puts INFERNO_FILE, a path relative to the tree, into the session as the tree holds it now, and deletes it there when the tree no longer does
+#     run: "tools/remote-test.sh run"          # runs INFERNO_TEST in the session; its output and exit code are the test's
+#     close: "tools/remote-test.sh close"      # gives the session and the slot up; it runs on every exit once open started, and in the next step that reads the tree when a kill skipped it, so it exits 0 when nothing is open
+#   run: "tools/remote-test.sh {tree} {test}"   # optional: the wrapper every mutant test runs through, so a reviewer writes the bare test and the host decides the machine; {tree} and {test} each go in once as one single-quoted shell word, a test that already starts with the wrapper's own words runs as written, session.match reads the wrapped command, and the wrapper passes INFERNO_MUTANT on to the test; {test} is one shell word, so the wrapper runs its last argument under a shell, and a wrapper that runs its arguments as a command line takes the key as "<wrapper> {tree} bash -c {test}"
+#   wrapped: '^(?:\w+=\S* +)*"?(?:~|/home/dev/acme-shop)/tools/remote-test\.sh"? '   # optional, beside run: a regex in single quotes of the other ways recorded tests already spell the wrapper (an environment prefix, its absolute path or its path under ~, in double quotes); a test it matches at its start, as the reviewer wrote it, runs as written beside one that starts with the wrapper's own words; without it only those words count
+#   checks:                       # optional: the host's checks (a contract script, a lint), which print no test runner's summary; a red run of a listed check that printed its finding line reads caught, and one that printed no such line (a wrapper error) reads no verdict
+#     - match: '^npm run check:wire\b'     # a regex in single quotes that marks a test command, as the reviewer wrote it, as this check
+#       finding: '^WIRE MISMATCH: '         # a regex in single quotes of the line the check prints on a finding
+
+# standards:                      # optional: the project's rule files under .specs-inferno/standards/, each with the path globs it applies to; dispatch-log prints every file that applies to a builder's ownership.editable, and a listed file that does not exist refuses the dispatch; /specsmd-inferno-standards drafts them; a --config file without the block takes this one
+#   - file: typescript.md
+#     paths: ["src/**/*.ts", "src/**/*.tsx"]
+#   - file: copy.md
+#     paths: ["src/copy/**"]
+
 worktree:
   bootstrap:                      # optional: commands run inside a fresh intent worktree before the first dispatch
     - npm ci
@@ -102,6 +141,9 @@ worktree:
 dispatch:
   constraints:                    # optional: lines pasted VERBATIM into every builder and tester dispatch (machine limits, wrappers, what may not run in parallel)
     - "Heavy commands (builds, test suites, cargo) run bare; a machine-wide guardrail wraps them. Exit 137 or 143 is the cap: run once more, then report."
+  # tools:                        # optional: the tools the roles and checks use, each with the version every machine of the host installs; `run.cjs tools` proposes the tools that fit the stack, `--write <id,id>` writes the accepted ones here and in verification.integrate and dispatch.constraints, and it prints a line for each listed tool this machine lacks
+  #   shellcheck: "0.10.0"
+  #   ast-grep: "0.39.0"
 
 # Delivery mode: how the orchestrator integrates and closes an intent.
 #   auto-close    (default) commit each item on the intent branch, then merge

@@ -6,9 +6,10 @@
  * The review binds the whole tree by content (`proofs.scopeHash` with no scope), which leaves
  * out `.specs-inferno/`: a ledger commit, the review file itself and an archive move keep it
  * current, and any code change voids it, except a change to a `review.outside` kb that the
- * base synced and the intent never touched (outsideHash). The gate checks it after its fold, so it never proves
- * a tree the reviewer did not read, and green checks it before every merge, which is the one
- * call both hosts and a hand merge make.
+ * base synced and the intent never touched (outsideHash); `["**"]` binds it to the files the
+ * intent changed. The gate checks it after its fold, so it never proves a tree the reviewer did
+ * not read, and green checks it before every merge, which is the one call both hosts and a hand
+ * merge make.
  */
 
 const fs = require('fs');
@@ -19,10 +20,16 @@ const lib = require('./run-lib.cjs');
 const proofs = require('./run-proofs.cjs');
 const { intentOf } = require('./run-worktrees.cjs');
 const { parseIntentReview } = require('./run-intent-review-file.cjs');
+const { proofOwed } = require('./run-review-aside.cjs');
 const { itemProofs } = require('./run-mutant-coverage.cjs');
-const { intentReviewCall, scanCall } = require('./run-call.cjs');
+const { intentRecordCall, intentReviewCall, scanCall } = require('./run-call.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { reviewOutside } = require('./run-config-gates.cjs');
+const { foldBound, isLedger, ownFiles } = require('./run-intent-fold.cjs');
+const { reviewPath, sentBack } = require('./run-review-file.cjs');
+const { previousReview } = require('./run-review-delta.cjs');
+const { deferredItems } = require('./state-defer.cjs');
+const { evidenceExists, openAfterShip } = require('./run-after-ship.cjs');
 
 const { RunError } = lib;
 
@@ -51,7 +58,10 @@ function intentFor(tree, options = {}) {
   );
 }
 
-/** The work items of the intent, from its spec files, live or archived. */
+/**
+ * The work items of the intent, from its spec files, live or archived. A deferred item is left
+ * out: it owes no review, no proof and no mutant, so neither the review nor the gate waits on it.
+ */
 function intentItems(tree, intentId) {
   const ids = new Set();
   for (const base of [['intents'], ['archive', 'intents']]) {
@@ -59,7 +69,8 @@ function intentItems(tree, intentId) {
     if (!fs.existsSync(dir)) continue;
     for (const file of fs.readdirSync(dir)) if (file.endsWith('.md')) ids.add(file.slice(0, -3));
   }
-  return [...ids].sort();
+  const deferred = deferredItems(lib.statePath(tree), intentId);
+  return [...ids].filter((id) => !deferred.has(id)).sort();
 }
 
 /** The ids of the collected scan's lines, or null when no scan was collected. */
@@ -76,53 +87,62 @@ function scanOwed(tree, intentId) {
   return scanIds(tree, intentId) === null;
 }
 
-/** Validate a review file against the intent as it stands. */
-function parseFor(tree, rel, intentId, recorded) {
+/** Validate a review file against the intent as it stands; `owing` false leaves out what each criterion owes. */
+function parseFor(tree, rel, intentId, recorded, owing = true) {
   const items = intentItems(tree, intentId);
   return parseIntentReview(tree, rel, {
-    recorded, items, scanIds: scanIds(tree, intentId) || [], proofs: itemProofs(tree, intentId, items),
+    recorded, items, scanIds: scanIds(tree, intentId) || [], proofs: owing ? itemProofs(tree, intentId, items) : [],
   });
 }
 
 /**
- * The tree hash that leaves out the kb the base synced, or null when `review.outside` is unset.
+ * The tree hashes that leave out the kb the base synced, or null when `review.outside` is unset.
  * A kb path is left out only while the branch holds the base's version of it: one that differs
  * from the merge base of the base or of origin's base, or is dirty, is the intent's own edit and
- * stays in, so a doubtful path voids the review rather than keeps it.
+ * stays in, so a doubtful path voids the review rather than keeps it. `["**"]` makes every path
+ * kb, which binds the review to the files the intent changed. The first hash is the one recorded;
+ * the second names the intent's ledger files too, as reviews recorded before that was fixed hashed them.
  */
-function outsideHash(tree, config) {
+function outsideHashes(tree, config) {
   const globs = reviewOutside(config || {});
   if (globs.length === 0) return null;
   const base = resolveBase(config, null, tree);
   // A base that is the tree's own branch moves with it, so no diff tells its kb edits from a sync.
-  if (base === lib.currentBranch(tree)) return null;
-  const refs = [base];
-  if (lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}`], { tolerate: true })) refs.push(`origin/${base}`);
-  const reads = [
-    ['diff', '--name-only', '--no-renames', '-z', 'HEAD'], ['ls-files', '--others', '--exclude-standard', '-z'],
-    ...refs.map((ref) => ['diff', '--name-only', '--no-renames', '-z', `${ref}...HEAD`]),
-  ];
-  const own = new Set();
-  for (const args of reads) {
-    const out = lib.git(tree, args, { tolerate: true });
-    if (out === null) return null; // a base it cannot diff leaves the kb in: the review is judged by the whole tree
-    for (const file of out.split('\0').filter(Boolean)) own.add(file);
-  }
+  const own = ownFiles(tree, base);
+  if (own === null) return null; // a base it cannot diff leaves the kb in: the review is judged by the whole tree
   // The intent's own kb paths are named too: a page it deleted is in no hash of the files that exist.
-  const kb = [...own].filter((file) => lib.matchesAny(file, globs)).sort();
+  // A ledger path is in no tree hash, so it is named in none either: the review's own record would void it.
+  const named = [...own].filter((file) => lib.matchesAny(file, globs)).sort();
   const hash = proofs.scopeHash(tree, null, { skip: (file) => lib.matchesAny(file, globs) && !own.has(file) });
-  return createHash('sha256').update(JSON.stringify([hash, kb])).digest('hex');
+  const digest = (names) => createHash('sha256').update(JSON.stringify([hash, names])).digest('hex');
+  return [digest(named.filter((file) => !isLedger(file))), digest(named)];
+}
+
+/** The hash `run.cjs review` records as tree_outside, or null when `review.outside` is unset. */
+function outsideHash(tree, config) {
+  const hashes = outsideHashes(tree, config);
+  return hashes && hashes[0];
 }
 
 /** The review reads the tree as it stands, whole or with the kb the base synced left out. */
 function reviewCurrent(tree, config, review) {
   if (review.tree === proofs.scopeHash(tree)) return true;
-  return typeof review.tree_outside === 'string' && review.tree_outside === outsideHash(tree, config);
+  if (typeof review.tree_outside !== 'string') return false;
+  const hashes = outsideHashes(tree, config);
+  return Boolean(hashes) && hashes.includes(review.tree_outside);
 }
+
+const changedLine = (review) => `the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`;
 
 /**
  * The review as it holds for the tree: `owed` lists every reason it does not, empty when a
- * recorded review reads clean for the current content.
+ * recorded review reads clean for the current content. A recorded file the review refuses now is
+ * `refused`: it goes back to its reviewer, and the record call is what runs next, never the call
+ * that read it. A clean review whose only refusal is a criterion that owes a proof, on a tree
+ * that moved since its record, as a fold that rewrote a mutated line or a pinned copy leaves it,
+ * is owed a review instead: its record's dispatch read another tree, so no record of the file can
+ * close the gap. The review call reads it as a delta of the recorded review, or whole while that
+ * review still binds the tree. An error of the count that is no refusal reads as any other error.
  */
 function intentReviewState(tree, config, intentId) {
   const rel = intentReviewPath(tree, intentId);
@@ -137,15 +157,20 @@ function intentReviewState(tree, config, intentId) {
   }
   let review;
   try {
-    review = parseFor(tree, rel, intentId, true);
+    review = parseFor(tree, rel, intentId, true, false);
+    parseFor(tree, rel, intentId, true);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
-    return { rel, review: null, owed: [...owed, error.message] };
+    if (review && error.refused && review.tree !== proofs.scopeHash(tree)) {
+      const delta = !reviewCurrent(tree, config, review);
+      return { rel, review: delta ? review : null, owed: [...owed, ...(delta ? [changedLine(review)] : []), error.refused] };
+    }
+    return { rel, review: null, refused: Boolean(error.refused), owed: [...owed, sentBack(error, intentRecordCall(tree))] };
   }
   if (!reviewCurrent(tree, config, review)) {
-    owed.push(`the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`);
+    owed.push(changedLine(review));
   } else if (review.verdict !== 'clean') {
-    owed.push('the review says fix and its findings are not fixed');
+    owed.push(proofOwed(tree, intentId, review) || 'the review says fix and its findings are not fixed');
   }
   return { rel, review, owed };
 }
@@ -161,29 +186,37 @@ function gateRefusal(tree, config, intentId, before, shown) {
   const out = [...shown, ...state.owed.map((reason) => `intent review owed: ${reason}`)];
   const moved = lib.git(tree, ['rev-parse', 'HEAD']) !== before;
   if (moved) {
-    out.push(`the fold moved the tree from ${lib.git(tree, ['rev-parse', '--short', before])}; the reviewer reads the base delta from there`);
+    const from = `the fold moved the tree from ${lib.git(tree, ['rev-parse', '--short', before])}`;
+    // Under review.outside the delta dispatch names what of the fold the review binds (run-intent-fold.cjs).
+    const fold = foldBound(tree, config, before, resolveBase(config, null, tree));
+    if (!fold) out.push(`${from}; the reviewer reads the base delta from there`);
+    else out.push(fold.bound.length ? `${from} and changed what the review binds: ${fold.bound.join(' ')}` : `${from} and changed no file the review binds`);
   }
-  out.push(`run ${intentReviewCall(tree)} first, then gate again`);
+  out.push(`run ${state.refused ? intentRecordCall(tree) : intentReviewCall(tree)} first, then gate again`);
   return { exit: 3, payload: { ok: false, tree, owed: ['review'], reasons: state.owed, folded: moved }, out };
 }
 
 /**
- * Whether an evidence path exists. A path inside the intent's own dir is found wherever the
- * intent lives now: both hosts archive that dir before they merge.
+ * The items of the intent whose minor-only fix settled with no second item review, each with
+ * the range nobody re-read: from the commit that fix review read to the commit it settled at.
+ * Only those settled after `from`, the commit the intent review reads from, so a delta of the
+ * intent review lists none the last one already read.
  */
-function evidenceExists(tree, intentId, rel) {
-  const live = `${lib.SPECS_DIR}/intents/${intentId}/`;
-  const archived = `${lib.SPECS_DIR}/archive/intents/${intentId}/`;
-  const candidates = [rel];
-  if (rel.startsWith(live)) candidates.push(archived + rel.slice(live.length));
-  if (rel.startsWith(archived)) candidates.push(live + rel.slice(archived.length));
-  return candidates.some((candidate) => fs.existsSync(path.join(tree, candidate)));
+function settledItems(tree, intentId, from) {
+  const intent = lib.readLedger(tree).intents.find((entry) => entry.id === intentId);
+  const short = (ref) => lib.git(tree, ['rev-parse', '--short', ref], { tolerate: true }) || ref.slice(0, 7);
+  return (intent ? intent.items : []).filter((item) => item.review === 'settled' && item.review_commit).flatMap((item) => {
+    if (from && lib.git(tree, ['merge-base', '--is-ancestor', item.review_commit, from], { tolerate: true }) !== null) return [];
+    const read = previousReview(tree, reviewPath(intentId, item.id));
+    return [{ item: item.id, range: `${read ? short(read.commit.trim()) : 'unknown'}..${short(item.review_commit)}` }];
+  });
 }
 
 /**
  * What a merge still owes beyond the command proofs: the review for this tree and the
- * evidence of every external criterion. The smoke lane's proof joins this list when the
- * flow gains one.
+ * evidence of every external criterion. `after` lists the after_ship entries whose path is
+ * missing, which the merge does not wait for and the ship prints as owed (run-after-ship.cjs).
+ * The smoke lane's proof joins this list when the flow gains one.
  */
 function mergeOwed(tree, config, intentId) {
   const owed = [];
@@ -200,10 +233,10 @@ function mergeOwed(tree, config, intentId) {
     owed.push('evidence');
     out.push(...missing.map((entry) => `evidence owed: ${entry.evidence} for ${entry.criterion}`));
   }
-  return { owed, out };
+  return { owed, out, after: state.review ? openAfterShip(tree, intentId, state.review.criteria) : [] };
 }
 
 module.exports = {
   gateRefusal, intentFor, intentItems, intentReviewPath, intentReviewState, mergeOwed, outsideHash, parseFor, reviewCurrent,
-  scanOwed, scanPath,
+  scanOwed, scanPath, settledItems,
 };

@@ -5,10 +5,12 @@ const path = require("node:path");
 
 const { INTENT_TREE, git, repo, run, worktree, write } = require("./review-fixture.cjs");
 
-// A delta review goes to the reviewer that read the item or the intent before, resumed warm.
-// Recording a review names that reviewer's agent id, and the record keeps it beside the tree
-// and the commit. An item's first review and the intent's first review stay cold, and the
-// intent review never resumes an item's reviewer.
+// Every review is a fresh dispatch, a delta review too: a resumed reviewer carries every round's
+// context into the next one, and a fresh one reads the fix and nothing else. A delta dispatch
+// names the previous review file and the range from the commit that review recorded to HEAD,
+// which is the fix. Recording a review still names the agent id of the reviewer that wrote it,
+// and the record keeps it beside the tree and the commit. The intent review never names an
+// item's reviewer.
 
 const ITEM_REVIEW = ".specs-inferno/intents/alpha/reviews/a-one.yaml";
 const INTENT_REVIEW = ".specs-inferno/intents/alpha/review.yaml";
@@ -46,7 +48,7 @@ test("an item's first review dispatches a cold reviewer, and its record call nam
   assert.equal(first.code, 3, shown(first));
   assert.match(first.out, /^dispatch specsmd-inferno-reviewer model model-review item a-one$/m);
   assert.doesNotMatch(first.out, /^resume /m);
-  assert.match(first.out, new RegExp(`^then run\\.cjs review --item a-one --reviewer <agent-id> --tree ${fixture.root} records it$`, "m"));
+  assert.match(first.out, new RegExp(`^then run\\.cjs review --item a-one --reviewer <agent-id> --tree ${fixture.root} records it; it runs the review's mutants first`, "m"));
 });
 
 test("the record writes the reviewer's id beside the tree and the commit", () => {
@@ -72,33 +74,49 @@ test("a record without the reviewer's id, or with the placeholder, refuses and p
   assert.notEqual(git(fixture.root, ["status", "--porcelain", "--", ITEM_REVIEW]), "");
 });
 
-test("a review owed after a recorded one resumes that reviewer with the same lines and a fresh fallback", () => {
+/** The commit a recorded review read, as its file holds it. */
+const readAt = (tree, rel) => /^commit: ([0-9a-f]{40})$/m.exec(fs.readFileSync(path.join(tree, rel), "utf8"))[1];
+const short = (tree, ref) => git(tree, ["rev-parse", "--short", ref]);
+
+test("a review owed after a recorded one is a fresh dispatch that names the previous review and the fix's range", () => {
   const fixture = repo();
   fixedAfter(fixture, "rev-a1");
   const delta = itemReview(fixture);
   assert.equal(delta.code, 3, shown(delta));
-  assert.doesNotMatch(delta.out, /^dispatch /m);
+  assert.doesNotMatch(delta.out, /^resume |rev-a1|if it does not answer/m);
   const lines = delta.out.split("\n");
-  const at = lines.indexOf("resume rev-a1 item a-one with SendMessage");
+  const at = lines.indexOf("dispatch specsmd-inferno-reviewer model model-review item a-one");
   assert.ok(at > 0, delta.out);
-  assert.match(lines[at + 1], /^ {2}range [0-9a-f]{7,}\.\.[0-9a-f]{7,} paths src\/a\.ts/);
-  assert.equal(lines[at + 2], "  spec .specs-inferno/intents/alpha/work-items/a-one.md");
-  assert.equal(lines[at + 3], "  brief .specs-inferno/intents/alpha/brief.md");
-  assert.equal(lines[at + 4], `  write ${ITEM_REVIEW}`);
-  assert.equal(lines[at + 5], "  if it does not answer, dispatch a fresh specsmd-inferno-reviewer model model-review with these lines");
+  assert.equal(lines[at + 1], `  previous ${ITEM_REVIEW}`);
+  const range = `${short(fixture.root, readAt(fixture.root, ITEM_REVIEW))}..${short(fixture.root, "HEAD")}`;
+  assert.equal(lines[at + 2], `  range ${range} paths src/a.ts`);
+  assert.equal(lines[at + 3], "  spec .specs-inferno/intents/alpha/work-items/a-one.md");
+  assert.equal(lines[at + 4], "  brief .specs-inferno/intents/alpha/brief.md");
+  assert.equal(lines[at + 5], `  write ${ITEM_REVIEW}`);
   assert.match(lines[at + 6], /^then run\.cjs review --item a-one --reviewer <agent-id> --tree /);
+  const payload = JSON.parse(run(fixture, ["review", "--item", "a-one", "--tree", fixture.root, "--json"]).out);
+  assert.equal(payload.previous, ITEM_REVIEW);
+  assert.equal(payload.range, range);
   write(fixture.root, ITEM_REVIEW, CLEAN);
-  const clean = itemReview(fixture, ["--reviewer", "rev-a1"]);
+  const clean = itemReview(fixture, ["--reviewer", "rev-a2"]);
   assert.equal(clean.code, 0, shown(clean));
+  assert.match(fs.readFileSync(path.join(fixture.root, ITEM_REVIEW), "utf8"), /^reviewer: rev-a2$/m);
 });
 
-test("on Codex the record takes the task path spawn_agent returns, and the resume is a followup_task to it", () => {
+test("an item's first review names no previous review", () => {
+  const fixture = repo();
+  const first = itemReview(fixture);
+  assert.equal(first.code, 3, shown(first));
+  assert.doesNotMatch(first.out, /^ {2}previous /m);
+});
+
+test("on Codex the record takes the task path spawn_agent returns, and the delta is a fresh spawn of the Codex reviewer", () => {
   const fixture = repo({ files: { [CODEX]: "verification:\n  integrate:\n    - echo codex\ndelivery:\n  base_branch: main\n" } });
   fixedAfter(fixture, "/root/review_a_one");
   const delta = itemReview(fixture, ["--config", CODEX]);
   assert.equal(delta.code, 3, shown(delta));
-  assert.match(delta.out, /^resume \/root\/review_a_one item a-one with followup_task$/m);
-  assert.match(delta.out, /^ {2}if it does not answer, dispatch a fresh specsmd_inferno_reviewer with these lines$/m);
+  assert.match(delta.out, /^dispatch specsmd_inferno_reviewer item a-one\n {2}previous \.specs-inferno\/intents\/alpha\/reviews\/a-one\.yaml$/m);
+  assert.doesNotMatch(delta.out, /followup_task|review_a_one|^resume /m);
 });
 
 /** An intent worktree with its work committed, an empty scan collected and an item review by `itemReviewer`. */
@@ -115,16 +133,16 @@ function intentStarted(itemReviewer) {
   return { fixture, tree };
 }
 
-test("the intent's first review dispatches cold and never resumes an item's reviewer", () => {
+test("the intent's first review dispatches cold, names no previous review and never an item's reviewer", () => {
   const { fixture, tree } = intentStarted("rev-item");
   const first = run(fixture, ["review", "--tree", tree]);
   assert.equal(first.code, 3, shown(first));
   assert.match(first.out, /^dispatch specsmd-inferno-reviewer model model-review intent alpha$/m);
-  assert.doesNotMatch(first.out, /resume|rev-item/);
+  assert.doesNotMatch(first.out, /resume|rev-item|^ {2}previous /m);
   assert.match(first.out, new RegExp(`^then run\\.cjs review --reviewer <agent-id> --tree ${tree} records it$`, "m"));
 });
 
-test("the intent review's record refuses without the reviewer's id, writes it, and the next intent review resumes it", () => {
+test("the intent review's record refuses without the reviewer's id, writes it, and the next intent review is a fresh dispatch of the delta", () => {
   const { fixture, tree } = intentStarted("rev-item");
   assert.equal(run(fixture, ["review", "--tree", tree]).code, 3);
   write(tree, INTENT_REVIEW, "verdict: clean\n");
@@ -138,7 +156,10 @@ test("the intent review's record refuses without the reviewer's id, writes it, a
   git(tree, ["commit", "-qam", "a later fix"]);
   const delta = run(fixture, ["review", "--tree", tree]);
   assert.equal(delta.code, 3, shown(delta));
-  assert.match(delta.out, /^resume rev-int intent alpha with SendMessage$/m);
-  assert.doesNotMatch(delta.out, /^dispatch |rev-item/m);
-  assert.match(delta.out, /^ {2}if it does not answer, dispatch a fresh specsmd-inferno-reviewer model model-review with these lines$/m);
+  assert.doesNotMatch(delta.out, /^resume |rev-int|rev-item|if it does not answer/m);
+  const lines = delta.out.split("\n");
+  const at = lines.indexOf("dispatch specsmd-inferno-reviewer model model-review intent alpha");
+  assert.ok(at > 0, delta.out);
+  assert.equal(lines[at + 1], `  previous ${INTENT_REVIEW}`);
+  assert.equal(lines[at + 2], `  range ${short(tree, readAt(tree, INTENT_REVIEW))}..${short(tree, "HEAD")}`);
 });

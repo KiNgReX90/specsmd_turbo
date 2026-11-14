@@ -35,7 +35,7 @@ const TURBO_CONFIG_DEFAULTS = {
   mode: 'production',
   branching: { project_key: '', base_branch: 'main', story_branches: true, sandbox_finish: 'push' },
   tester: { enabled: false },
-  construction: { mutants: 3 },
+  construction: { mutants: 'all' },
   sync: { docs: 'none', issues: 'none', jira_project_url: '' },
   sandbox: { code_scaffold: true, scaffold_after_build: true }
 };
@@ -205,8 +205,9 @@ function textOr(value, fallback) {
  * key at all. There is no live_test block: the live test always runs, and how
  * the app starts and where it answers the agent works out itself. An old
  * live_test answer is ignored. The construction block
- * is `mutants`, the most lines a script breaks per story to prove its tests
- * can fail (0 = off), never asked at install. The sync block names where the
+ * is `mutants`: a script breaks one line per acceptance criterion a test
+ * covers to prove that test can fail; a number caps them per story (0 = off),
+ * `all` is no cap and the default. Never asked at install. The sync block names where the
  * intent documentation (confluence | none) and the epic and stories (jira | none)
  * are synced, both none by default and always none in sandbox mode; an
  * unsupported tool is written as `none`, and jira_project_url is only written
@@ -261,7 +262,7 @@ function renderTurboConfig(answers = {}) {
 
   lines.push(
     'construction:',
-    pad(`  mutants: ${TURBO_CONFIG_DEFAULTS.construction.mutants}`, 'most lines broken per story to prove its tests can fail; 0 = off'),
+    pad(`  mutants: ${TURBO_CONFIG_DEFAULTS.construction.mutants}`, 'one line broken per tested criterion to prove its test can fail; a number caps them, 0 = off'),
     'sync:',
     pad(`  docs: ${syncDocs}`, 'confluence | none: where the intent documentation is pulled from and pushed back to; production only'),
     pad(`  issues: ${syncIssues}`, 'jira | none: where the epic, the stories and the test cases are created; production only')

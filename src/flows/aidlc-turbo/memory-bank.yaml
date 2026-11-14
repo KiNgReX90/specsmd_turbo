@@ -46,7 +46,7 @@ flow_config:
     - mode: "production | sandbox. Both use git; sandbox is production without story branches"
     - branching: "project_key and base_branch (both modes), story_branches (production only), sandbox_finish (sandbox only: push puts the finished intent straight onto the base branch, merge_request pushes the intent branch with one merge request; default push)"
     - tester: "enabled only: test cases are written in the record's language"
-    - construction: "mutants (default 3): the most lines a script breaks per story to prove its tests can fail; 0 turns it off"
+    - construction: "mutants (default all): a script breaks one line per acceptance criterion a test covers, to prove that test can fail; a number caps them per story, 0 turns it off"
     - sandbox: "sandbox only: code_scaffold (the Code Scaffold, saved as code-scaffold.html) and scaffold_after_build (its update after the build, saved as code-scaffold-built.html), both true by default. Production always makes both and ignores the block. A part that is off is not drawn, rendered, saved or published, and nothing reports it as missing"
     - sync: "docs (confluence | none), issues (jira | none), both optional and none by default, jira_project_url (the installer default of the Jira board link, only written when issues is jira). Any other tool is not supported yet: the flow says so and treats it as none"
 
