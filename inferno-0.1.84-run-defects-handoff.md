@@ -4,7 +4,7 @@ One file for the defects a host session meets, newest last. Each section says wh
 
 Only what is still to build is in this file. A section leaves it once it is built, and `inferno-build-next.md` keeps its row with the commit. Sections 1 to 14 are built in 0.1.85 and gone from here, and the fourteen sections of the 0.1.83 file before them are built as 0.1.84. Their text is in this branch's history: sections 12 to 14 at `120be9b4`, sections 1 to 11 at `d5d82fa1`, and the 0.1.83 file at `912c9feb`. A section keeps its number, so the next one is 15.
 
-Eight sections are open: 15, 16, 17, 18, 19, 20, 21 and 22.
+Nine sections are open: 15, 16, 17, 18, 19, 20, 21, 22 and 23.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -79,3 +79,12 @@ The reviewer turned the mutant into a pin on `tooling.md`, which `S/run-review-f
 **Evidence.** Skoft_CRA, intent `a-buyer-and-reviewer-prove-the-release`, 2026-11-15. Local `main` at d83c1ed80, `origin/main` at 644d9e7eb. `git diff --name-only main...HEAD -- grok` listed 8 files and `git diff --name-only origin/main...HEAD -- grok` listed 0; the intent never touched `grok/`. Three gate starts in a row answered `intent review owed ... the fold ... changed what the review binds: grok/...` for kb-only folds, each costing a reviewer round and a restart.
 
 **How to fix.** Diff against the newer of the two refs only: when one is an ancestor of the other, use the descendant (`git merge-base --is-ancestor`), and keep the union only when they have diverged. Test: a scratch host whose local base lags its origin by one commit that adds `kb/x.md`; fold it into the intent, then `foldBound` binds nothing and the gate starts without a review.
+
+
+## 23. A suite that prints a refusal line in its own output turns a real red into "no verdict"
+
+**What is wrong.** `readRun` (`S/run-check-refused.cjs:71-75`) counts a run as refused when its exit is non-zero and any line of its own log, from where the run started, matches `verification.refused`. A suite whose tests print a fixture refusal line, for example a host's tests of its own wrapper, and that then fails for a real reason, is read as refused. Integrate, the gate and verify-item then report "no verdict, a fault of the test machine", run it once more, and end with exit 5 and "run the step again". A real red is hidden, and the step it names reruns it without end.
+
+**Evidence.** Skoft_CRA, direct integrate of branch `direct-alpha-refuse`, 2026-11-15. `npm run test:definitions` exited 1 with one real failing test (8141 tests, 8128 pass, 1 fail: `scripts/specs-inferno-codex.test.mjs:455`). Its own tests printed fixture lines such as `remote-run: REFUSED [machine] delta: the session holds the machine lock no longer, so this ran nothing; no verdict`. Integrate ended with exit 5: "1 of 5 integrate check(s) got no verdict: the host's wrapper ran nothing, twice, a fault of the test machine and not of the code; run the step again". The log is `~/.cache/specsmd-inferno/Skoft_CRA/direct-alpha-refuse/integrate-20261115T160642Z/2.log`, lines 8488 to 8787 and 9028.
+
+**How to fix.** Read a refusal only where the host's wrapper writes one. Count it only on the host's refusal exit, which Skoft_CRA's config comment names as 75, and only from the run's last non-empty line, never from anywhere in its output. A host key such as `verification.refused_exit: 75` carries the code. Test: a shell that prints a matching fixture line, then fails with exit 1, is a red; one whose last line matches and that exits 75 is refused.
