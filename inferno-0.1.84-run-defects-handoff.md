@@ -4,7 +4,7 @@ One file for the defects a host session meets, newest last. Each section says wh
 
 Only what is still to build is in this file. A section leaves it once it is built, and `inferno-build-next.md` keeps its row with the commit. Sections 1 to 14 are built in 0.1.85 and gone from here, and the fourteen sections of the 0.1.83 file before them are built as 0.1.84. Their text is in this branch's history: sections 12 to 14 at `120be9b4`, sections 1 to 11 at `d5d82fa1`, and the 0.1.83 file at `912c9feb`. A section keeps its number, so the next one is 15.
 
-Four sections are open: 15, 16, 17 and 18.
+Six sections are open: 15, 16, 17, 18, 19 and 20.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -54,3 +54,20 @@ The reviewer turned the mutant into a pin on `tooling.md`, which `S/run-review-f
 **Evidence.** Skoft_CRA, intent `a-buyer-and-reviewer-prove-the-release`, 2026-11-15. The brief's line read `TC-346 (reserved for ..., stub at integration/TEST-CASES.md:4752)`. The gate result held `"unanswered":[{"case":"integrationTEST-CASESmd4752","file":"integration/TEST-CASES.md","why":"the brief's Tester proves line names it"}]` with `"results":[]`, while `lane-smoke` and `lane-windows` were still running. The host reworded the line to name TC-346 alone and waited for the lanes before restarting the gate.
 
 **How to fix.** Keep only tokens that match the host's case-id shape (`casesConfig` already knows the prefix, for example `/^TC-\d+$/`), and refuse the brief in the plan lint when the line names anything else. Run `cases.refusal` in the detach path beside `intentReview.gateRefusal`, before `lanes.startLanes`, so a red that needs no command never starts a lane. Test: a brief whose `Tester proves:` line names `TC-1` and `x.md:42`. `testerProves` returns `['TC-1']`, and `gate --detach` with an unanswered case exits 2 and starts no lane.
+
+## 19. A gate mark added to a completed item is never checked against the config
+
+**What is wrong.** `run-plan-lint.cjs` refuses a mark whose name `gateHeld` (`S/run-criterion-marks.cjs:56`) does not hold, but it skips completed items. `run-mutant-coverage.cjs:173` then counts any mark that is not late. So an orchestrator that marks a criterion of a completed item in a spec-only commit, for instance `(gate: cargo test --manifest-path src-tauri/Cargo.toml)` on a criterion that command never runs, gets a clean intent review and a gate that prints PASS beside a check that did not happen.
+
+**Evidence.** Skoft_CRA, intent `the-lower-layers-stop-calling-up`, 2026-11-15, flow build f3be640a. Criterion 6 of `llu-the-store-runs-the-evidence-sweep-it-is-given` is a `cargo check --features promo-capture` that no finalize command ran. The oracle rejected marking it with `cargo test` because nothing would have refused that false mark; the host instead added the check to `verification.finalize` and `verification.integrate` (host commit 0e1ac98f4) and marked the criterion with it (e40e0f730).
+
+**How to fix.** Have the mutant coverage (or the intent review's record) run `gateHeld` on every mark it counts, completed item or not, and refuse a name the selected config does not hold, as the plan lint does for an open item. Test: a scratch host with a completed item whose criterion carries a mark naming a command outside `verification.finalize`; recording a clean intent review is refused with that name.
+
+## 20. A mutant whose test is a bare shell check reads no verdict
+
+**What is wrong.** A criterion proved only by a check (a `git grep` count, a probe line, a diff count) can take a mutant whose broken line reintroduces what the check forbids. But the mutant runner reads a verdict only from a test runner's summary, so a test written as the check itself, `test $(git grep ... | wc -l) -eq 0`, exits 1 on the mutant and still reads as no verdict. The reviewer has to wrap each check in an inline `node --input-type=module -e 'import {test} from "node:test"; ...'` so a summary prints.
+
+**Evidence.** Skoft_CRA, intent `the-lower-layers-stop-calling-up`, 2026-11-15, flow build f3be640a. Fifteen check-only criteria (greps, slice probes, `SKOFT_CRA_` diff counts) were proved by mutants; the intent reviewer measured that the bare `test ... -eq 0` form gave no verdict on this host and rewrote all fifteen as inline node tests, which pass unmutated and fail on each mutant.
+
+**How to fix.** Let a mutant name its test as a plain check (a `check: true` key, or a test without a runner summary) and read the exit code: non-zero on the mutant and zero on the unmutated tree, which the runner then runs first, is caught. Test: a scratch tree with a grep criterion, a mutant that adds the forbidden line, and a bare `test $(...) -eq 0`; the record reads caught.
+
