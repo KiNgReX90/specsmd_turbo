@@ -4,7 +4,7 @@ One file for the defects a host session meets, newest last. Each section says wh
 
 Only what is still to build is in this file. A section leaves it once it is built, and `inferno-build-next.md` keeps its row with the commit. Sections 1 to 14 are built in 0.1.85 and gone from here, and the fourteen sections of the 0.1.83 file before them are built as 0.1.84. Their text is in this branch's history: sections 12 to 14 at `120be9b4`, sections 1 to 11 at `d5d82fa1`, and the 0.1.83 file at `912c9feb`. A section keeps its number, so the next one is 15.
 
-One section is open: 15.
+Two sections are open: 15 and 16.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -16,3 +16,17 @@ One section is open: 15.
 
 **How to fix.** Make both readers list a move the same way: `changedPaths` passes `--no-renames` (a move then names both sides, which `itemFiles`, `sinceOutside` and the lane scopes all want: the old path's scope is what picked the journeys before the move). `hashOf` and `headDiffHash` already pass `--no-renames`, so the hash needs no change. Test: a scratch repo where the item `git mv`s an owned file, `verify-item`, then `review --item` prints the dispatch, not `verify-item owed`.
 
+
+## 16. A rule file under `.specs-inferno/standards/` counts as ledger, so an item that delivers one can never prove it
+
+**What is wrong.** The host's rule files live under `.specs-inferno/standards/`, and `standards:` in the host config hands them to every builder and reviewer as rules to follow. They are deliverables a work item writes, not bookkeeping. But every ledger test reads the whole `.specs-inferno/` tree as ledger: `inLedger` (`S/run-item-proof.cjs:85`) leaves the file out of the item's proof, so the review dispatch's `paths` line omits it and a later change to it leaves the proof current. The recorder refuses a mutant on it (`S/run-review-file.cjs:328`, "a mutant breaks the code, never the ledger") and refuses a pin that names it (`S/run-review-file.cjs:292-293`, "a pin reads the code, never the ledger"). So a criterion whose only product line is in a rule file has no mutant and no pin, and no route the flow accepts to prove it.
+
+**Evidence.** Skoft_CRA, intent `every-agent-gets-the-tool-that-fits-the-file-it-touches`, 2026-11-14 and 15, flow build f3be640a. Item `tft-ast-grep-is-the-structural-search-of-the-reading-roles` creates `.specs-inferno/standards/tooling.md` (commit e826a418a). Its review dispatch printed `range 9de79cdf1..e826a418a paths docs/SEARCH.md scripts/tooling-docs.test.mjs`, without the new rule file. The first `run.cjs review --item ... --reviewer ... --quality-reviewer ...` exited 2 with:
+
+```
+ERROR [BAD_REVIEW] .specs-inferno/intents/every-agent-gets-the-tool-that-fits-the-file-it-touches/reviews/tft-ast-grep-is-the-structural-search-of-the-reading-roles.yaml: mutants entry 2 breaks .specs-inferno/standards/tooling.md; a mutant breaks the code, never the ledger. send this back to the reviewer that wrote the file, then run the same command again.
+```
+
+The reviewer turned the mutant into a pin on `tooling.md`, which `S/run-review-file.cjs:293` refused too, so it dropped both. The item's criteria 2 and 3 (what was refused is on record, the rule file follows the standards format) are recorded with no mutant and no pin. The next item, `tft-cargo-nextest-is-measured-before-it-is-adopted`, has the same gap for its criterion 5 (the record in `tooling.md` holds both numbers and one decision). The host's workaround is that a test reads the rule file and the gate marks the criterion. Nothing catches a later edit of the file that breaks that test's subject, until the next gate.
+
+**How to fix.** Make the ledger `.specs-inferno/` minus `.specs-inferno/standards/`: one `lib.inLedger(path)` in `S/run-lib.cjs` that answers false under `standards/`, used by `S/run-item-proof.cjs:85`, `S/run-review-file.cjs:194`, `:292` and `:328`, and by the grant refusal in `S/run-grant.cjs:74` so a builder may be granted a rule file. State, config, intents, reviews and archive stay ledger. Test: a scratch repo whose item owns `.specs-inferno/standards/x.md`. Its proof lists the file, a mutant on it is run and caught by a test that reads it, and a pin on it is checked.
