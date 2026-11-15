@@ -4,7 +4,7 @@ One file for the defects a host session meets, newest last. Each section says wh
 
 Only what is still to build is in this file. A section leaves it once it is built, and `inferno-build-next.md` keeps its row with the commit. Sections 1 to 14 are built in 0.1.85 and gone from here, and the fourteen sections of the 0.1.83 file before them are built as 0.1.84. Their text is in this branch's history: sections 12 to 14 at `120be9b4`, sections 1 to 11 at `d5d82fa1`, and the 0.1.83 file at `912c9feb`. A section keeps its number, so the next one is 15.
 
-Six sections are open: 15, 16, 17, 18, 19 and 20.
+Eight sections are open: 15, 16, 17, 18, 19, 20, 21 and 22.
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -47,7 +47,7 @@ The reviewer turned the mutant into a pin on `tooling.md`, which `S/run-review-f
 
 **How to fix.** Let `gateHeld` accept a command of `verification.integrate`, and have `S/run-gate-marks.cjs` read its verdict from the green proof `commandProof` (`S/run-proofs.cjs:133`) finds for the gate's tree, once section 17's base key has landed. Have the plan lint send a one-time measurement to the brief as an external success criterion rather than an item criterion. Test: a scratch host with an integrate-only command and a criterion marked with it. With a green integrate proof for the tree the intent review records clean, and without one it is refused.
 
-## 18. The `Tester proves:` reader takes any token with a digit as a case id, and the detached gate checks it only after the lanes start
+## 21. The `Tester proves:` reader takes any token with a digit as a case id, and the detached gate checks it only after the lanes start
 
 **What is wrong.** `testerProves` (`S/run-cases.cjs:273-276`) splits the brief's `Tester proves:` line on spaces and commas, strips non-word characters and keeps every token that holds a digit. A path with a line number (`integration/TEST-CASES.md:4752`), a section number or a date in that line becomes a case id that no commit can answer, so the gate is red before it runs a command. The detached gate makes it cost more: `gate --detach` (`S/run-gate.cjs:253-260`) folds, checks the intent review and starts the lanes, but the cases check runs only inside the gate process (`S/run-gate.cjs:156`). The gate dies at once, the smoke and Windows lanes keep running on the remote machines, and a second `gate --detach` after the brief is fixed is refused with `GATE_RUNNING` until both lanes end.
 
@@ -71,3 +71,11 @@ The reviewer turned the mutant into a pin on `tooling.md`, which `S/run-review-f
 
 **How to fix.** Let a mutant name its test as a plain check (a `check: true` key, or a test without a runner summary) and read the exit code: non-zero on the mutant and zero on the unmutated tree, which the runner then runs first, is caught. Test: a scratch tree with a grep criterion, a mutant that adds the forbidden line, and a bare `test $(...) -eq 0`; the record reads caught.
 
+
+## 22. A stale local base branch makes every synced file the intent's own, so each fold re-owes the intent review
+
+**What is wrong.** `ownReads` (`S/run-intent-fold.cjs:19-26`) lists the intent's files as `<ref>...<at>` for both `base` and `origin/<base>`, and `ownFiles` (`:33`) takes their union. When the local `main` lags `origin/main` (the primary checkout is not pulled while another gate holds it), `main...HEAD` diffs from an old merge base, so every file main synced since then counts as the intent's own. `foldBound` (`:49-66`) then binds each later fold's change to those files, with `review.outside: ["**"]` set to stop exactly that. Every kb sync on main re-owes the intent review before the gate may start.
+
+**Evidence.** Skoft_CRA, intent `a-buyer-and-reviewer-prove-the-release`, 2026-11-15. Local `main` at d83c1ed80, `origin/main` at 644d9e7eb. `git diff --name-only main...HEAD -- grok` listed 8 files and `git diff --name-only origin/main...HEAD -- grok` listed 0; the intent never touched `grok/`. Three gate starts in a row answered `intent review owed ... the fold ... changed what the review binds: grok/...` for kb-only folds, each costing a reviewer round and a restart.
+
+**How to fix.** Diff against the newer of the two refs only: when one is an ancestor of the other, use the descendant (`git merge-base --is-ancestor`), and keep the union only when they have diverged. Test: a scratch host whose local base lags its origin by one commit that adds `kb/x.md`; fold it into the intent, then `foldBound` binds nothing and the gate starts without a review.
