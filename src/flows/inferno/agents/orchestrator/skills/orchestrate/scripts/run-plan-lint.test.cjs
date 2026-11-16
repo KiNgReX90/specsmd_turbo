@@ -237,7 +237,7 @@ test("an Item Map row that names an id the intent does not have is a finding", (
 
 test("an acceptance criterion that names no test, case id or command is a finding", () => {
   const items = withItem("card-store", "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance)", "- [ ] A card of 25 shows 25");
-  assertOneFinding(plan({ items }), /^FINDING card-store: acceptance criterion 1 names no test file, case id or command in a code span$/);
+  assertOneFinding(plan({ items }), /^FINDING card-store: acceptance criterion 1 names no test file, case id or command in a code span; a one-time measurement goes to the brief, as a success criterion the intent review proves external with an evidence file$/);
 });
 
 test("a missing section is a finding, and so is one left empty", () => {
@@ -313,7 +313,7 @@ test("frontier stops on a plan finding before it prints a ready set, and never l
   const items = withItem("card-store", "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance)", "- [ ] A card of 25 shows 25");
   const stopped = run(plan({ items }), ["frontier", "gift-cards"]);
   assert.equal(stopped.code, 2, stopped.out + stopped.err);
-  assert.match(stopped.out, /^FINDING card-store: acceptance criterion 1 names no test file, case id or command in a code span$/m);
+  assert.match(stopped.out, /^FINDING card-store: acceptance criterion 1 names no test file, case id or command in a code span; a one-time measurement goes to the brief, as a success criterion the intent review proves external with an evidence file$/m);
   assert.doesNotMatch(stopped.out, /^ready /m);
 
   const clean = run(plan(), ["frontier", "gift-cards"]);
@@ -364,12 +364,16 @@ test("a gate mark names a finalize command or a lane of the selected config, at 
   assert.match(ready.out, /^ready card-store /m);
 });
 
-test("a lane the config does not set, or a command the gate never runs, is no gate name", () => {
-  for (const name of ["verification.smoke", "verification.integrate", "npm run quick", "windows"]) {
+test("a lane the config does not set, or a command neither the gate nor integrate runs, is no gate name", () => {
+  for (const name of ["verification.smoke", "verification.integrate", "npm run other", "windows"]) {
     const tree = plan({ items: marked(name) });
     write(tree.root, ".specs-inferno/config.yaml", `${GATE_CONFIG}  integrate:\n    - npm run quick\n`);
     assertOneFinding(tree, new RegExp(`^FINDING card-store: acceptance criterion 1 is marked \\(gate: ${name.replace(/\./g, "\\.")}\\), which`));
   }
+  const integrated = plan({ items: marked("npm run quick") });
+  write(integrated.root, ".specs-inferno/config.yaml", `${GATE_CONFIG}  integrate:\n    - npm run quick\n`);
+  const result = lint(integrated);
+  assert.equal(result.code, 0, `a command of verification.integrate is a gate name: ${result.out}${result.err}`);
 });
 
 test("a plan without a mark lints as before and never reads the config", () => {

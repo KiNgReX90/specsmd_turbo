@@ -16,7 +16,8 @@
  *     prose around it states a value, only a reader can judge, so the lint holds it to no more.
  *     A criterion whose line ends in a gate mark, `(gate: <name>)`, names its command there, and
  *     the name is one the config's verification block holds (run-criterion-marks.cjs). The config
- *     is read only for a plan that marks a criterion;
+ *     is read only for a plan that marks a criterion. A criterion neither fits is told where a
+ *     one-time measurement goes: the brief, as an external success criterion;
  *   - every open item has the nine sections in order, Edge Cases, Out of Scope and Reuse hold
  *     their content or exactly `None.`, every fixed line holds its form, and no line holds a
  *     TBD or a TODO;
@@ -255,8 +256,10 @@ function testPlanFindings(id, item, editable, parsed, tree, add) {
   if (!breaks.none && !breaks.named) add('Test Plan has no Breaks line');
 }
 
-const UNHELD = "which the config's verification block does not hold: " +
-  'name a command of verification.finalize, verbatim or as its rest after verification.session.match, or a lane the config sets as verification.<lane>';
+/** Where a criterion no proof kind fits goes when it is a one-time measurement, such as a count on a named commit. */
+const ONCE = '; a one-time measurement goes to the brief, as a success criterion the intent review proves external with an evidence file';
+const UNHELD = "which the config's verification block does not hold: name a command of verification.finalize or verification.integrate, " +
+  `verbatim or as its rest after verification.session.match, or a lane the config sets as verification.<lane>${ONCE}`;
 
 /** Every finding on one open item's own text. `names` says whether a gate mark may give a name. */
 function itemFindings(tree, item, spec, criteria, findings, names) {
@@ -278,7 +281,7 @@ function itemFindings(tree, item, spec, criteria, findings, names) {
     const mark = gateMark(criterion);
     if (mark !== null) {
       if (!names(mark)) add(`acceptance criterion ${index + 1} is marked (gate: ${mark}), ${UNHELD}`);
-    } else if (codeSpans(criterion).length === 0) add(`acceptance criterion ${index + 1} names no test file, case id or command in a code span`);
+    } else if (codeSpans(criterion).length === 0) add(`acceptance criterion ${index + 1} names no test file, case id or command in a code span${ONCE}`);
   });
 
   tableFindings(parsed, 'Edge Cases', EDGE_HEADER, add, (row, label) => {

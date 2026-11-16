@@ -33,7 +33,9 @@ test("a criterion marked with a gate command owes no mutant, and one the config 
   assert.equal(refused.code, 2, shown(refused));
   assert.deepEqual(refused.out.split("\n").filter((line) => line.startsWith("FINDING ")), [
     "FINDING a-one: acceptance criterion 2 is marked (gate: echo nothing), which the config's verification block does not hold: " +
-      "name a command of verification.finalize, verbatim or as its rest after verification.session.match, or a lane the config sets as verification.<lane>",
+      "name a command of verification.finalize or verification.integrate, verbatim or as its rest after verification.session.match, " +
+      "or a lane the config sets as verification.<lane>; a one-time measurement goes to the brief, " +
+      "as a success criterion the intent review proves external with an evidence file",
   ]);
 });
 
@@ -135,7 +137,7 @@ test("a gate mark is read from the end of the criterion's own line only", () => 
   assert.equal(gateMark("a lint passes (`npm run lint`)"), null);
 });
 
-test("a mark names a command of verification.finalize or a lane the config sets", () => {
+test("a mark names a command of verification.finalize or verification.integrate, or a lane the config sets", () => {
   const config = {
     verification: {
       finalize: ["npm run check", "cargo test"],
@@ -146,7 +148,7 @@ test("a mark names a command of verification.finalize or a lane the config sets"
   };
   const held = (names, under) => names.filter((name) => gateHeld(under, name));
   const names = ["npm run check", "cargo test", "verification.windows", "npm run quick", "npm run lint", "verification.lint", "verification.smoke"];
-  assert.deepEqual(held(names, config), ["npm run check", "cargo test", "verification.windows"]);
+  assert.deepEqual(held(names, config), ["npm run check", "cargo test", "verification.windows", "npm run quick"]);
   assert.deepEqual(held(names, { verification: { smoke: { command: "npm run smoke", scope: ["src/**"] } } }), ["verification.smoke"]);
   assert.deepEqual(held(names, {}), []);
 });
@@ -175,7 +177,9 @@ const SESSION = "  session:\n    match: '^tools/remote\\.sh \\S+ '\n    open: to
 const wrappedConfig = (session) => CONFIG.replace("verification:\n", `verification:\n  finalize:\n    - ${WRAP} ${GATE}\n${session}`);
 const findings = (result) => result.out.split("\n").filter((line) => line.startsWith("FINDING "));
 const unheld = (name) => `FINDING a-one: acceptance criterion 2 is marked (gate: ${name}), which the config's verification block does not hold: ` +
-  "name a command of verification.finalize, verbatim or as its rest after verification.session.match, or a lane the config sets as verification.<lane>";
+  "name a command of verification.finalize or verification.integrate, verbatim or as its rest after verification.session.match, " +
+  "or a lane the config sets as verification.<lane>; a one-time measurement goes to the brief, " +
+  "as a success criterion the intent review proves external with an evidence file";
 
 test("under wrapped finalize commands the session's match reaches, the plan lint accepts a bare mark and a verbatim one", () => {
   const { fixture, tree } = planned();

@@ -54,7 +54,7 @@ test("each marked criterion stands beside the verdict of its finalize command, a
     "MARKED a-one:2 (gate: npm run size): GREEN, unchanged since its last pass",
     `MARKED a-one:3 (gate: verification.windows): not run by this gate, run.cjs gate --detach --tree ${root} --intent alpha --config ${codex} starts the lanes`,
     "MARKED a-two:1 (gate: npm run check): PASS",
-    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize and no lane of this config",
+    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize or verification.integrate and no lane of this config",
     "last line",
   ]);
   assert.deepEqual(result.payload.marks[0], { item: "a-one", criterion: 2, gate: "npm run size", verdict: "GREEN, unchanged since its last pass" });
@@ -83,7 +83,7 @@ test("gate --wait gives a lane its own state, and a lane it did not start is nam
 test("the verdicts read the config the gate runs with", () => {
   const root = tree({ "a-one": ["the size cap holds (gate: npm run size)"] }, "verification:\n  finalize:\n    - npm run check\n");
   write(root, ".specs-inferno/config.lane.yaml", LANE_CONFIG);
-  assert.deepEqual(marked(gateResult(0, PASSED), root), ["MARKED a-one:1 (gate: npm run size): no command of verification.finalize and no lane of this config"]);
+  assert.deepEqual(marked(gateResult(0, PASSED), root), ["MARKED a-one:1 (gate: npm run size): no command of verification.finalize or verification.integrate and no lane of this config"]);
   const selected = withMarks({ tree: root, intent: "alpha", config: ".specs-inferno/config.lane.yaml" }, gateResult(0, PASSED)).out;
   assert.equal(selected[1], "MARKED a-one:1 (gate: npm run size): GREEN, unchanged since its last pass");
 });
@@ -155,17 +155,17 @@ test("under wrapped finalize commands the session's match reaches, a bare mark r
     "MARKED a-one:1 (gate: npm run check): PASS",
     "MARKED a-one:2 (gate: npm run size): FAIL",
     `MARKED a-two:1 (gate: ${WRAP} npm run check): PASS`,
-    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize and no lane of this config",
+    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize or verification.integrate and no lane of this config",
   ]);
 });
 
 test("a bare mark under wrapped commands with no session key reads as no command, as before", () => {
   const root = tree(BARE, WRAPPED);
   assert.deepEqual(marked(gateResult(2, WRAPPED_RESULTS), root), [
-    "MARKED a-one:1 (gate: npm run check): no command of verification.finalize and no lane of this config",
-    "MARKED a-one:2 (gate: npm run size): no command of verification.finalize and no lane of this config",
+    "MARKED a-one:1 (gate: npm run check): no command of verification.finalize or verification.integrate and no lane of this config",
+    "MARKED a-one:2 (gate: npm run size): no command of verification.finalize or verification.integrate and no lane of this config",
     `MARKED a-two:1 (gate: ${WRAP} npm run check): PASS`,
-    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize and no lane of this config",
+    "MARKED a-two:2 (gate: npm run lint): no command of verification.finalize or verification.integrate and no lane of this config",
   ]);
 });
 

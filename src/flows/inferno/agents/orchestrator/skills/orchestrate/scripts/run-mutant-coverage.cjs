@@ -19,9 +19,10 @@
  * A criterion whose line ends in a gate mark, `(gate: <name>)`, owes neither: the gate proves it
  * (run-criterion-marks.cjs). It keeps its number, so every recorded mutant names what it named,
  * unless its mark came after the item's first review outside a commit of its spec alone, or names
- * a command or lane the config the call runs with does not hold (`gateHeld`). The plan lint holds an
- * open item's marks to the config; this holds every mark that counts, a completed item's too, so a
- * mark added to it later in a commit of its spec alone counts only when the gate runs what it names.
+ * a command or lane the config the call runs with does not hold (`gateHeld`), or an integrate
+ * command with no green proof for the tree (`markGap`). The plan lint holds an open item's marks to
+ * the config; this holds every mark that counts, a completed item's too, so a mark added to it later
+ * in a commit of its spec alone counts only when the gate, or integrate, runs what it names.
  *
  * An item mutant the intent review moved, under `moved`, counts for the criterion it was moved to
  * and no longer for the one its item review recorded (run-mutant-moves.cjs): a review recorded
@@ -34,7 +35,8 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { pinProblem, testPaths } = require('./run-review-pins.cjs');
-const { gateHeld, gateMark, lateMarks } = require('./run-criterion-marks.cjs');
+const { gateMark, lateMarks, markGap } = require('./run-criterion-marks.cjs');
+const { integrateAgainCall } = require('./run-call.cjs');
 const { changedSince, locate } = require('./run-mutant-runs.cjs');
 
 /** The criteria under `## Acceptance Criteria`, one per list line, checkbox or not. */
@@ -120,15 +122,22 @@ function placed(tree, intentId, itemId, spec) {
   return (entry) => (typeof entry.find === 'string' ? locate(tree, entry, elsewhere) : {});
 }
 
-/** The 0-based indexes of the criteria whose mark, not late, names nothing the config holds. */
-const unheldMarks = (criteria, late, configOf) => criteria.map((text, index) => index)
-  .filter((index) => !late.includes(index) && gateMark(criteria[index]) !== null && !gateHeld(configOf(), gateMark(criteria[index])));
+/** The 0-based indexes of the criteria whose mark, not late, counts for nothing on the tree, under `unheld` or `unproven` (markGap). */
+function markGaps(tree, criteria, late, configOf) {
+  const gaps = { unheld: [], unproven: [] };
+  criteria.forEach((text, index) => {
+    const gap = !late.includes(index) && gateMark(text) !== null ? markGap(tree, configOf(), gateMark(text)) : null;
+    if (gap) gaps[gap].push(index);
+  });
+  return gaps;
+}
 
 /**
  * What each item of the intent needs: its criteria, how its tests prove them, its manifest's test
  * paths, its own caught mutants that can still be placed, its own pins that still stand, and its
- * marks that count for nothing: late ones, and under `unheld` those the config does not hold.
- * `config` is the one the call runs with; without one the tree's own is read, and only for a mark.
+ * marks that count for nothing: late ones, under `unheld` those the config does not hold, and under
+ * `unproven` those of an integrate command with no green proof, which `integrate` runs. `config` is
+ * the one the call runs with; without one the tree's own is read, and only for a mark.
  */
 function itemProofs(tree, intentId, ids, config) {
   const configOf = () => config || lib.readConfig(tree);
@@ -143,7 +152,8 @@ function itemProofs(tree, intentId, ids, config) {
       id,
       criteria,
       late,
-      unheld: unheldMarks(criteria, late, configOf),
+      ...markGaps(tree, criteria, late, configOf),
+      integrate: integrateAgainCall(tree, []),
       tested: tests.length > 0,
       tests,
       mutants: movedMutants(tree, intentId, id, criteria, moves).filter((entry) => entry.caught === 'yes' && !where(entry).why),
@@ -169,11 +179,13 @@ function names(mutant, item, index, own) {
 const LATE = " (its gate mark came after the item's first review, outside a commit of its spec alone)";
 const UNHELD = (name) => ` (its gate mark names ${name}, which the config's verification block does not hold: ` +
   'correct the mark in a commit of its spec alone, or prove the criterion)';
+const UNPROVEN = (name, call) => ` (its gate mark names ${name}, a command of verification.integrate with no green proof for this tree: ` +
+  `run ${call} to prove it, or prove the criterion)`;
 
 /**
  * One line per item that still owes a caught mutant or a checked pin, naming the criteria it owes.
  * `intentPins` are the intent review's pins, which its record checked. A criterion with a gate
- * mark owes none, unless the item lists its index under `late` or `unheld`.
+ * mark owes none, unless the item lists its index under `late`, `unheld` or `unproven`.
  */
 function mutantGaps(items, intentMutants, intentPins = []) {
   const lines = [];
@@ -184,8 +196,10 @@ function mutantGaps(items, intentMutants, intentPins = []) {
       [...caught, ...intentPins].some((entry) => names(entry, item, index, false));
     const late = (index) => (item.late || []).includes(index);
     const unheld = (index) => (item.unheld || []).includes(index);
-    const gated = (index) => gateMark(item.criteria[index]) !== null && !late(index) && !unheld(index);
-    const why = (index) => (late(index) ? LATE : unheld(index) ? UNHELD(gateMark(item.criteria[index])) : '');
+    const unproven = (index) => (item.unproven || []).includes(index);
+    const gated = (index) => gateMark(item.criteria[index]) !== null && !late(index) && !unheld(index) && !unproven(index);
+    const why = (index) => (late(index) ? LATE : unheld(index) ? UNHELD(gateMark(item.criteria[index]))
+      : unproven(index) ? UNPROVEN(gateMark(item.criteria[index]), item.integrate) : '');
     if (!item.tested) continue;
     const owed = item.criteria.map((text, index) => (gated(index) || named(index) ? null : `${index + 1} "${text}"${why(index)}`))
       .filter(Boolean);

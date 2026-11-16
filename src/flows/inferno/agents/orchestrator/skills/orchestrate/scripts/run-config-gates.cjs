@@ -29,8 +29,11 @@ const globList = (value) => Array.isArray(value) && value.length > 0 &&
 const command = (value) => typeof value === 'string' && value.trim().length > 0;
 /** The configs whose verification.base_scoped a --config file took from the project config, which may name commands it does not run. */
 const inheritedScoped = new WeakSet();
+/** The file each validated config was read from, so a proof read for it is keyed as the call that selected it keys one. */
+const sources = new WeakMap();
 
 function validateGates(config, file) {
+  sources.set(config, file);
   const verification = isMap(config.verification) ? config.verification : {};
   if (verification.merge_slot !== undefined && !BOOLEANS.includes(verification.merge_slot)) {
     throw new RunError(
@@ -105,6 +108,9 @@ function baseScoped(config) {
   return (isMap(config.verification) && config.verification.base_scoped) || [];
 }
 
+/** The file `config` was read from (lib.readConfig validates it here), or undefined for one built in code. */
+const configFile = (config) => sources.get(config);
+
 /** True only when the config turns the merge slot on. */
 function mergeSlot(config) {
   const value = isMap(config.verification) ? config.verification.merge_slot : undefined;
@@ -123,4 +129,4 @@ function reviewOutside(config) {
   return globList(value) ? [...value] : [];
 }
 
-module.exports = { baseScoped, inheritGates, mergeSlot, reviewOutside, shipCleanup, validateGates };
+module.exports = { baseScoped, configFile, inheritGates, mergeSlot, reviewOutside, shipCleanup, validateGates };
