@@ -71,7 +71,7 @@ function treePath(tree, options) {
   const refuse = (why) => new RunError(`grant ${options.path}: ${why}`, 'DISPATCH_PROOF');
   if (!inside(file) || path.posix.normalize(file) !== file) throw refuse('name one path inside the tree, relative to it');
   if (/[*?[\]{}]/.test(file)) throw refuse('a grant is one exact path, never a pattern');
-  if (file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`)) {
+  if (lib.inLedger(file)) {
     throw refuse('the ledger is the single writer\'s and never a builder\'s');
   }
   const stat = fs.statSync(path.join(tree, file), { throwIfNoEntry: false });

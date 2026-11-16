@@ -12,7 +12,7 @@
  * Integrate lands an item while sibling builders and reviewers work in the same tree, so it
  * refuses only what it would read or commit. A check reads the tree it runs in, uncommitted
  * sibling bytes included: one with a `finalize_scopes` entry reads its globs, one without reads
- * every path outside `.specs-inferno/`, exactly what `proofs.scopeHash` hashes for it.
+ * every path outside the ledger (lib.inLedger), exactly what `proofs.scopeHash` hashes for it.
  *
  * Requires `run-lib.cjs` only, so `run-gate.cjs` and `run-review.cjs` load it without a cycle.
  */
@@ -43,7 +43,7 @@ function dirtyFiles(tree) {
 
 /**
  * What a set of checks reads, one scope per check, null for a check with no scope entry: the
- * union of their globs, or null, every path outside `.specs-inferno/`, once one is unscoped. No
+ * union of their globs, or null, every path outside the ledger, once one is unscoped. No
  * check reads nothing.
  */
 function scopeOf(scopes) {
@@ -53,7 +53,7 @@ function scopeOf(scopes) {
 
 /** Whether checks reading `scope` (from scopeOf) read `file`. */
 function reads(scope, file) {
-  if (file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`)) return false;
+  if (lib.inLedger(file)) return false;
   return scope === null || lib.matchesAny(file, scope);
 }
 

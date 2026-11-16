@@ -74,7 +74,7 @@ function deltaProblem(tree, rel, findings, same) {
     if (range === null) continue;
     if (!range.includes(path.posix.normalize(finding.file))) {
       const span = `${previous.commit.trim().slice(0, 7)}..${lib.git(tree, ['rev-parse', '--short', 'HEAD'])}`;
-      const listed = range.filter((file) => file !== lib.SPECS_DIR && !file.startsWith(`${lib.SPECS_DIR}/`));
+      const listed = range.filter((file) => !lib.inLedger(file));
       return `${at} names ${finding.file}, which the range ${span} did not change: a new finding sits on a line the fix ` +
         `changed, in ${listed.join(', ') || 'no file outside the ledger'}. ${verbatim}, or drop it`;
     }

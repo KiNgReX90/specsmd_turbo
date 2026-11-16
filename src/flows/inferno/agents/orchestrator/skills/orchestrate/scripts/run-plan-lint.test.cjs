@@ -439,7 +439,7 @@ const proves = (line) => BRIEF.replace("## Users", `Tester proves: ${line}\n\n##
 test("a Tester proves line that names anything but a case id is a finding, at plan-lint and at frontier", () => {
   const tree = plan({ brief: proves("TC-1, x.md:42") });
   write(tree.root, ".specs-inferno/config.yaml", CASES_CONFIG);
-  const expected = /^FINDING brief: the Tester proves line names "x\.md:42", which is no case id of the shape \/\^\(\?:TC-\\d\+\)\$\/; it names case ids alone$/;
+  const expected = /^FINDING brief: the Tester proves line names "x\.md:42", which is no case id of the shape \/\^\(\?:TC-\\d\+\)\$\/; it names case ids alone, or reads `None\.` when the intent has no tester case$/;
   assertOneFinding(tree, expected);
   const stopped = run(tree, ["frontier", "gift-cards"]);
   assert.equal(stopped.code, 2, stopped.out + stopped.err);

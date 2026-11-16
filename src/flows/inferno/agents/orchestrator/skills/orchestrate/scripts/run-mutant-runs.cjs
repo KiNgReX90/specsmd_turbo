@@ -95,7 +95,7 @@ function editableOf(tree, intentId, itemId) {
 function batchFile(tree, entries) {
   const file = path.join(path.dirname(journalPath(tree)), `review-mutants-${lib.stamp()}-${process.pid}.json`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(entries.map((entry) => Object.fromEntries(MUTANT_KEYS.map((key) => [key, entry[key]])))));
+  fs.writeFileSync(file, JSON.stringify(entries.map((entry) => Object.fromEntries([...MUTANT_KEYS, 'check'].map((key) => [key, entry[key]])))));
   return file;
 }
 
@@ -143,7 +143,7 @@ function changedSince(tree, rel, editable) {
   const [first] = lib.gitLines(tree, ['log', '--format=%H', '--reverse', '--', rel.split(path.sep).join('/')]);
   if (!first) return [];
   return lib.gitLines(tree, ['-c', 'core.quotePath=off', 'diff', '--name-only', first, 'HEAD'])
-    .filter((file) => !file.startsWith(`${lib.SPECS_DIR}/`) && lib.ownedBy(file, editable, tree));
+    .filter((file) => !lib.inLedger(file) && lib.ownedBy(file, editable, tree));
 }
 
 /**
@@ -301,6 +301,6 @@ function previousEntries(tree, rel) {
 const ownFindings = (doc) => (Array.isArray(doc.findings) ? doc.findings.filter((finding) => !isMap(finding) || finding.mutant === undefined) : []);
 
 /** The entry as a review file keeps it: the proposal, then what the runner wrote, in that order. */
-const kept = (entry) => Object.fromEntries([...MUTANT_KEYS, 'was', 'caught', 'why'].map((key) => [key, entry[key]]).filter(([, value]) => value !== undefined));
+const kept = (entry) => Object.fromEntries([...MUTANT_KEYS, 'check', 'was', 'caught', 'why'].map((key) => [key, entry[key]]).filter(([, value]) => value !== undefined));
 
 module.exports = { changedSince, checkTargets, dump, kept, locate, ownFindings, previousEntries, ranLines, runEntries, survivorFinding };

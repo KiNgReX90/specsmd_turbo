@@ -2,7 +2,8 @@
 
 /**
  * What a mutate may break: a committed file of the tree, and in a batch a list of entries
- * `{criterion, file, line, find, replace, test}`. `find` occurs exactly once on that line and
+ * `{criterion, file, line, find, replace, test}`, and `check: true` when the test is a plain check
+ * whose exit code is its verdict (run-mutate-check.cjs). `find` occurs exactly once on that line and
  * `replace` is its broken version, both on one line. A batch is JSON or the YAML subset of
  * run-yaml.cjs. Every entry is checked before anything is written, so a bad entry refuses the
  * whole batch and touches nothing.
@@ -12,9 +13,11 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { CHECK_HOW } = require('./run-mutate-check.cjs');
 
 const { RunError } = lib;
 const KEYS = ['criterion', 'file', 'line', 'find', 'replace', 'test'];
+const OPTIONAL = ['check'];
 
 /** A committed file of `tree`, with its bytes and its lines. A file nothing could restore is refused. */
 function committedFile(tree, file) {
@@ -41,8 +44,9 @@ function entry(tree, raw, k) {
   const at = `entry ${k}`;
   const bad = (message) => new RunError(`${at}: ${message}`, 'BAD_BATCH');
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw bad(`it is not a map of ${KEYS.join(', ')}`);
-  const unknown = Object.keys(raw).filter((key) => !KEYS.includes(key));
-  if (unknown.length > 0) throw bad(`it holds ${unknown.join(', ')}; an entry holds ${KEYS.join(', ')} only`);
+  const unknown = Object.keys(raw).filter((key) => !KEYS.includes(key) && !OPTIONAL.includes(key));
+  if (unknown.length > 0) throw bad(`it holds ${unknown.join(', ')}; an entry holds ${KEYS.join(', ')} only, and check: true`);
+  if (![undefined, true, 'true'].includes(raw.check)) throw bad(`check reads ${raw.check}; ${CHECK_HOW}`);
   const text = (key, empty = false) => {
     const value = typeof raw[key] === 'number' && key === 'criterion' ? String(raw[key]) : raw[key];
     if (typeof value !== 'string' || (!empty && value.trim() === '')) throw bad(`it needs ${key} as text`);
@@ -57,7 +61,7 @@ function entry(tree, raw, k) {
   const times = occurrences(lines[n - 1], find);
   if (times !== 1) throw target(`find occurs ${times} times on ${rel}:${n}; it must occur there exactly once`);
   if (find === replace) throw target(`replace leaves ${rel}:${n} as it is, so it is no mutant`);
-  return { k, criterion, rel, abs, n, col: lines[n - 1].indexOf(find), find, replace, test, rust: rel.endsWith('.rs') };
+  return { k, criterion, rel, abs, n, col: lines[n - 1].indexOf(find), find, replace, test, rust: rel.endsWith('.rs'), check: raw.check !== undefined };
 }
 
 /** The checked entries of the batch at `file`, numbered from 1 in their order. */

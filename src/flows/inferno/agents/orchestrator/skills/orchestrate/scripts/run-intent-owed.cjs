@@ -4,8 +4,8 @@
  * Whether the intent review holds for a tree, and what the gate and green owe without it.
  *
  * The review binds the whole tree by content (`proofs.scopeHash` with no scope), which leaves
- * out `.specs-inferno/`: a ledger commit, the review file itself and an archive move keep it
- * current, and any code change voids it, except a change to a `review.outside` kb that the
+ * out the ledger (lib.inLedger), all of `.specs-inferno/` but its rule files: a ledger commit,
+ * the review file itself and an archive move keep it current, and any code change voids it, except a change to a `review.outside` kb that the
  * base synced and the intent never touched (outsideHash); `["**"]` binds it to the files the
  * intent changed. The gate checks it after its fold, so it never proves a tree the reviewer did
  * not read, and green checks it before every merge, which is the one call both hosts and a hand
@@ -106,7 +106,7 @@ function parseFor(tree, rel, intentId, recorded, owing = true, config) {
  * kb, which binds the review to the files the intent changed. The first hash is the one recorded;
  * the second names the intent's ledger files too, as reviews recorded before that was fixed hashed them.
  */
-function outsideHashes(tree, config) {
+function outsideHashes(tree, config, released = false) {
   const globs = reviewOutside(config || {});
   if (globs.length === 0) return null;
   const base = resolveBase(config, null, tree);
@@ -116,9 +116,11 @@ function outsideHashes(tree, config) {
   // The intent's own kb paths are named too: a page it deleted is in no hash of the files that exist.
   // A ledger path is in no tree hash, so it is named in none either: the review's own record would void it.
   const named = [...own].filter((file) => lib.matchesAny(file, globs)).sort();
-  const hash = proofs.scopeHash(tree, null, { skip: (file) => lib.matchesAny(file, globs) && !own.has(file) });
+  // `released` hashes as the released flow did, which read a rule file as ledger (rulesHeld).
+  const rule = (file) => released && lib.inStandards(file);
+  const hash = proofs.scopeHash(tree, null, { skip: (file) => rule(file) || (lib.matchesAny(file, globs) && !own.has(file)) });
   const digest = (names) => createHash('sha256').update(JSON.stringify([hash, names])).digest('hex');
-  return [digest(named.filter((file) => !isLedger(file))), digest(named)];
+  return [digest(named.filter((file) => !isLedger(file) && !rule(file))), digest(named)];
 }
 
 /** The hash `run.cjs review` records as tree_outside, or null when `review.outside` is unset. */
@@ -127,12 +129,31 @@ function outsideHash(tree, config) {
   return hashes && hashes[0];
 }
 
+/**
+ * Whether no rule file changed since the commit the review read. The released flow hashed none
+ * (lib.inLedger), so a hash it recorded holds while that is so.
+ */
+function rulesHeld(tree, review) {
+  const rules = [`${lib.STANDARDS_DIR}/**`];
+  try {
+    return proofs.scopeHash(tree, rules) === proofs.scopeHash(tree, rules, { ref: String(review.commit) });
+  } catch (error) {
+    if (error instanceof RunError) return false;
+    throw error;
+  }
+}
+
+/** The review's tree hash holds for the tree, as recorded now or by the released flow. */
+const treeHolds = (tree, review) => review.tree === proofs.scopeHash(tree) ||
+  (review.tree === proofs.scopeHash(tree, null, { skip: lib.inStandards }) && rulesHeld(tree, review));
+
 /** The review reads the tree as it stands, whole or with the kb the base synced left out. */
 function reviewCurrent(tree, config, review) {
-  if (review.tree === proofs.scopeHash(tree)) return true;
+  if (treeHolds(tree, review)) return true;
   if (typeof review.tree_outside !== 'string') return false;
-  const hashes = outsideHashes(tree, config);
-  return Boolean(hashes) && hashes.includes(review.tree_outside);
+  const released = rulesHeld(tree, review) && outsideHashes(tree, config, true);
+  const hashes = [...(outsideHashes(tree, config) || []), ...(released || [])];
+  return hashes.includes(review.tree_outside);
 }
 
 const changedLine = (review) => `the code changed since the review read it at ${(review.commit || 'an unknown commit').slice(0, 7)}`;
@@ -164,7 +185,7 @@ function intentReviewState(tree, config, intentId) {
     parseFor(tree, rel, intentId, true, true, config);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
-    if (review && error.refused && review.tree !== proofs.scopeHash(tree)) {
+    if (review && error.refused && !treeHolds(tree, review)) {
       const delta = !reviewCurrent(tree, config, review);
       return { rel, review: delta ? review : null, owed: [...owed, ...(delta ? [changedLine(review)] : []), error.refused] };
     }

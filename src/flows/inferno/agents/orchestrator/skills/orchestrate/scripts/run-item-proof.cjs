@@ -27,7 +27,7 @@
  *   diff             { from, paths, sha256 }: the item's diff is every path changed since the
  *                    baseline `from` (a full sha) that the item owns or a dispatch of it claimed
  *                    or was granted (`dispatchClaims` in run-review-span.cjs),
- *                    never one under `.specs-inferno/`, sorted; sha256 hashes `git diff --full-index --binary --no-renames
+ *                    never one of the ledger (lib.inLedger), sorted; sha256 hashes `git diff --full-index --binary --no-renames
  *                    --no-color --no-ext-diff --no-textconv --src-prefix=a/ --dst-prefix=b/
  *                    <from> -- <paths>` as the tree stands, new files included. Once the item
  *                    is committed, the same diff from `from` to HEAD hashes the same: that is
@@ -78,11 +78,11 @@ const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
 const literal = (file) => `:(literal)${file}`;
 
 /**
- * The ledger's paths, under `.specs-inferno/`: never part of an item's proof nor of the code its
- * review binds, also when the item owns one, as a host config it changes. The proof's writer
+ * The ledger's paths, `.specs-inferno/` but its rule files (lib.inLedger): never part of an item's
+ * proof nor of the code its review binds, also when the item owns one, as a host config it changes. The proof's writer
  * leaves them out of its paths and its reader out of what changed since, so both hold one rule.
  */
-const inLedger = (file) => file.startsWith(`${lib.SPECS_DIR}/`);
+const inLedger = lib.inLedger;
 
 // ---------------------------------------------------------------------------
 // The proof file

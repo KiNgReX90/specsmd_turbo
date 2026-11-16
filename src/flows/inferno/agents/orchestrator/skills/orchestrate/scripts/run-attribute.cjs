@@ -198,7 +198,7 @@ function attribute(tree, items, options) {
   if (legacy.length > 0) return { legacy };
 
   const peers = peerRecords(tree, options.peers);
-  const ledger = (file) => file.startsWith(`${lib.SPECS_DIR}/`);
+  const ledger = lib.inLedger;
   const outside = new Set();
   const unreported = new Set();
   const attributed = [];

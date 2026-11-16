@@ -64,7 +64,7 @@ const configOf = (config) => () => config;
 test("the lint finds each token of the line that is no case id, and names the shape it wants", () => {
   const found = provesFindings("Tester proves: TC-1 (stub at x.md:42)\n", configOf({ cases: { files: [{ path: "c.md", case: "^### (TC-\\d+)" }] } }));
   assert.equal(found.length, 1);
-  assert.match(found[0], /^brief: the Tester proves line names "stub", "at", "x\.md:42", which are no case ids of the shape \/\^\(\?:TC-\\d\+\)\$\/; it names case ids alone$/);
+  assert.match(found[0], /^brief: the Tester proves line names "stub", "at", "x\.md:42", which are no case ids of the shape \/\^\(\?:TC-\\d\+\)\$\/; it names case ids alone, or reads `None\.` when the intent has no tester case$/);
   const one = provesFindings("Tester proves: TC-1, x.md:42\n", configOf({ cases: { files: [{ path: "c.md", case: "^### (TC-\\d+)" }] } }));
   assert.match(one[0], /names "x\.md:42", which is no case id of the shape/);
 });

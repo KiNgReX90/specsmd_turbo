@@ -19,7 +19,9 @@
  * runs of the shared build, each entry on a build of its own in its turn, then the other entries,
  * after every entry that runs in place.
  * Every test runs through the host's `mutate.run` wrapper when it names one, and a red run of a
- * check the host lists reads caught when it printed its finding line (run-mutate-host.cjs).
+ * check the host lists reads caught when it printed its finding line (run-mutate-host.cjs). An
+ * entry that says `check: true` runs as written, in place, after its check ran once on the tree as
+ * it is, and its exit code is its verdict (run-mutate-check.cjs).
  *
  * A clean tree only, every touched file restored in a finally, and signals held until then.
  * A held signal is read before every run, so the batch starts no run after it, and every entry
@@ -44,6 +46,7 @@ const {
 } = require('./run-mutate-session.cjs');
 const { commandOf, hostOf } = require('./run-mutate-host.cjs');
 const { leftBehind, settle, snapshot } = require('./run-mutate-left.cjs');
+const { CHECK_READ, baselines, placed, unproven } = require('./run-mutate-check.cjs');
 
 const { RunError } = lib;
 const OFF = 'unset INFERNO_MUTANT; ';
@@ -58,8 +61,8 @@ const SOURCE_READ = 'its test starts no cargo run, so it reads the source in pla
  */
 function planAll(tree, entries, hosted) {
   // `why` is shown for a Rust entry only: every other language runs in place anyway.
-  const plans = new Map(entries.map((e) => [e.k, { form: 'classic', why: SOURCE_READ }]));
-  const switchable = entries.filter((e) => e.rust && runsCompiled(e.test, hosted && hosted.match));
+  const plans = new Map(entries.map((e) => [e.k, { form: 'classic', why: e.check ? CHECK_READ : SOURCE_READ }]));
+  const switchable = entries.filter((e) => e.rust && !e.check && runsCompiled(e.test, hosted && hosted.match));
   for (const rel of [...new Set(switchable.map((e) => e.rel))]) {
     const mine = switchable.filter((e) => e.rel === rel);
     const text = fs.readFileSync(path.join(tree, rel), 'utf8');
@@ -86,7 +89,7 @@ async function signalled(session) {
 
 /** Run entry `e`'s test behind `prefix`: in the session when it serves `e`, null when it serves `e` but reads no verdict now. */
 function runOf(hs, e, prefix, label) {
-  if (!hs.tests.has(e.k)) return lib.runShell(prefix + e.command, hs.session.tree, hs.session.log(label));
+  if (!hs.tests.has(e.k)) return lib.runShell(prefix + e.command, hs.session.tree, hs.session.log(label), { wrap: !e.check });
   return noVerdict(hs) ? null : runIn(hs, e, prefix, label);
 }
 
@@ -122,9 +125,12 @@ async function control(hs, switched, round) {
 }
 
 function execute(hs, e, prefix, label) {
+  const why = unproven(hs.base, e);
+  if (why) return { caught: null, why };
   const run = runOf(hs, e, prefix, label);
   if (!run) return { caught: null, ...noVerdict(hs) };
-  return { ...verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks }), code: run.code, log: run.log, signal: run.signal };
+  const verdict = verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks, check: e.check });
+  return { ...verdict, code: run.code, log: run.log, signal: run.signal };
 }
 
 /**
@@ -218,7 +224,9 @@ async function runAll(session, sealed, entries, plans, groups) {
   const state = { builds: 0 };
   let out = {};
   try {
-    out = await runSwitched(hs, entries, plans, state);
+    const first = await baselines(session, entries, signalled);
+    hs.base = first.base;
+    out = first.stopped ? first : await runSwitched(hs, entries, plans, state);
     if (!out.stopped) out = await runOwn(hs, entries, plans, state);
   } finally {
     const closed = closeOnce(hs);
@@ -301,10 +309,10 @@ async function batch(options) {
       `refusing to mutate a dirty tree: ${dirty.slice(0, 5).join(', ')} is uncommitted. Mutate once the tree is clean.`), 'DIRTY');
   }
   const host = hostOf(config);
-  const entries = readBatch(tree, file).map((e) => ({ ...e, command: commandOf(host, tree, e.test) }));
+  const entries = readBatch(tree, file).map((e) => placed(host, e, (test) => commandOf(host, tree, test)));
   const hosted = sessionOf(config);
   const plans = planAll(tree, entries, hosted);
-  const groups = { hosted, host, tests: sessionTests(hosted, entries, plans) };
+  const groups = { hosted, host, tests: sessionTests(hosted, entries.filter((e) => !e.check), plans) };
   // What git calls changed before the first write: the batch file and the review being recorded.
   const before = snapshot(tree);
   const session = openSession(tree);
