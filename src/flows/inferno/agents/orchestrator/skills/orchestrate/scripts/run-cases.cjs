@@ -16,7 +16,7 @@
  *    that names its id. A key named outside every block reaches every id in that file.
  * 3. expectations: the range modified or deleted lines of a test that existed at its start, edited
  *    no case, and no commit carries a `Cases:` line. `Cases: none` answers this rule only.
- * With `proves`, the gate adds: each id the brief's `Tester proves:` line names is edited or named.
+ * With `proves`, the gate adds: each case id the brief's `Tester proves:` line names is edited or named (run-cases-proves.cjs).
  *
  * Config `cases:` (absent: no-op): `files` (path, `case` opener regex with the id in group 1, and
  * `rules: [stale]` for a file that joins rule 1 only), `tests`, `sources`, `expectations` (globs).
@@ -31,6 +31,7 @@ const lib = require('./run-lib.cjs');
 const { declared, finder, names } = require('./run-real-app-keys.cjs');
 const realApp = require('./run-real-app.cjs');
 const { blockAt, caseBlocks, labelPattern, namesId, testBlocks, trailers } = require('./run-cases-blocks.cjs');
+const { idShape, otherTokens, testerProves, tokens } = require('./run-cases-proves.cjs');
 
 const { RunError } = lib;
 
@@ -40,6 +41,7 @@ const SHOWN_TITLES = 8;
 const KEY_KINDS = new Set(['testid', 'prefix', 'copy']);
 /** The most cases one key may reach before it counts as a shared step that reaches none. */
 const MAX_DRIVEN = 3;
+const HOST_CONFIG = 'the host config';
 
 const globs = (value) => (value === undefined || value === '' ? [] : Array.isArray(value) ? value : [value]);
 
@@ -264,15 +266,23 @@ function cases(options, config) {
  */
 function refusal(tree, config, range, brief) {
   if (!config.cases) return null;
-  const proves = brief && fs.existsSync(brief) ? testerProves(fs.readFileSync(brief, 'utf8')) : [];
+  const shape = idShape(casesConfig(config, HOST_CONFIG));
+  const proves = brief && fs.existsSync(brief) ? testerProves(fs.readFileSync(brief, 'utf8'), shape) : [];
   const result = cases({ tree, range, proves }, config);
   return result.exit === 0 ? null : result;
 }
 
-/** The case ids the brief's `Tester proves:` line names, or none. */
-function testerProves(text) {
-  const line = /^[*_\s-]*Tester proves:?[*_]*\s*(.*)$/im.exec(text || '');
-  return line ? line[1].split(/[,\s]+/).map((token) => token.replace(/[^\w-]/g, '')).filter((token) => /\d/.test(token)) : [];
+/**
+ * The plan lint's finding on a brief whose `Tester proves:` line names a token of no case-id
+ * shape, with the shape it wants; `configOf` is read only when the line names a token.
+ */
+function provesFindings(text, configOf) {
+  if (tokens(text).length === 0) return [];
+  const shape = idShape(casesConfig(configOf(), HOST_CONFIG));
+  const other = shape ? otherTokens(text, shape) : [];
+  if (other.length === 0) return [];
+  const which = other.length === 1 ? 'is no case id' : 'are no case ids';
+  return [`brief: the Tester proves line names ${other.map((token) => `"${token}"`).join(', ')}, which ${which} of the shape /${shape.source}/; it names case ids alone`];
 }
 
-module.exports = { USAGE, cases, casesConfig, refusal, testerProves };
+module.exports = { USAGE, cases, casesConfig, provesFindings, refusal, testerProves };
