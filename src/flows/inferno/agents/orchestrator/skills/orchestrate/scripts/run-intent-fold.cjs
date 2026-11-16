@@ -13,7 +13,7 @@ const lib = require('./run-lib.cjs');
 const { reviewOutside } = require('./run-config-gates.cjs');
 const { foldRanges } = require('./run-fold.cjs');
 
-const isLedger = (file) => file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`);
+const isLedger = lib.inLedger;
 
 /**
  * The base refs the intent's files are read against: of the local base and origin's, the one that

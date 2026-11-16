@@ -193,7 +193,7 @@ function boundFiles(tree, rel, doc, { recorded = false } = {}) {
   for (const file of listed) {
     if (typeof file !== 'string' || file.trim() === '') throw bad(rel, 'files holds paths only');
     const normal = relativePath(rel, file, 'files');
-    if (normal === lib.SPECS_DIR || normal.startsWith(`${lib.SPECS_DIR}/`)) continue;
+    if (lib.inLedger(normal)) continue;
     if (!recorded && !fs.existsSync(path.join(tree, normal))) {
       throw bad(rel, `files lists ${file}, which is not in the tree; list only files the tree holds, never one the change deleted`);
     }
@@ -292,7 +292,7 @@ function pinsOf(rel, doc, criterionOf = () => null) {
     const problem = criterionOf(pin.criterion, pin);
     if (problem) throw bad(rel, `${at} ${problem}`);
     const [file, test] = [relativePath(rel, pin.file, at), relativePath(rel, pin.test, at)];
-    const ledger = [file, test].find((name) => name === lib.SPECS_DIR || name.startsWith(`${lib.SPECS_DIR}/`));
+    const ledger = [file, test].find(lib.inLedger);
     if (ledger) throw bad(rel, `${at} names ${ledger}; a pin reads the code, never the ledger`);
     const words = pinWords(pin.text);
     if (words < PIN_WORDS) {
@@ -328,7 +328,7 @@ function proposalsOf(rel, doc, criterionOf, held = () => false) {
     const problem = criterionOf(mutant.criterion, mutant);
     if (problem) throw bad(rel, `${at} ${problem}`);
     const file = relativePath(rel, mutant.file, at);
-    if (file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`)) throw bad(rel, `${at} breaks ${file}; a mutant breaks the code, never the ledger`);
+    if (lib.inLedger(file)) throw bad(rel, `${at} breaks ${file}; a mutant breaks the code, never the ledger`);
     const check = mutant.check === undefined ? {} : { check: mutant.check };
     return [withSays({ ...Object.fromEntries(MUTANT_KEYS.map((key) => [key, key === 'file' ? file : mutant[key]])), ...check }, mutant.says)];
   });
