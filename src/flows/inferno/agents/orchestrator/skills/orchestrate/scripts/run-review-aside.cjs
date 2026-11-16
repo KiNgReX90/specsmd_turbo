@@ -162,21 +162,22 @@ function asideLines(tree, intentId, { withdrawn = false } = {}) {
 
 /**
  * The criteria that still owe a proof in the intent review `doc`, judged as the recorder judges a
- * clean one: a caught mutant, a checked pin or a deferred survivor answers a criterion.
+ * clean one: a caught mutant, a checked pin or a deferred survivor answers a criterion. `config`
+ * is the one the call runs with; without one the tree's own is read (run-mutant-coverage.cjs).
  */
-function proofGaps(tree, intentId, doc) {
+function proofGaps(tree, intentId, doc, config) {
   // Required here: run-intent-owed loads the intent review schema, which loads this module.
   const items = require('./run-intent-owed.cjs').intentItems(tree, intentId);
-  return mutantGaps(answered(itemProofs(tree, intentId, items), maps(doc.deferred)), maps(doc.mutants), maps(doc.pins));
+  return mutantGaps(answered(itemProofs(tree, intentId, items, config), maps(doc.deferred)), maps(doc.mutants), maps(doc.pins));
 }
 
 /**
  * What a recorded fix review owes when its every finding is deferred and a criterion still owes a
  * proof: its reviewer again, for those criteria only. Null for any other review.
  */
-function proofOwed(tree, intentId, review) {
+function proofOwed(tree, intentId, review, config) {
   if (review.verdict !== 'fix' || review.findings.length > 0 || review.survivors.length > 0) return null;
-  const gaps = proofGaps(tree, intentId, review);
+  const gaps = proofGaps(tree, intentId, review, config);
   return gaps.length > 0 ? `every open finding is deferred, and ${gaps.join('; ')}; propose a mutant or a pin for each` : null;
 }
 

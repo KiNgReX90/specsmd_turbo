@@ -18,7 +18,10 @@
  *
  * A criterion whose line ends in a gate mark, `(gate: <name>)`, owes neither: the gate proves it
  * (run-criterion-marks.cjs). It keeps its number, so every recorded mutant names what it named,
- * unless its mark came after the item's first review outside a commit of its spec alone.
+ * unless its mark came after the item's first review outside a commit of its spec alone, or names
+ * a command or lane the config the call runs with does not hold (`gateHeld`). The plan lint holds an
+ * open item's marks to the config; this holds every mark that counts, a completed item's too, so a
+ * mark added to it later in a commit of its spec alone counts only when the gate runs what it names.
  *
  * An item mutant the intent review moved, under `moved`, counts for the criterion it was moved to
  * and no longer for the one its item review recorded (run-mutant-moves.cjs): a review recorded
@@ -31,7 +34,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { pinProblem, testPaths } = require('./run-review-pins.cjs');
-const { gateMark, lateMarks } = require('./run-criterion-marks.cjs');
+const { gateHeld, gateMark, lateMarks } = require('./run-criterion-marks.cjs');
 const { changedSince, locate } = require('./run-mutant-runs.cjs');
 
 /** The criteria under `## Acceptance Criteria`, one per list line, checkbox or not. */
@@ -117,22 +120,30 @@ function placed(tree, intentId, itemId, spec) {
   return (entry) => (typeof entry.find === 'string' ? locate(tree, entry, elsewhere) : {});
 }
 
+/** The 0-based indexes of the criteria whose mark, not late, names nothing the config holds. */
+const unheldMarks = (criteria, late, configOf) => criteria.map((text, index) => index)
+  .filter((index) => !late.includes(index) && gateMark(criteria[index]) !== null && !gateHeld(configOf(), gateMark(criteria[index])));
+
 /**
  * What each item of the intent needs: its criteria, how its tests prove them, its manifest's test
  * paths, its own caught mutants that can still be placed, its own pins that still stand, and its
- * marks that count for nothing.
+ * marks that count for nothing: late ones, and under `unheld` those the config does not hold.
+ * `config` is the one the call runs with; without one the tree's own is read, and only for a mark.
  */
-function itemProofs(tree, intentId, ids) {
+function itemProofs(tree, intentId, ids, config) {
+  const configOf = () => config || lib.readConfig(tree);
   const moves = intentMoves(tree, intentId);
   return ids.map((id) => {
     const spec = lib.readItemSpec(tree, intentId, id);
     const tests = testPaths(spec);
     const criteria = acceptanceCriteria(fs.readFileSync(spec.file, 'utf8'));
     const where = placed(tree, intentId, id, spec);
+    const late = lateMarks(tree, intentId, id, spec.file, criteria);
     return {
       id,
       criteria,
-      late: lateMarks(tree, intentId, id, spec.file, criteria),
+      late,
+      unheld: unheldMarks(criteria, late, configOf),
       tested: tests.length > 0,
       tests,
       mutants: movedMutants(tree, intentId, id, criteria, moves).filter((entry) => entry.caught === 'yes' && !where(entry).why),
@@ -156,11 +167,13 @@ function names(mutant, item, index, own) {
 }
 
 const LATE = " (its gate mark came after the item's first review, outside a commit of its spec alone)";
+const UNHELD = (name) => ` (its gate mark names ${name}, which the config's verification block does not hold: ` +
+  'correct the mark in a commit of its spec alone, or prove the criterion)';
 
 /**
  * One line per item that still owes a caught mutant or a checked pin, naming the criteria it owes.
  * `intentPins` are the intent review's pins, which its record checked. A criterion with a gate
- * mark owes none, unless the item lists its index under `late`.
+ * mark owes none, unless the item lists its index under `late` or `unheld`.
  */
 function mutantGaps(items, intentMutants, intentPins = []) {
   const lines = [];
@@ -170,9 +183,11 @@ function mutantGaps(items, intentMutants, intentPins = []) {
     const named = (index) => own.some((entry) => names(entry, item, index, true)) ||
       [...caught, ...intentPins].some((entry) => names(entry, item, index, false));
     const late = (index) => (item.late || []).includes(index);
-    const gated = (index) => gateMark(item.criteria[index]) !== null && !late(index);
+    const unheld = (index) => (item.unheld || []).includes(index);
+    const gated = (index) => gateMark(item.criteria[index]) !== null && !late(index) && !unheld(index);
+    const why = (index) => (late(index) ? LATE : unheld(index) ? UNHELD(gateMark(item.criteria[index])) : '');
     if (!item.tested) continue;
-    const owed = item.criteria.map((text, index) => (gated(index) || named(index) ? null : `${index + 1} "${text}"${late(index) ? LATE : ''}`))
+    const owed = item.criteria.map((text, index) => (gated(index) || named(index) ? null : `${index + 1} "${text}"${why(index)}`))
       .filter(Boolean);
     if (owed.length > 0) lines.push(`${item.id} owes a caught mutant or a checked pin for criteria ${owed.join(', ')}`);
   }

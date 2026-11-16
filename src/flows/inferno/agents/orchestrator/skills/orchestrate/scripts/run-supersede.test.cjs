@@ -124,6 +124,15 @@ test("a fix outside every running lane's scope is refused and the lane walks on"
   assert.ok(jobs.alive(lane), 'the lane walks on');
 });
 
+test("a fix that moves a file out of a running lane's scope supersedes the lane", { skip: !LINUX }, (t) => {
+  const { f, lane } = walking(t);
+  git(f.tree, 'mv', 'src/input.txt', 'docs/input.txt');
+  commit(f.tree, 'the input moves to the docs');
+  const result = run(f, 'gate', '--detach', '--supersede');
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, new RegExp(`superseded smoke lane pid ${lane.pid}: stopped, proven by its stop check`));
+});
+
 test("the fixture's cleanup ends every job a test detached before it removes the tree", { skip: !LINUX }, () => {
   const cleanups = [];
   const { f, lane, gateJob } = walking({ after: (fn) => cleanups.push(fn) });
