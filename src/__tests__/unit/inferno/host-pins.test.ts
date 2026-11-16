@@ -9,6 +9,7 @@
  *   scripts give a driver that commits onto the base.
  * - The reviewer carries no rule of one host and no ownership check: a host's own rules live in
  *   its standards folder, and ownership is held by the attribution in `verify-item`.
+ * - The reviewer gives a criterion only a check proves that check as its mutant's test.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -160,5 +161,16 @@ describe('the reviewer carries no host rule and no ownership check', () => {
     const attribution = readFileSync(path.join(SCRIPTS, 'run-attribute.cjs'), 'utf8');
     expect(attribution).toContain("verify-item's attribution: which dispatch record answers for each reviewed item, and what\n * changed since its baseline inside and outside the item's ownership.");
     expect(USAGE).toContain('node run.cjs verify-item <item-id> [--tree <dir>]      the item\'s own check plus its ownership');
+  });
+});
+
+describe('the reviewer gives a check-only criterion its check as the test', () => {
+  // A criterion only a plain check proves takes a mutant too: the entry marks its test a check, and
+  // the runner reads the check's exit code (run-mutate-check.cjs), so the reviewer never wraps it.
+  it.each(['agents/reviewer/agent.md', 'commands/inferno-reviewer.md'])('%s gives a check-only criterion its check as the test', (rel) => {
+    const text = readFileSync(path.join(INFERNO, rel), 'utf8');
+    expect(text).toContain('a criterion only a check proves takes that check, with `check: true`.');
+    expect(text).toContain('name a criterion no mutant can reach in your review, for the orchestrator.');
+    expect(text).not.toMatch(/or only a check proves/);
   });
 });
