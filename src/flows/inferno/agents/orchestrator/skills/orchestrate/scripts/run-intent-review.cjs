@@ -141,7 +141,7 @@ async function record(tree, context, commit, restored) {
   const reviewer = reviewerId(context.reviewer, intentRecordCall(tree));
   // The runner runs the mutants owed here and writes what they said into the file (run-review-mutants.cjs).
   const ran = await intentMutants(tree, context);
-  const review = owed.parseFor(tree, rel, intent, false);
+  const review = owed.parseFor(tree, rel, intent, false, true, context.config);
   const abs = path.join(tree, rel);
   // A recorded file sent back to its reviewer still holds what the last record wrote, written anew here.
   const text = unrecorded(tree, rel);
@@ -222,7 +222,7 @@ function reviewIntent(options) {
   if (owed.scanOwed(tree, intent)) return scanRefusal(tree, context, folded);
   const state = owed.intentReviewState(tree, config, intent);
   // A fix review whose every finding is deferred owes its reviewer for the criteria still without a proof (run-review-aside.cjs).
-  const current = state.review && owed.reviewCurrent(tree, config, state.review) && !proofOwed(tree, intent, state.review);
+  const current = state.review && owed.reviewCurrent(tree, config, state.review) && !proofOwed(tree, intent, state.review, config);
   if (current) {
     if (options.rerun) return rerun(tree, context, state.review, folded);
     const head = `intent review ${state.review.verdict} for the current tree (read at ${state.review.commit.slice(0, 7)})`;

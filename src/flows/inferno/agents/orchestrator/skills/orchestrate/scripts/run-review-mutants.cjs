@@ -250,7 +250,7 @@ async function intentMutants(tree, context) {
   const text = fs.readFileSync(abs, 'utf8');
   const doc = readDoc(tree, rel);
   const own = ownFindings(doc);
-  const proofs = aside.answer(itemProofs(tree, intent, items));
+  const proofs = aside.answer(itemProofs(tree, intent, items, context.config));
   const carried = moves.rename(aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes')));
   retest(rel, doc, carried);
   // Placed before anything is judged: an owed proposal its item's code no longer holds is held by nothing and counts for nothing.

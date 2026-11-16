@@ -87,11 +87,14 @@ function scanOwed(tree, intentId) {
   return scanIds(tree, intentId) === null;
 }
 
-/** Validate a review file against the intent as it stands; `owing` false leaves out what each criterion owes. */
-function parseFor(tree, rel, intentId, recorded, owing = true) {
+/**
+ * Validate a review file against the intent as it stands; `owing` false leaves out what each criterion owes.
+ * `config` is the one the call runs with, which every gate mark that counts is held to (run-mutant-coverage.cjs).
+ */
+function parseFor(tree, rel, intentId, recorded, owing = true, config) {
   const items = intentItems(tree, intentId);
   return parseIntentReview(tree, rel, {
-    recorded, items, scanIds: scanIds(tree, intentId) || [], proofs: owing ? itemProofs(tree, intentId, items) : [],
+    recorded, items, scanIds: scanIds(tree, intentId) || [], proofs: owing ? itemProofs(tree, intentId, items, config) : [],
   });
 }
 
@@ -158,7 +161,7 @@ function intentReviewState(tree, config, intentId) {
   let review;
   try {
     review = parseFor(tree, rel, intentId, true, false);
-    parseFor(tree, rel, intentId, true);
+    parseFor(tree, rel, intentId, true, true, config);
   } catch (error) {
     if (!(error instanceof RunError)) throw error;
     if (review && error.refused && review.tree !== proofs.scopeHash(tree)) {
@@ -170,7 +173,7 @@ function intentReviewState(tree, config, intentId) {
   if (!reviewCurrent(tree, config, review)) {
     owed.push(changedLine(review));
   } else if (review.verdict !== 'clean') {
-    owed.push(proofOwed(tree, intentId, review) || 'the review says fix and its findings are not fixed');
+    owed.push(proofOwed(tree, intentId, review, config) || 'the review says fix and its findings are not fixed');
   }
   return { rel, review, owed };
 }
