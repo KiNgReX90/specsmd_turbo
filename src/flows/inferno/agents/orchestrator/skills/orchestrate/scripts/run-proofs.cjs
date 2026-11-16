@@ -6,6 +6,7 @@ const { createHash } = require('crypto');
 const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
 const { readRun } = require('./run-check-refused.cjs');
+const { baseScoped } = require('./run-config-gates.cjs');
 
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -129,20 +130,37 @@ function revokeFlakeProofs(tree) {
   writeJson(ledger, done);
 }
 
-/** A command's proof, keyed by its `finalize_scopes` entry unless the caller names a scope, as a lane does. */
+/**
+ * The merge base a `verification.base_scoped` command reads: `git merge-base HEAD <base>` off the
+ * base, as integrate anchors a landing there (run-since.cjs). On the base itself, on a detached tree
+ * with no base to name, or with no such base branch, there is no merge base to bind: the proof binds
+ * HEAD, so green reads only what the last run minted there, and `rerun` makes every run spawn.
+ */
+function readsBase(tree, config) {
+  const base = require('./run-intents.cjs').resolveBase(config, null, tree);
+  const sha = base === lib.currentBranch(tree) ? null : lib.git(tree, ['merge-base', 'HEAD', base], { tolerate: true });
+  return sha ? { base: sha } : { base: lib.git(tree, ['rev-parse', 'HEAD']), rerun: true };
+}
+
+/**
+ * A command's proof, keyed by its `finalize_scopes` entry unless the caller names a scope, as a lane
+ * does, and by the merge base it reads when the config lists it in `base_scoped`. Any other command
+ * keeps the key it always had, so none of its proofs goes stale.
+ */
 function commandProof(tree, config, selected, command,
   scope = config.verification && config.verification.finalize_scopes && config.verification.finalize_scopes[command]) {
   revokeFlakeProofs(tree);
   const file = path.relative(tree, path.resolve(tree, selected || DEFAULT_CONFIG));
   const hash = scopeHash(tree, scope);
-  const key = digest(JSON.stringify([command, file, hash]));
-  return { command, config: file, hash, file: path.join(lib.cacheDir(tree), 'green-commands', key) };
+  const bound = baseScoped(config).includes(command) ? readsBase(tree, config) : null;
+  const key = digest(JSON.stringify(bound ? [command, file, hash, bound.base] : [command, file, hash]));
+  return { command, config: file, hash, ...bound, file: path.join(lib.cacheDir(tree), 'green-commands', key) };
 }
 
 function readProof(proof) {
   try {
     const record = JSON.parse(fs.readFileSync(proof.file, 'utf8'));
-    return record.command === proof.command && record.config === proof.config && record.hash === proof.hash &&
+    return record.command === proof.command && record.config === proof.config && record.hash === proof.hash && record.base === proof.base &&
       Number.isFinite(record.seconds) && record.seconds >= 0 && Number.isFinite(Date.parse(record.stamp)) &&
       typeof record.branch === 'string' ? record : null;
   } catch (error) {
@@ -161,7 +179,7 @@ function readProof(proof) {
 function runCommand(tree, config, selected, command, log, force = false, shell = lib.runShell) {
   const proof = commandProof(tree, config, selected, command);
   const previous = readProof(proof);
-  if (previous && !force) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
+  if (previous && !force && !proof.rerun) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
   fs.rmSync(proof.file, { force: true });
   const { run, line } = readRun(config, shell, command, tree, log);
   if (line) return { command, result: 'refused', seconds: run.seconds, log: run.log, line };
@@ -170,7 +188,7 @@ function runCommand(tree, config, selected, command, log, force = false, shell =
     if (moved) fs.appendFileSync(log, '\nverification inputs changed while the command ran. Run it again.\n');
     return { command, result: 'fail', seconds: run.seconds, log: run.log, ...(moved ? { moved: true } : {}) };
   }
-  const { file, ...identity } = proof;
+  const { file, rerun, ...identity } = proof;
   writeJson(file, { ...identity, stamp: new Date().toISOString(), seconds: run.seconds, branch: lib.currentBranch(tree) });
   return { command, result: 'pass', seconds: run.seconds };
 }

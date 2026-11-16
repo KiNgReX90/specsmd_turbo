@@ -27,6 +27,8 @@ const BOOLEANS = [true, false, 'true', 'false'];
 const globList = (value) => Array.isArray(value) && value.length > 0 &&
   value.every((glob) => typeof glob === 'string' && glob.trim().length > 0);
 const command = (value) => typeof value === 'string' && value.trim().length > 0;
+/** The configs whose verification.base_scoped a --config file took from the project config, which may name commands it does not run. */
+const inheritedScoped = new WeakSet();
 
 function validateGates(config, file) {
   const verification = isMap(config.verification) ? config.verification : {};
@@ -46,6 +48,7 @@ function validateGates(config, file) {
   require('./run-check-session.cjs').validateChecks(verification, file);
   validateRefused(verification, file);
   validateWrapper(verification, 'verification', file);
+  validateBaseScoped(verification, file, inheritedScoped.has(config));
   const review = isMap(config.review) ? config.review : {};
   if (review.outside !== undefined && !globList(review.outside)) {
     throw new RunError(
@@ -59,6 +62,8 @@ function validateGates(config, file) {
 /** A --config file inherits each verification key here and review.outside from the project config when it sets none. */
 function inheritGates(config, defaults) {
   const keys = [['verification', 'merge_slot'], ['verification', 'ship_cleanup'], ['verification', 'session'], ['verification', 'refused'],
+    ['verification', 'refused_exit'],
+    ['verification', 'base_scoped'],
     ['verification', 'run'], ['verification', 'wrapped'], ['review', 'outside']];
   for (const [section, key] of keys) {
     const from = defaults[section];
@@ -66,7 +71,38 @@ function inheritGates(config, defaults) {
     if (config[section] === undefined) config[section] = {};
     const own = config[section];
     if (isMap(own) && own[key] === undefined) own[key] = from[key];
+    if (key === 'base_scoped' && own[key] === from[key]) inheritedScoped.add(config);
   }
+}
+
+/**
+ * `verification.base_scoped`: the commands whose verdict reads the merge base, such as a ratchet that
+ * counts the head against the base, so their proof is keyed by the merge base too (run-proofs.cjs).
+ * An entry names a command of `verification.finalize` or `verification.integrate` verbatim, as a
+ * `finalize_scopes` key does; an inherited list is not held to the --config file's own commands.
+ */
+function validateBaseScoped(verification, file, inherited) {
+  const value = verification.base_scoped;
+  if (value === undefined) return;
+  if (!globList(value)) {
+    throw new RunError(
+      `verification.base_scoped in ${file} must be a list of commands, each one not empty: "base_scoped: [\\"<command>\\"]" under verification:.`,
+      'BAD_CONFIG'
+    );
+  }
+  const ran = [...(verification.finalize || []), ...(verification.integrate || [])];
+  const stray = inherited ? undefined : value.find((entry) => !ran.includes(entry));
+  if (stray !== undefined) {
+    throw new RunError(
+      `verification.base_scoped "${stray}" in ${file} names no command in verification.finalize or verification.integrate: list one verbatim or remove it.`,
+      'BAD_CONFIG'
+    );
+  }
+}
+
+/** The commands whose proof is keyed by the merge base, or none. */
+function baseScoped(config) {
+  return (isMap(config.verification) && config.verification.base_scoped) || [];
 }
 
 /** True only when the config turns the merge slot on. */
@@ -87,4 +123,4 @@ function reviewOutside(config) {
   return globList(value) ? [...value] : [];
 }
 
-module.exports = { inheritGates, mergeSlot, reviewOutside, shipCleanup, validateGates };
+module.exports = { baseScoped, inheritGates, mergeSlot, reviewOutside, shipCleanup, validateGates };

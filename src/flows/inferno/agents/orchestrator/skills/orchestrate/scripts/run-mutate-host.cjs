@@ -120,4 +120,4 @@ function commandOf(host, tree, test) {
   return host.run.text.replace(PART, (all, part) => quote(part === 'tree' ? tree : test));
 }
 
-module.exports = { commandOf, hostOf, quote, validateHost, validateWrapper, wrapperOf };
+module.exports = { commandOf, hostOf, quote, startsWrapped, validateHost, validateWrapper, wrapperOf };

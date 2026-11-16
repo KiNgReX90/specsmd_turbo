@@ -31,8 +31,9 @@ const path = require('path');
  *
  * A check (a contract script, a lint) prints no runner's summary. A host that lists it under
  * `mutate.checks` names the line it prints on a finding, and a red run of it that printed that line
- * is caught (run-mutate-host.cjs). For any other red run with no summary, of a command that starts no
- * runner read here, the reason says that a check cannot prove a mutant and names the way out.
+ * is caught (run-mutate-host.cjs). An entry that says `check: true` is read by its exit code, past
+ * every guard above (run-mutate-check.cjs). For any other red run with no summary, of a command that
+ * starts no runner read here, the reason names the ways a check reads a verdict.
  */
 
 /** Exit codes of a run whose child a signal ended: SIGINT, SIGKILL, SIGTERM. */
@@ -58,8 +59,8 @@ const RUNNER = new RegExp([
   /(?:^|[\s;&|('"/])playwright\s+test\b/.source,
   /(?:^|[\s;&|('"])(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?test\b/.source,
 ].join('|'));
-const CHECK_HINT = 'a check cannot prove a mutant, so end the criterion\'s line with (gate: <name>) instead, ' +
-  'or have the host list the check and its finding line under mutate.checks';
+const CHECK_HINT = 'a plain check reads a verdict only as a batch entry that says check: true; else end the criterion\'s line ' +
+  'with (gate: <name>), or have the host list the check and its finding line under mutate.checks';
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -139,9 +140,9 @@ function vitestParseFailed(lines, abs) {
  * The verdict of one run: `caught` true or false, or null with `why`. `abs` is the mutated file;
  * without it only a build failure and a kill are read. `files` are the mutated files a failed build
  * is held to (`abs` alone by default), `test` the command as the reviewer wrote it, and `checks`
- * the host's checks, each `{match, finding}` as regexes.
+ * the host's checks, each `{match, finding}` as regexes, and `check` true when the test is a plain check.
  */
-function verdictOf(run, text, abs, { files = abs ? [abs] : [], test = null, checks = [] } = {}) {
+function verdictOf(run, text, abs, { files = abs ? [abs] : [], test = null, checks = [], check: plain = false } = {}) {
   if (run.signal) return { caught: null, why: `ended on ${run.signal}` };
   if (run.code === 0) return { caught: false };
   if (KILLED.has(run.code)) return { caught: null, why: `killed (exit ${run.code})` };
@@ -159,6 +160,7 @@ function verdictOf(run, text, abs, { files = abs ? [abs] : [], test = null, chec
   }
   const lines = clean.split('\n');
   if (abs && (nodeParseFailed(lines, abs) || vitestParseFailed(lines, abs))) return { caught: null, why: 'did not parse' };
+  if (plain) return { caught: true };
   const check = test === null ? null : checks.find((entry) => entry.match.test(test));
   if (check && check.finding.test(clean)) return { caught: true };
   if (!FAILED_SUMMARY.some((summary) => summary.test(clean))) {

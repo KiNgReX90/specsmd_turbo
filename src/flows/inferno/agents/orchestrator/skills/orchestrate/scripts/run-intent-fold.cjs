@@ -15,10 +15,22 @@ const { foldRanges } = require('./run-fold.cjs');
 
 const isLedger = lib.inLedger;
 
-/** The diffs that name a file as the intent's own at `at`: the dirty tree for HEAD, then against each base ref. */
+/**
+ * The base refs the intent's files are read against: of the local base and origin's, the one that
+ * holds the other, as the older one's merge base predates what the newer synced; both when they
+ * diverged; the base itself, which no diff reads, when neither resolves.
+ */
+function baseRefs(tree, base) {
+  const refs = [base, `origin/${base}`].filter((ref) => lib.git(tree, ['rev-parse', '--verify', '--quiet', ref], { tolerate: true }));
+  const holds = (older, newer) => lib.git(tree, ['merge-base', '--is-ancestor', older, newer], { tolerate: true }) !== null;
+  if (refs.length === 0) return [base];
+  const newer = refs.find((ref) => refs.every((other) => holds(other, ref)));
+  return newer ? [newer] : refs;
+}
+
+/** The diffs that name a file as the intent's own at `at`: the dirty tree for HEAD, then against the base refs. */
 function ownReads(tree, base, at) {
-  const refs = [base];
-  if (lib.git(tree, ['rev-parse', '--verify', '--quiet', `origin/${base}`], { tolerate: true })) refs.push(`origin/${base}`);
+  const refs = baseRefs(tree, base);
   const dirty = at === 'HEAD'
     ? [['diff', '--name-only', '--no-renames', '-z', 'HEAD'], ['ls-files', '--others', '--exclude-standard', '-z']]
     : [];

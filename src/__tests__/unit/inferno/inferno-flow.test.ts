@@ -206,6 +206,15 @@ describe('inferno flow', () => {
     expect(text).not.toMatch(/needs a caught mutant, in its item review/);
   });
 
+  // A criterion only a plain check proves takes a mutant too: the entry marks its test a check, and
+  // the runner reads the check's exit code (run-mutate-check.cjs), so the reviewer never wraps it.
+  it.each(['agents/reviewer/agent.md', 'commands/inferno-reviewer.md'])('%s gives a check-only criterion its check as the test', (rel) => {
+    const text = readFileSync(path.join(INFERNO, rel), 'utf8');
+    expect(text).toContain('a criterion only a check proves takes that check, with `check: true`.');
+    expect(text).toContain('name a criterion no mutant can reach in your review, for the orchestrator.');
+    expect(text).not.toMatch(/or only a check proves/);
+  });
+
   it('the Codex reviewer skill proposes pins beside mutants', () => {
     const skill = readFileSync(path.join(INFERNO, 'codex/skills/specsmd-inferno-reviewer/SKILL.md'), 'utf8');
     expect(skill).toContain('you propose mutants and pins; the runner runs or checks them on record.');

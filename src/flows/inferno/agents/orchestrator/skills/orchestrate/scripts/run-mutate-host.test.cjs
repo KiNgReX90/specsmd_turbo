@@ -180,7 +180,7 @@ test("a listed check that printed its finding line reads caught, and the same ch
   assert.match(refused.payload.entries[0].why, /^no test summary reports a failure \(exit 3\)$/);
   const unlisted = batch(f, entries, `mutate:\n${runKey(f)}`);
   assert.equal(unlisted.payload.entries[0].caught, null);
-  assert.match(unlisted.payload.entries[0].why, /a check cannot prove a mutant.*\(gate: <name>\).*mutate\.checks/);
+  assert.match(unlisted.payload.entries[0].why, /check: true.*\(gate: <name>\).*mutate\.checks/);
 });
 
 // A control run whose compiler the machine killed: cargo exits 101 with could not compile, as a
