@@ -56,7 +56,7 @@ test("the intent deleting a kb page the base gave it voids the review", () => {
   assert.match(result.out, /intent review owed: the code changed since the review/);
 });
 
-test("a kb change the local base holds and origin lacks voids the review, read against origin's base", () => {
+test("a kb change the local base holds and origin lacks is the base's sync and keeps the review, read against the newer local base", () => {
   const fixture = repo({ config: OUTSIDE });
   const bare = path.join(path.dirname(fixture.root), "origin.git");
   git(path.dirname(fixture.root), ["init", "-q", "--bare", bare]);
@@ -68,8 +68,10 @@ test("a kb change the local base holds and origin lacks voids the review, read a
   intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));
   baseCommits(fixture, "wiki/page.md");
   const result = gate(fixture, tree);
-  assert.equal(result.code, 3, result.out + result.err);
-  assert.match(result.out, /intent review owed: the code changed since the review/);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /folded main into/);
+  assert.doesNotMatch(result.out, /intent review owed/);
+  assert.notEqual(git(fixture.root, ["rev-parse", "main"]), git(fixture.root, ["rev-parse", "origin/main"]), "origin lags the local base");
   assert.ok(fs.existsSync(path.join(tree, "wiki/page.md")));
 });
 

@@ -73,8 +73,9 @@ function targets(tree, config, live) {
     }
     return { lane, job };
   });
+  // A move names both of its paths, as the lane's start read them: one out of the scope touches it too.
   const touched = lanes.some(({ lane, job }) =>
-    lib.gitLines(tree, ['diff', '--name-only', job.head, 'HEAD'], { tolerate: true }).some((file) => lib.matchesAny(file, lane.scope)));
+    lib.gitLines(tree, ['diff', '--name-only', '--no-renames', job.head, 'HEAD'], { tolerate: true }).some((file) => lib.matchesAny(file, lane.scope)));
   if (!touched) throw new RunError(`the fix changes nothing a running lane proves; wait for it: ${gateWaitCall(tree)}`, 'NOT_SUPERSEDED');
   return {
     lanes: lanes.map(({ job }) => ({ lane: job.lane, pid: job.pid, log: laneLog(tree, job) })),
