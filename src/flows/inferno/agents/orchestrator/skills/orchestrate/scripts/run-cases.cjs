@@ -282,7 +282,7 @@ function provesFindings(text, configOf) {
   const other = shape ? otherTokens(text, shape) : [];
   if (other.length === 0) return [];
   const which = other.length === 1 ? 'is no case id' : 'are no case ids';
-  return [`brief: the Tester proves line names ${other.map((token) => `"${token}"`).join(', ')}, which ${which} of the shape /${shape.source}/; it names case ids alone`];
+  return [`brief: the Tester proves line names ${other.map((token) => `"${token}"`).join(', ')}, which ${which} of the shape /${shape.source}/; it names case ids alone, or reads \`None.\` when the intent has no tester case`];
 }
 
 module.exports = { USAGE, cases, casesConfig, provesFindings, refusal, testerProves };
