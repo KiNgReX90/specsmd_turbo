@@ -136,3 +136,72 @@ test("a check entry is withdrawn by its copy as recorded, key and all", () => {
   assert.deepEqual(runs(fixture), ["checks/a2.expect", "checks/a2.expect"], "only the new proposal ran, as a check");
   assert.match(read(tree, INTENT_REVIEW), /^withdrawn:\n {2}- criterion: a-one:2\n(?:.*\n){5} {4}check: true\n {4}caught: no\n {4}reason: /m);
 });
+
+// A host's recorded reviews hold mutants whose test was a bare check and read no verdict. Its
+// reviewer writes the same entry again with the key: the carried entry takes it and runs as a check
+// in that record. Without the key it stays held as recorded. An entry recorded caught yes or no
+// never takes the key: a caught one stays as recorded and does not run, and a survivor reruns as the
+// survivor it is, with its test read as before.
+
+const BARE_ONE = plain(1, {}, null);
+const commitChange = (tree, rel, body, message) => {
+  write(tree, rel, body);
+  git(tree, ["commit", "-qam", message]);
+};
+
+test("a delta item review's carried entry without a verdict takes check: true and reads caught; without the key it stays held", () => {
+  const fixture = repo();
+  write(fixture.root, REVIEW, withMutants(BARE_ONE, proposal(2, { ...TWO, expect: "checks/two.expect" })));
+  const first = record(fixture);
+  assert.equal(first.code, 2, shown(first));
+  assert.match(first.out, /mutants: 2 ran, 0 caught, 1 survived, 1 without a verdict/);
+  runs(fixture);
+  const survivor = proposal(2, { ...TWO, expect: "checks/two.expect" });
+
+  commitChange(fixture.root, "checks/one.expect", "src/a.ts const a = 1\n", "a first fix");
+  assert.equal(run(fixture, ["review", "--item", "a-one", "--tree", fixture.root]).code, 3);
+  write(fixture.root, REVIEW, itemReview(`mutants:\n${BARE_ONE}${survivor}`));
+  const held = record(fixture);
+  assert.equal(held.code, 2, shown(held));
+  assert.deepEqual(runs(fixture), ["checks/two.expect"], "only the survivor reran");
+  assert.match(read(fixture.root, REVIEW), / {4}test: node checks\/plain\.cjs checks\/one\.expect \.\.\/runs\.log\n {4}caught: none\n/);
+
+  commitChange(fixture.root, "checks/one.expect", "src/a.ts a = 1\n", "a second fix");
+  assert.equal(run(fixture, ["review", "--item", "a-one", "--tree", fixture.root]).code, 3);
+  write(fixture.root, REVIEW, itemReview(`mutants:\n${plain(1)}${survivor}    check: true\n`));
+  const result = record(fixture);
+
+  assert.equal(result.code, 2, shown(result));
+  assert.deepEqual(runs(fixture), ["checks/one.expect", "checks/one.expect", "checks/two.expect"],
+    "the check on the tree as it is, then on its mutant, then the survivor as before");
+  assert.match(result.out, /mutants: 2 ran, 1 caught, 1 survived, 0 without a verdict/);
+  const written = read(fixture.root, REVIEW);
+  assert.match(written, / {4}test: node checks\/plain\.cjs checks\/one\.expect \.\.\/runs\.log\n {4}check: true\n {4}caught: yes\n/);
+  assert.match(written, / {4}test: node checks\/has\.cjs checks\/two\.expect \.\.\/runs\.log\n {4}caught: no\n/, "the survivor never takes the key");
+});
+
+test("an intent review's carried entry without a verdict takes check: true and reads caught; a caught one never runs for the key", () => {
+  const strong = (criterion) => proposal(criterion, { ...TWO, expect: "checks/a2.expect" });
+  const { fixture, tree } = owedTree(withMutants(BARE_ONE, strong(2)));
+  const finding = "findings:\n  - criterion: a-one:1\n    file: src/a.ts\n    line: 1\n    evidence: the name reads loosely\n" +
+    "    fix: say it plainly\n    severity: minor\n    owner: a-one\n";
+  const first = intentReview(fixture, tree, `verdict: fix\n${finding}`);
+  assert.equal(first.code, 2, shown(first));
+  assert.match(first.out, /mutants: 2 ran, 1 caught, 0 survived, 1 without a verdict/);
+  runs(fixture);
+  commitChange(tree, "docs/b.md", "the name reads plainly\n", "the minor fix");
+
+  const held = intentReview(fixture, tree, `verdict: clean\nmutants:\n${plain("a-one:1", {}, null)}`);
+  assert.equal(held.code, 2, shown(held));
+  assert.match(held.err, /a-one owes a caught mutant or a checked pin for criteria 1/);
+  assert.deepEqual(runs(fixture), [], "without the key the entry stays held as recorded");
+
+  write(tree, INTENT_REVIEW, `verdict: clean\nmutants:\n${plain("a-one:1")}${strong("a-one:2")}    check: true\n`);
+  const result = run(fixture, ["review", "--tree", tree, "--reviewer", "rev-1"]);
+
+  assert.equal(result.code, 0, shown(result));
+  assert.deepEqual(runs(fixture), ["checks/one.expect", "checks/one.expect"], "only the entry without a verdict ran, as a check");
+  const written = read(tree, INTENT_REVIEW);
+  assert.match(written, /criterion: a-one:1\n(?:.*\n){4} {4}test: node checks\/plain\.cjs checks\/one\.expect \.\.\/runs\.log\n {4}check: true\n {4}caught: yes\n/);
+  assert.match(written, / {4}test: node checks\/has\.cjs checks\/a2\.expect \.\.\/runs\.log\n {4}caught: yes\n/, "the caught entry stays as recorded");
+});

@@ -31,6 +31,8 @@
  * An item mutant recorded under the wrong criterion moves under `moved` (run-mutant-moves.cjs).
  * A survivor may take another test: the reviewer writes its entry again with only `test` changed,
  * and the record runs it with that test and keeps the first one as `was`; it takes the entry's `check` too.
+ * A carried entry that read no verdict takes `check: true` the same way (rearm below), in an item's
+ * delta review and in the intent review.
  *
  * An item's record runs its mutants beside both lens files it signs and beside another item's
  * pending review files, which are no test's input and no mutant's target (run-mutant-runs.cjs).
@@ -121,6 +123,7 @@ async function itemMutants(tree, context) {
       const { why } = where(entry);
       if (why) out.push(`MUTANT ${entry.criterion} (${entry.file}:${entry.line}, find ${JSON.stringify(entry.find)}) no longer stands: ${why}; ${owes(entry)}`);
     }
+    rearm(rel, doc, entries);
     pins = carriedPins(tree, rel, doc, owner, out);
   } else {
     const named = itemCriterion(item.id, acceptanceCriteria(fs.readFileSync(spec.file, 'utf8')));
@@ -225,6 +228,22 @@ function retest(rel, doc, carried) {
 }
 
 /**
+ * A carried entry that read no verdict, its test a bare check the runner could not read, written
+ * again with `check: true`: it takes the key and runs again in this record as a check. `sameMutant`
+ * stays blind to the key, since the key says how a test's exit is read and not which mistake it
+ * catches, so the entry is the one carried and never a second mutant, and a withdrawn or deferred
+ * copy recorded without the key still names it. An entry recorded caught yes or no never takes the
+ * key: a caught one stays as recorded, and a survivor reruns as the survivor it is.
+ */
+function rearm(rel, doc, carried) {
+  for (const entry of mutantsOf(rel, doc).filter((one) => one.check === 'true')) {
+    const none = carried.find((one) => one.caught === 'none' && sameMutant(one, entry));
+    // Without caught it is due again; the run writes its caught and its why anew.
+    if (none) delete Object.assign(none, { check: 'true' }).caught;
+  }
+}
+
+/**
  * The recorded intent review written back as its reviewer left it, so a record runs its survivors
  * again: its own findings and pins, its verdict without the survivors, and no mutant, since the
  * record carries every one from the committed file.
@@ -253,6 +272,7 @@ async function intentMutants(tree, context) {
   const proofs = aside.answer(itemProofs(tree, intent, items));
   const carried = moves.rename(aside.keep(previousEntries(tree, rel).filter((entry) => entry.find !== undefined || entry.caught === 'yes')));
   retest(rel, doc, carried);
+  rearm(rel, doc, carried);
   // Placed before anything is judged: an owed proposal its item's code no longer holds is held by nothing and counts for nothing.
   // A set-aside one is left out before it is placed, as a carried one is.
   const fromItems = placedOwed(tree, intent, items, [...carried, ...aside.entries]);
