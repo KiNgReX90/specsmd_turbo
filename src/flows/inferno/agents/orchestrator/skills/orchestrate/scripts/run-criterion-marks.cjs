@@ -9,10 +9,19 @@
  * beside the verdict of what it names (run-gate-marks.cjs).
  *
  * A name is one of the things the gate runs: a command of `verification.finalize`, or a lane the
- * config sets, as `verification.<lane>` (`verification.smoke`, `verification.windows`). A command
- * is named verbatim, or by its rest after `verification.session.match`, the check the host's
- * wrapper runs, so a plan names the bare command a host config wraps; the verbatim one wins.
- * One pair of backticks around the name is read past. The plan lint refuses any other name.
+ * config sets, as `verification.<lane>` (`verification.smoke`, `verification.windows`), or a check
+ * integrate runs at every landing, a command of `verification.integrate`. A command is named
+ * verbatim, or by its rest after `verification.session.match`, the check the host's wrapper runs,
+ * so a plan names the bare command a host config wraps; the verbatim one wins, and a command in
+ * both lists reads as a finalize command. One pair of backticks around the name is read past. The
+ * plan lint refuses any other name.
+ *
+ * The gate never runs an integrate command, so its mark counts only while integrate's green proof
+ * for the tree stands: the one `commandProof` finds (run-proofs.cjs), keyed by the command, the
+ * config file, its scope's content and, for a `verification.base_scoped` command, the merge base.
+ * A red or refused run mints none, and a skip mints none but leaves the one that scope's content
+ * already has. A commit of `.specs-inferno/` alone, as the review's record, moves none of them,
+ * save on the base branch, where a base-scoped command's proof binds HEAD (run-proofs.cjs).
  *
  * The reviewer never adds a mark: a criterion that turns out unreachable goes to the
  * orchestrator, which amends the spec in one commit that changes that spec alone. So once the
@@ -33,6 +42,8 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { configuredLanes } = require('./run-lane-config.cjs');
 const { reach } = require('./run-host-session.cjs');
+const { configFile } = require('./run-config-gates.cjs');
+const proofs = require('./run-proofs.cjs');
 
 const MARK = /(?:^|\s)\(gate:\s*(.*?)\s*\)$/;
 
@@ -42,19 +53,40 @@ function gateMark(text) {
   return match && match[1] ? match[1].replace(/^`(.+)`$/, '$1') : null;
 }
 
-/** The finalize command a mark's name stands for under this config, as the header says, or null. */
-function gateCommand(config, name) {
+/** The command of `verification.<list>` a mark's name stands for under this config, as the header says, or null. */
+function listed(config, list, name) {
   const verification = config.verification || {};
-  const commands = Array.isArray(verification.finalize) ? verification.finalize : [];
+  const commands = Array.isArray(verification[list]) ? verification[list] : [];
   if (commands.includes(name)) return name;
   if (!verification.session) return null;
   const match = new RegExp(verification.session.match);
   return commands.find((command) => reach(match, command) === name) || null;
 }
 
-/** Whether a mark may give `name` under this config: a finalize command it stands for, or a lane. */
+/** The finalize command a mark's name stands for under this config, or null. */
+const gateCommand = (config, name) => listed(config, 'finalize', name);
+
+/** The integrate command a mark's name stands for under this config, or null: a finalize command wins. */
+const integrateCommand = (config, name) => (gateCommand(config, name) === null ? listed(config, 'integrate', name) : null);
+
+/** Whether a mark may give `name` under this config: a finalize or integrate command it stands for, or a lane. */
 function gateHeld(config, name) {
-  return gateCommand(config, name) !== null || configuredLanes(config).some((lane) => `verification.${lane.name}` === name);
+  return gateCommand(config, name) !== null || integrateCommand(config, name) !== null ||
+    configuredLanes(config).some((lane) => `verification.${lane.name}` === name);
+}
+
+/** Integrate's green proof of `command` for the tree as it stands, under the file `config` was read from, or null. */
+const integrateProof = (tree, config, command) => proofs.readProof(proofs.commandProof(tree, config, configFile(config), command));
+
+/**
+ * Why a mark counts for nothing on the tree under this config, or null when it counts: `unheld`
+ * when it names nothing the config holds, `unproven` when it names an integrate command with no
+ * green proof for the tree. Only an integrate command's proof is looked up.
+ */
+function markGap(tree, config, name) {
+  if (!gateHeld(config, name)) return 'unheld';
+  const command = integrateCommand(config, name);
+  return command === null || integrateProof(tree, config, command) ? null : 'unproven';
 }
 
 /** The two homes of a spec, live and archived, from its path in either. */
@@ -115,4 +147,4 @@ function lateMarks(tree, intentId, itemId, specFile, criteria) {
   return marked.filter((entry) => !planned(tree, specs, entry.text, review)).map((entry) => entry.index);
 }
 
-module.exports = { gateCommand, gateHeld, gateMark, lateMarks };
+module.exports = { gateCommand, gateHeld, gateMark, integrateCommand, integrateProof, lateMarks, markGap };

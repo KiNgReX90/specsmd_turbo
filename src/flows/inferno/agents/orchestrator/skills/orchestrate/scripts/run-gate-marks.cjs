@@ -4,7 +4,8 @@
  * The gate's lines for the criteria the plan marked with the command or lane that proves them
  * (run-criterion-marks.cjs): one `MARKED <item>:<n> (gate: <name>): <verdict>` line per mark,
  * beside the verdict this gate gave that command or lane. A finalize command reads as the gate
- * ran it, a lane as gate --wait found it. A gate with no marked criterion prints nothing new,
+ * ran it, a lane as gate --wait found it, an integrate command, which the gate never runs, from
+ * integrate's green proof for the tree. A gate with no marked criterion prints nothing new,
  * and neither does a call that gave no verdict yet (a started, queued or running gate).
  *
  * The lines go after a red gate's own lines, and before the last line of any other, so the
@@ -18,8 +19,8 @@ const lib = require('./run-lib.cjs');
 const { configuredLanes } = require('./run-lane-config.cjs');
 const { intentFor, intentItems } = require('./run-intent-owed.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
-const { gateCommand, gateMark } = require('./run-criterion-marks.cjs');
-const { gateStartCall } = require('./run-call.cjs');
+const { gateCommand, gateMark, integrateCommand, integrateProof } = require('./run-criterion-marks.cjs');
+const { gateStartCall, integrateAgainCall } = require('./run-call.cjs');
 
 const MAX_LINES = 30;
 const WORDS = {
@@ -48,8 +49,13 @@ function verdictOf(name, tree, config, payload) {
     if (!state) return 'not started, no path in its scope changed';
     return state.state === 'green' ? 'GREEN' : state.state;
   }
+  const integrated = integrateCommand(config, name);
+  if (integrated !== null) {
+    return integrateProof(tree, config, integrated) ? 'GREEN, integrate proved it for this tree'
+      : `NO PROOF, integrate has no green run of it for this tree: run ${integrateAgainCall(tree, [])}`;
+  }
   const command = gateCommand(config, name);
-  if (command === null) return 'no command of verification.finalize and no lane of this config';
+  if (command === null) return 'no command of verification.finalize or verification.integrate and no lane of this config';
   const entry = payload.results.find((result) => result.command === command);
   return entry ? WORDS[entry.result] : 'not run, the gate stopped at an earlier red';
 }
