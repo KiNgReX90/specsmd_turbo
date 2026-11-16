@@ -440,9 +440,11 @@ test("a Tester proves line that names anything but a case id is a finding, at pl
   const stopped = run(tree, ["frontier", "gift-cards"]);
   assert.equal(stopped.code, 2, stopped.out + stopped.err);
   assert.match(stopped.out, new RegExp(expected.source, "m"));
-  const clean = plan({ brief: proves("TC-1, TC-2") });
-  write(clean.root, ".specs-inferno/config.yaml", CASES_CONFIG);
-  assert.equal(lint(clean).code, 0);
+  for (const line of ["TC-1, TC-2", "None."]) {
+    const clean = plan({ brief: proves(line) });
+    write(clean.root, ".specs-inferno/config.yaml", CASES_CONFIG);
+    assert.equal(lint(clean).code, 0, line);
+  }
 });
 
 test("a plan written before the lint keeps its Tester proves line, and a host with no cases section is not held to a shape", () => {

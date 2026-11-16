@@ -40,6 +40,8 @@ test("the shape is group 1 of each opener, past escapes, classes, lookarounds an
     [["^(?=#)#+ (?<!x)(\\d+)\\."], ["12"], ["#", "x"]],
     [["^### (TC-(?:\\d+))"], ["TC-8"], ["TC-"]],
     [["^### (TC-\\d+)", "^## (HC-\\w+)"], ["TC-9", "HC-quit"], ["HC-"]],
+    [["^### ((TC|BUG)-\\d+)"], ["TC-10", "BUG-2"], ["TC", "BUG"]],
+    [["^> (?<=> )(TC-\\d+)"], ["TC-11"], [" ", ">"]],
   ];
   for (const [openers, ids, others] of cases) {
     const built = shape(...openers);
@@ -80,4 +82,23 @@ test("the lint reads no config for a brief whose line names nothing", () => {
   };
   assert.deepEqual(provesFindings("# Demo\n", never), []);
   assert.deepEqual(provesFindings("Tester proves:\n", never), []);
+});
+
+// A brief with no tester case says so the way the lint spells an empty section: `None.` alone.
+test("a line that reads None. alone proves nothing and is no finding, with a shape and without one", () => {
+  for (const line of ["Tester proves: None.\n", "**Tester proves:** None.  \n"]) {
+    assert.deepEqual(testerProves(line, idShape(HOST)), []);
+    assert.deepEqual(testerProves(line, null), []);
+    assert.deepEqual(provesFindings(line, () => {
+      throw new Error("config read");
+    }), []);
+  }
+});
+
+test("None. beside another token is named like any token that is no case id, and none in another spelling is no None.", () => {
+  const host = configOf({ cases: { files: [{ path: "c.md", case: "^### (TC-\\d+)" }] } });
+  assert.match(provesFindings("Tester proves: TC-1, None.\n", host)[0], /names "None", which is no case id of the shape/);
+  assert.match(provesFindings("Tester proves: None., x.md:42\n", host)[0], /names "None", "x\.md:42", which are no case ids/);
+  assert.match(provesFindings("Tester proves: none\n", host)[0], /names "none", which is no case id/);
+  assert.deepEqual(testerProves("Tester proves: TC-1, None.\n", idShape(HOST)), ["TC-1"]);
 });

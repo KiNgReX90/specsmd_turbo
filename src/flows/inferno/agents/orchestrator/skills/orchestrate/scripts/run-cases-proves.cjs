@@ -6,7 +6,8 @@
  * case opener, so a path with a line number, a section number or a date on that line is never
  * one: each once became an id no commit could answer, and the gate was red before it ran a
  * command. A host whose openers capture no id has no shape, and its line reads as it did before
- * the shape: every token that holds a digit. run-cases.cjs owns the config and the gate.
+ * the shape: every token that holds a digit. A brief with no tester case writes `None.` alone,
+ * as the plan lint spells an empty section. run-cases.cjs owns the config and the gate.
  */
 
 const LINE = /^[*_\s-]*Tester proves:?[*_]*\s*(.*)$/im;
@@ -46,10 +47,10 @@ function idShape(settings) {
   return groups.length > 0 ? new RegExp(`^(?:${groups.join('|')})$`) : null;
 }
 
-/** The raw tokens of the line, split on commas and spaces. */
+/** The raw tokens of the line, split on commas and spaces; none for `None.` alone, the lint's word for an empty section. */
 function rawTokens(text) {
   const line = LINE.exec(text || '');
-  return line ? line[1].split(/[,\s]+/) : [];
+  return line && line[1].trim() !== 'None.' ? line[1].split(/[,\s]+/) : [];
 }
 
 /** The tokens of the line, each without the prose around it. */
