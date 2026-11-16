@@ -15,6 +15,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { SAME_ITEM, deltaProblem } = require('./run-review-delta.cjs');
 const { NO_SAYS, saysProblem } = require('./run-criterion-says.cjs');
+const { CHECK_HOW } = require('./run-mutate-check.cjs');
 
 const { RunError } = lib;
 
@@ -35,7 +36,8 @@ const SEVERITY_FIX = 'blocker when the change breaks a criterion or other behavi
  * A mutant as a reviewer proposes it: the criterion it breaks, a line of a file, the text on that
  * line and its broken version, and the test that should notice. The runner adds `caught` (yes, no,
  * or none when the run read no verdict, with `why`) when it runs it; an entry without `caught`
- * never ran and is owed to the intent review. A file the released flow recorded holds
+ * never ran and is owed to the intent review. `check: true` marks a test that is a plain check
+ * (run-mutate-check.cjs), and travels with the entry. A file the released flow recorded holds
  * `{criterion, test, caught}`, a mutant its reviewer ran itself, and still reads.
  */
 const MUTANT_KEYS = ['criterion', 'file', 'line', 'find', 'replace', 'test'];
@@ -259,7 +261,7 @@ function weightOf(review) {
  * the released flow's reviewer ran itself. `replace` may be empty, since dropping text is a mistake.
  */
 function mutantsOf(rel, doc) {
-  return entries(rel, doc, 'mutants', ['criterion', 'test'], ['says', ...TARGET_KEYS, ...RUNNER_KEYS], ['replace']).map((mutant, index) => {
+  return entries(rel, doc, 'mutants', ['criterion', 'test'], ['says', ...TARGET_KEYS, 'check', ...RUNNER_KEYS], ['replace']).map((mutant, index) => {
     const at = `mutants entry ${index + 1}`;
     const targeted = TARGET_KEYS.some((key) => mutant[key] !== undefined);
     if (targeted) {
@@ -268,6 +270,7 @@ function mutantsOf(rel, doc) {
       if (typeof mutant.replace !== 'string') throw bad(rel, `${at} replace must be text, empty to drop find`);
       if (!/^\d+$/.test(mutant.line)) throw bad(rel, `${at} line must be a line number, not ${mutant.line}`);
     }
+    if (mutant.check !== undefined && mutant.check !== 'true') throw bad(rel, `${at} check reads ${mutant.check}; ${CHECK_HOW}`);
     if (mutant.caught !== undefined && !CAUGHT.includes(mutant.caught)) throw bad(rel, `${at} caught must be yes, no or none`);
     if (!targeted && mutant.caught !== 'yes' && mutant.caught !== 'no') throw bad(rel, `${at} has no file: ${PROPOSE}`);
     if ((mutant.why !== undefined) !== (mutant.caught === 'none')) throw bad(rel, `${at} carries why exactly when caught reads none`);
@@ -326,7 +329,8 @@ function proposalsOf(rel, doc, criterionOf, held = () => false) {
     if (problem) throw bad(rel, `${at} ${problem}`);
     const file = relativePath(rel, mutant.file, at);
     if (file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`)) throw bad(rel, `${at} breaks ${file}; a mutant breaks the code, never the ledger`);
-    return [withSays(Object.fromEntries(MUTANT_KEYS.map((key) => [key, key === 'file' ? file : mutant[key]])), mutant.says)];
+    const check = mutant.check === undefined ? {} : { check: mutant.check };
+    return [withSays({ ...Object.fromEntries(MUTANT_KEYS.map((key) => [key, key === 'file' ? file : mutant[key]])), ...check }, mutant.says)];
   });
   const counts = new Map();
   for (const { criterion } of proposals) counts.set(criterion, (counts.get(criterion) || 0) + 1);

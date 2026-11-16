@@ -155,11 +155,11 @@ test("a finding line of a command no check lists is no verdict", () => {
   assert.equal(verdict.caught, null);
 });
 
-test("no summary on a command that is no known runner names the gate mark and the host key", () => {
+test("no summary on a command that is no known runner names the check key, the gate mark and the host key", () => {
   for (const test of ["npm run check:wire", "node scripts/clause-map.mjs", "bash tools/lint.sh src"]) {
     const verdict = verdictOf(run(1), WIRE_FOUND, ABS, { test });
     assert.match(verdict.why, /^no test summary reports a failure \(exit 1\)/);
-    assert.match(verdict.why, /a check cannot prove a mutant/);
+    assert.match(verdict.why, /a plain check reads a verdict only as a batch entry that says check: true/);
     assert.match(verdict.why, /\(gate: <name>\)/);
     assert.match(verdict.why, /mutate\.checks/);
   }

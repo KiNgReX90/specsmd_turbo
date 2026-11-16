@@ -37,7 +37,7 @@ const sameWherever = (a, b) => sameMutant({ ...a, file: b.file }, b);
 
 /** The withdrawn mutants of a review: each a mutant as recorded, plus reason. */
 function withdrawnOf(rel, doc) {
-  return entries(rel, doc, 'withdrawn', [...MUTANT_KEYS, 'reason'], ['says', 'caught', 'why'], ['replace']).map((entry, index) => {
+  return entries(rel, doc, 'withdrawn', [...MUTANT_KEYS, 'reason'], ['says', 'check', 'caught', 'why'], ['replace']).map((entry, index) => {
     if (typeof entry.replace !== 'string') throw bad(rel, `withdrawn entry ${index + 1} has no replace: copy the mutant as recorded, then add reason`);
     return entry;
   });
