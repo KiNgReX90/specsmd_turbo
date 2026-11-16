@@ -140,6 +140,17 @@ function ignoredKeys(config) {
     ? ['IGNORED verification.flake_rerun: a red command stays red'] : [];
 }
 
+/**
+ * The whole branch answers for its tester cases, and for each case its brief says the tester
+ * proves: null when it does, else the red gate result, before any command or lane runs.
+ */
+function casesRefusal(tree, config, base, intent, folded, shown) {
+  const brief = path.join(tree, lib.SPECS_DIR, 'intents', intent, 'brief.md');
+  const stale = cases.refusal(tree, config, `${mergeBase(tree, base)}..HEAD`, brief);
+  if (!stale) return null;
+  return { exit: 2, payload: { ok: false, tree, branch: lib.currentBranch(tree), folded, results: [], cases: stale.payload }, out: [...shown, ...stale.out] };
+}
+
 /** Run the finalize commands in this process. `gate` below dispatches between this, --detach and --wait. */
 function gateNow(options) {
   const tree = treeOf(options);
@@ -151,12 +162,8 @@ function gateNow(options) {
   const folded = foldBase(tree, base);
   const { config, commands } = gateCommands(tree, options.config);
   const shown = [...restored, ...folded, ...ignoredKeys(config)];
-  // The whole branch answers for its tester cases, and for each case its brief says the tester proves.
-  const brief = path.join(tree, lib.SPECS_DIR, 'intents', intent, 'brief.md');
-  const stale = cases.refusal(tree, config, `${mergeBase(tree, base)}..HEAD`, brief);
-  if (stale) {
-    return { exit: 2, payload: { ok: false, tree, branch: lib.currentBranch(tree), folded: folded.length > 0, results: [], cases: stale.payload }, out: [...shown, ...stale.out] };
-  }
+  const stale = casesRefusal(tree, config, base, intent, folded.length > 0, shown);
+  if (stale) return stale;
   const unreviewed = intentReview.gateRefusal(tree, config, intent, before, shown);
   if (unreviewed) return unreviewed;
   shown.push(...asideLines(tree, intent, { withdrawn: true }));
@@ -254,6 +261,10 @@ function gateDetach(options) {
   const current = gateCommands(tree, options.config).config;
   const folded = [...restored, ...foldLines, ...ignoredKeys(current)];
   // Refused here too, or the child dies refusing and --wait reports a gate with no result.
+  // A red cases check gives the ticket back as a red --wait does, so the next detach starts afresh.
+  const stale = casesRefusal(tree, current, base, intent, foldLines.length > 0, folded);
+  if (stale && mergeSlot(current)) slot.release(tree);
+  if (stale) return stale;
   const unreviewed = intentReview.gateRefusal(tree, current, intent, before, folded);
   if (unreviewed) return unreviewed;
   folded.push(...asideLines(tree, intent, { withdrawn: true }));
