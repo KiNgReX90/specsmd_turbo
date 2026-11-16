@@ -22,7 +22,7 @@
  * the landing, or one whose proof still holds, opens nothing, and a step that runs none of them
  * opens no session. A session that did not open fails every command that would have run in it,
  * with the open's exit and log in the command's own log, so none of them runs or mints a proof.
- * An open that printed the host's `verification.refused` line gives them no verdict instead, and
+ * An open whose last line is the host's `verification.refused` line gives them no verdict instead, and
  * `checkRounds` runs them again in a fresh session.
  * The close runs once the open has started, on every exit of the step: after the last command,
  * after a gate's first red, and after an error. A close that failed is a line beside the result,
@@ -40,7 +40,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const { alive, owner } = require('./run-mutate-journal.cjs');
 const { call, ending, exported, reach, validateSessionKey } = require('./run-host-session.cjs');
-const { refusalIn, refusedOf } = require('./run-check-refused.cjs');
+const { refusal } = require('./run-check-refused.cjs');
 
 const KEYS = ['match', 'open', 'run', 'close'];
 
@@ -62,7 +62,6 @@ function checkSession(tree, config, dir) {
   const key = config.verification && config.verification.session;
   if (!key) return null;
   const match = new RegExp(key.match);
-  const refused = refusedOf(config);
   const env = { INFERNO_TREE: tree, INFERNO_SESSION: null };
   const record = path.join(recordsOf(tree), `${lib.stamp()}-${process.pid}.json`);
   let opened = null;
@@ -84,7 +83,7 @@ function checkSession(tree, config, dir) {
       if (opened.code === 0) return lib.runShell(exported({ ...env, INFERNO_TEST: options.test === undefined ? inner : options.test }) + key.run, tree, log, { wrap: false });
       fs.mkdirSync(path.dirname(log), { recursive: true });
       // The open's refusal line goes into the check's own log, where runCommand reads it as no verdict.
-      const line = refused ? refusalIn(refused, opened.log) : null;
+      const line = refusal(config, opened.code, opened.log, 0);
       fs.appendFileSync(log, `the host session did not open (exit ${opened.code} -> ${opened.log}), so this check did not run\n${line ? `${line}\n` : ''}`);
       return { command, code: opened.code || 1, signal: null, seconds: 0, log, wrapped: false };
     },
