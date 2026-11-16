@@ -427,3 +427,31 @@ test("a success criterion marked (after ship) lints clean, a misspelled mark and
   const items = withItem("card-store", "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance)", "- [ ] A card of 25 shows 25 (`test/store.test.ts` :: saves a balance) (after ship)");
   assertOneFinding(plan({ items }), /^FINDING card-store: acceptance criterion 1 is marked \(after ship\), which only a success criterion of the brief carries/);
 });
+
+// The brief's Tester proves line names case ids alone, of the shape the host's case opener captures.
+const CASES_CONFIG = "cases:\n  files:\n    - path: integration/TEST-CASES.md\n      case: '^### (TC-\\d+)'\n";
+const proves = (line) => BRIEF.replace("## Users", `Tester proves: ${line}\n\n## Users`);
+
+test("a Tester proves line that names anything but a case id is a finding, at plan-lint and at frontier", () => {
+  const tree = plan({ brief: proves("TC-1, x.md:42") });
+  write(tree.root, ".specs-inferno/config.yaml", CASES_CONFIG);
+  const expected = /^FINDING brief: the Tester proves line names "x\.md:42", which is no case id of the shape \/\^\(\?:TC-\\d\+\)\$\/; it names case ids alone$/;
+  assertOneFinding(tree, expected);
+  const stopped = run(tree, ["frontier", "gift-cards"]);
+  assert.equal(stopped.code, 2, stopped.out + stopped.err);
+  assert.match(stopped.out, new RegExp(expected.source, "m"));
+  for (const line of ["TC-1, TC-2", "None."]) {
+    const clean = plan({ brief: proves(line) });
+    write(clean.root, ".specs-inferno/config.yaml", CASES_CONFIG);
+    assert.equal(lint(clean).code, 0, line);
+  }
+});
+
+test("a plan written before the lint keeps its Tester proves line, and a host with no cases section is not held to a shape", () => {
+  const old = plan({ brief: proves("x.md:42").replace("- SC-1: ", "- ").replace("- SC-2: ", "- ") });
+  write(old.root, ".specs-inferno/config.yaml", CASES_CONFIG);
+  const result = lint(old);
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /written before the plan lint/);
+  assert.equal(lint(plan({ brief: proves("x.md:42") })).code, 0);
+});

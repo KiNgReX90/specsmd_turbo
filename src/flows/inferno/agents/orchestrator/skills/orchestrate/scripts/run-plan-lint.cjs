@@ -50,6 +50,7 @@ const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
 const { gateHeld, gateMark } = require('./run-criterion-marks.cjs');
 const { MARK, NEAR } = require('./run-after-ship.cjs');
 const { editableReader, pathErrors } = require('./run-manifest-paths.cjs');
+const { provesFindings } = require('./run-cases.cjs');
 
 const ITEM_SECTIONS = [
   'Description', 'Acceptance Criteria', 'Edge Cases', 'Out of Scope', 'Test Plan', 'Reuse',
@@ -359,6 +360,8 @@ function lintPlan(tree, intent, configOf) {
   const findings = [];
   const brief = readBrief(tree, intent.id, findings);
   if (!brief) return { form: 'old', findings: [], overlaps: [], open: 0, criteria: 0 };
+  // The Tester proves line names case ids alone (run-cases-proves.cjs).
+  findings.push(...provesFindings(fs.readFileSync(briefFile(tree, intent.id), 'utf8'), configOf));
 
   const delivered = new Map();
   const editable = new Map();
