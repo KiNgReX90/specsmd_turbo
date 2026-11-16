@@ -27,6 +27,17 @@ test('a lane starts only when the branch touched its scope', (t) => {
   assert.deepEqual(laneRuns(f), ['smoke']);
 });
 
+test('a move out of a lane\'s scope starts the lane: the path it left is one the lane proved', (t) => {
+  const f = fixture(t);
+  git(f.tree, 'mv', 'src/input.txt', 'docs/input.txt');
+  commit(f.tree, 'the input moves to the docs');
+  const started = run(f, 'gate', '--detach');
+  passed(started);
+  assert.match(started.out, /smoke lane started pid \d+/);
+  passed(run(f, 'gate', '--wait', '--minutes', '0.5'));
+  assert.deepEqual(laneRuns(f), ['smoke']);
+});
+
 test('gate --wait exits 4 while a lane runs and 0 once the gate and every lane are green', (t) => {
   const f = fixture(t, config({ smoke: '0', windows: 'wait' }));
   touch(f);

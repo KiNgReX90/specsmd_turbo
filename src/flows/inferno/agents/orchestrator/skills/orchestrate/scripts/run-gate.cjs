@@ -52,9 +52,12 @@ function refuseDirty(tree) {
   return restored;
 }
 
-/** Paths changed since a ref (the branch against its base, or the tree against HEAD), and what is uncommitted on top. */
+/**
+ * Paths changed since a ref (the branch against its base, or the tree against HEAD), and what is
+ * uncommitted on top. A move names both of its paths, as every reader it is compared with does.
+ */
 function changedPaths(tree, since) {
-  const tracked = lib.gitLines(tree, ['diff', '--name-only', since], { tolerate: true });
+  const tracked = lib.gitLines(tree, ['diff', '--name-only', '--no-renames', since], { tolerate: true });
   const untracked = lib.gitLines(tree, ['ls-files', '--others', '--exclude-standard'], { tolerate: true });
   return [...new Set([...tracked, ...untracked])];
 }

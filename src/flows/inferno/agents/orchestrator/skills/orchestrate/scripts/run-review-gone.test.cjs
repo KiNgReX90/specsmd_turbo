@@ -72,6 +72,14 @@ test("a file the correction renamed reads as gone, and the delta reads its new p
   assert.match(block(result.out, "specsmd-inferno-reviewer").join("\n"), new RegExp(`^ {2}range \\S+ paths .*${MOVED}`, "m"));
 });
 
+test("a correction that only moves an owned file the review does not list out of the item's paths owes the review again", () => {
+  const h = recordedFix(["src/a.ts"], ["src/a.ts"]);
+  git(h.tree, ["mv", GONE, "legacy.ts"]);
+  git(h.tree, ["commit", "-qm", "the correction moves the legacy module out"]);
+
+  assertOwed(h.review());
+});
+
 test("the gone line leaves the files that are still in the tree out", () => {
   const h = recordedFix(["src/a.ts", GONE], ["src/a.ts"]);
   correct(h, ["rm", "-q", GONE], "the correction drops the legacy module");
