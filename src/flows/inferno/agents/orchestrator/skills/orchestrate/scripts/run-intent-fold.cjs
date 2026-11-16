@@ -13,7 +13,7 @@ const lib = require('./run-lib.cjs');
 const { reviewOutside } = require('./run-config-gates.cjs');
 const { foldRanges } = require('./run-fold.cjs');
 
-const isLedger = (file) => file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`);
+const isLedger = lib.inLedger;
 
 /** The diffs that name a file as the intent's own at `at`: the dirty tree for HEAD, then against each base ref. */
 function ownReads(tree, base, at) {

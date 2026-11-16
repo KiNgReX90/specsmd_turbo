@@ -25,7 +25,7 @@ function gitFields(tree, args) {
  */
 function scopeHash(tree, scope, options = {}) {
   const inScope = (file) => (options.exact ? scope.includes(file) : lib.matchesAny(file, scope));
-  const included = (file) => file !== lib.SPECS_DIR && !file.startsWith(`${lib.SPECS_DIR}/`) &&
+  const included = (file) => !lib.inLedger(file) &&
     (!scope || inScope(file)) && !(options.skip && options.skip(file));
   const entries = new Map();
   for (const row of gitFields(tree, ['ls-tree', '-rz', options.ref || 'HEAD'])) {

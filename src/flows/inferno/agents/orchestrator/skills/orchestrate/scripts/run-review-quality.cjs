@@ -73,7 +73,7 @@ function isConfig(file) {
   return CONFIG_EXTENSIONS.has(path.posix.extname(base));
 }
 
-const inLedger = (file) => file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`);
+const inLedger = lib.inLedger;
 
 /**
  * Whether an item gets the quality lens: never one of kind `test`, and else only one whose

@@ -143,7 +143,7 @@ function changedSince(tree, rel, editable) {
   const [first] = lib.gitLines(tree, ['log', '--format=%H', '--reverse', '--', rel.split(path.sep).join('/')]);
   if (!first) return [];
   return lib.gitLines(tree, ['-c', 'core.quotePath=off', 'diff', '--name-only', first, 'HEAD'])
-    .filter((file) => !file.startsWith(`${lib.SPECS_DIR}/`) && lib.ownedBy(file, editable, tree));
+    .filter((file) => !lib.inLedger(file) && lib.ownedBy(file, editable, tree));
 }
 
 /**

@@ -230,7 +230,12 @@ function standsSince(tree, context) {
 function itemReviewCurrent(tree, context) {
   const { item, files } = context;
   if (!item.review_hash) return false;
-  return filesHash(tree, files) === item.review_hash || standsSince(tree, context);
+  if (filesHash(tree, files) === item.review_hash || standsSince(tree, context)) return true;
+  // The released flow hashed no rule file (lib.inLedger), so its review holds while the rule files it lists are as it read them.
+  const rules = files.filter(lib.inStandards);
+  const from = rules.length > 0 && commitOf(tree, item.review_commit);
+  return Boolean(from) && filesHash(tree, rules) === filesHashAt(tree, from, rules) &&
+    itemReviewCurrent(tree, { ...context, files: files.filter((file) => !lib.inStandards(file)) });
 }
 
 module.exports = { filesHash, itemReviewCurrent };

@@ -25,7 +25,7 @@ const { grantedPaths } = require('./run-grant.cjs');
 
 const { RunError } = lib;
 
-const inLedger = (file) => file === lib.SPECS_DIR || file.startsWith(`${lib.SPECS_DIR}/`);
+const inLedger = lib.inLedger;
 
 /** The spec ownership of `id`, or none when its spec does not read. */
 function specOwned(tree, intentId, id) {
