@@ -59,6 +59,7 @@ function validateGates(config, file) {
 /** A --config file inherits each verification key here and review.outside from the project config when it sets none. */
 function inheritGates(config, defaults) {
   const keys = [['verification', 'merge_slot'], ['verification', 'ship_cleanup'], ['verification', 'session'], ['verification', 'refused'],
+    ['verification', 'refused_exit'],
     ['verification', 'run'], ['verification', 'wrapped'], ['review', 'outside']];
   for (const [section, key] of keys) {
     const from = defaults[section];
