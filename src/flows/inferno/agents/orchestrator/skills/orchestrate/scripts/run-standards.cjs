@@ -22,7 +22,7 @@ const lib = require('./run-lib.cjs');
 const { parseYaml } = require('./run-yaml.cjs');
 
 const { RunError } = lib;
-const STANDARDS_DIR = '.specs-inferno/standards';
+const { STANDARDS_DIR } = lib;
 const DEFAULT_CONFIG = '.specs-inferno/config.yaml';
 
 /** The config file that holds the block, and the block, or null when no config holds one. */

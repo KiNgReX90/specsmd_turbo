@@ -94,6 +94,13 @@ function dirtyPaths(root, allowed = []) {
 // ---------------------------------------------------------------------------
 
 const SPECS_DIR = '.specs-inferno';
+/** The project's rule files (run-standards.cjs): inside SPECS_DIR, yet product a work item writes, never ledger. */
+const STANDARDS_DIR = `${SPECS_DIR}/standards`;
+/** The flow's own policy beside them (state-defer-finding.cjs), which no builder is handed: ledger, as config.yaml is. */
+const DEFER_RULE = `${STANDARDS_DIR}/defer-findings.yaml`;
+const within = (file, dir) => file === dir || file.startsWith(`${dir}/`);
+const inStandards = (file) => within(file, STANDARDS_DIR) && file !== DEFER_RULE;
+const inLedger = (file) => within(file, SPECS_DIR) && !inStandards(file);
 
 function statePath(root) {
   return path.join(root, SPECS_DIR, 'state.yaml');
@@ -441,8 +448,10 @@ function capLines(out, max = 30) {
 }
 
 module.exports = {
+  DEFER_RULE,
   RunError,
   SPECS_DIR,
+  STANDARDS_DIR,
   cacheDir,
   capLines,
   codeTreeHash,
@@ -454,6 +463,8 @@ module.exports = {
   gitLines,
   globToRegExp,
   idleMinutes,
+  inLedger,
+  inStandards,
   isHeavy,
   matchesAny,
   onPath,
