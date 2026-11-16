@@ -82,11 +82,12 @@ const itemFiles = (context) => [...new Set([...(context.editable || []), ...(con
 
 /**
  * The files changed from `from` to HEAD that a correction round reads: those of the item and
- * those `listed`, the files the last review lists, never one of the ledger.
+ * those `listed`, the files the last review lists, never one of the ledger. A move names both of
+ * its paths, so one that takes an owned file away is a change of the item too.
  */
 function changedSince(tree, context, from, listed) {
   const owned = itemFiles(context);
-  return lib.gitLines(tree, ['diff', '--name-only', `${from}..HEAD`], { tolerate: true })
+  return lib.gitLines(tree, ['diff', '--name-only', '--no-renames', `${from}..HEAD`], { tolerate: true })
     .filter((file) => !inLedger(file) && (lib.ownedBy(file, owned) || listed.includes(file)));
 }
 
