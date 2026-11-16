@@ -134,6 +134,38 @@ test("a listed command's proof carries the merge base, follows it, and a record 
   assert.equal(proofs.readProof(moved), null);
 });
 
+test("a base commit the tree has not folded leaves the merge base, the key and the green as they were; the fold moves them", () => {
+  const { fixture } = ratcheted(LISTED);
+  const config = inProcess(fixture);
+  let runs = 0;
+  const shell = (command, cwd, file) => {
+    runs += 1;
+    return lib.runShell("true", cwd, file);
+  };
+  const land = () => proofs.runCommand(fixture.root, config, undefined, RATCHET, path.join(fixture.dir, "ran.log"), false, shell).result;
+  git(fixture.root, ["checkout", "-qb", "one"]);
+  commit(fixture.root, "docs/b.md", "moved\n");
+  const forked = sha(fixture.root, "main");
+  assert.equal(land(), "pass");
+  const proof = proofs.commandProof(fixture.root, config, undefined, RATCHET);
+
+  git(fixture.root, ["checkout", "-q", "main"]);
+  commit(fixture.root, "docs/c.md", "main moved\n");
+  git(fixture.root, ["checkout", "-q", "one"]);
+  const unfolded = proofs.commandProof(fixture.root, config, undefined, RATCHET);
+  assert.equal(unfolded.base, forked);
+  assert.equal(unfolded.file, proof.file);
+  assert.equal(land(), "green");
+  assert.equal(runs, 1);
+
+  git(fixture.root, ["merge", "-q", "--no-edit", "main"]);
+  const folded = proofs.commandProof(fixture.root, config, undefined, RATCHET);
+  assert.equal(folded.base, sha(fixture.root, "main"));
+  assert.notEqual(folded.file, proof.file);
+  assert.equal(land(), "pass");
+  assert.equal(runs, 2);
+});
+
 /** Runs the listed command twice through runCommand, counting the runs, and reads its proof after. */
 function twice(fixture, config) {
   let runs = 0;
