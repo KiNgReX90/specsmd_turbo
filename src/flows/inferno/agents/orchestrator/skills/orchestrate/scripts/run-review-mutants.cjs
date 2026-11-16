@@ -30,7 +30,7 @@
  * nobody and counts as caught for nothing, so the reviewer may propose for it in the same record.
  * An item mutant recorded under the wrong criterion moves under `moved` (run-mutant-moves.cjs).
  * A survivor may take another test: the reviewer writes its entry again with only `test` changed,
- * and the record runs it with that test and keeps the first one as `was`.
+ * and the record runs it with that test and keeps the first one as `was`; it takes the entry's `check` too.
  *
  * An item's record runs its mutants beside both lens files it signs and beside another item's
  * pending review files, which are no test's input and no mutant's target (run-mutant-runs.cjs).
@@ -220,7 +220,7 @@ function retest(rel, doc, carried) {
   for (const entry of mutantsOf(rel, doc)) {
     const survivor = carried.find((one) => one.caught === 'no' && target(one, entry) && !sameMutant(one, entry));
     // A survivor reads caught no, so it is due and runs again with the test it takes here.
-    if (survivor) Object.assign(survivor, { was: survivor.was || survivor.test, test: entry.test });
+    if (survivor) Object.assign(survivor, { was: survivor.was || survivor.test, test: entry.test, check: entry.check });
   }
 }
 
