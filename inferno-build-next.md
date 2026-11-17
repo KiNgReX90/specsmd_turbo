@@ -89,7 +89,7 @@ Built on this branch on 2026-11-17. `CHANGELOG.md` says what it does.
 | --- | --- | --- | --- |
 | 0o | A test the host's wrapper carries takes no seat on this machine's build wrapper | `inferno-remote-run-wrapped-in-local-seat-handoff.md` | `e659ab4a` |
 
-## 2. BUILD NOW: three rows
+## 2. BUILD NOW: four rows
 
 A host's next finding arrives here as a row, with its section in the handoff file.
 
@@ -98,6 +98,7 @@ A host's next finding arrives here as a row, with its section in the handoff fil
 | 0p | The test of a first write reads its lower bound from the clock the file is stamped with | `inferno-first-write-clock-lag-handoff.md` |
 | 0q | The test of a refused grant compares the record, never the stat index | `inferno-grant-test-stat-index-age-handoff.md` |
 | 0r | A gate run again after a red command on unchanged code records its cause, and ship keeps the red log | `inferno-regate-cause-not-recorded-handoff.md` |
+| 0s | A mutant test whose command is missing reads that as its reason, and the batch runs it once | `inferno-mutant-command-not-found-handoff.md` |
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
