@@ -14,7 +14,7 @@ The test at `run-grant.test.cjs:162`, "a path the dispatch already owns through 
 
 ## Evidence
 
-- Alpha, `~/.cache/specsmd-inferno/Skoft_CRA/inferno-intent/the-definitions-layer-owns-its-models-and-calls-nothing-above-it-20261116T174943Z/gate-20261117T124204Z/4.log`, from line 10878: `AssertionError` at `run-grant.test.cjs:201:10`, `pass 1764`, `fail 1`. The only key that differs is `.../index.json`: expected `{}`, actual eight entries.
+- Alpha, `~/.cache/specsmd-inferno/Skoft_CRA/inferno-intent/the-definitions-layer-owns-its-models-and-calls-nothing-above-it-20261116T174943Z/gate-20261117T124204Z/4.log`, from line 10878: `AssertionError` at `run-grant.test.cjs:201:10`, `pass 1764`, `fail 1`. The only key that differs is `.../index.json`: expected `{}`, actual eight entries. The ship of the intent removed this log with the branch's cache folder, so these lines are the only copy (row 0r).
 - The same log gives the times. The fixture's files are stamped `2026-11-17T12:55:47.808Z` to `47.818Z`. The two dispatches are logged at `12:55:48.485Z` and `12:55:49.263Z`. The grant's snapshot ran after `49.81Z`, more than 2000 ms after the files were written. The test took 2363 ms, where it takes 0.8 to 1.3 s on a quiet machine.
 - The test and `run-snapshot.cjs` on this branch are the same as the installed ones (`diff` is empty), so the branch holds the defect too.
 
