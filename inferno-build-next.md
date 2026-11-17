@@ -81,6 +81,14 @@ Built on this branch on 2026-11-13. `CHANGELOG.md` says what each one does. The 
 
 The release steps (row 7) ran on `f3be640a`, the tree that holds all three: each result is one line in the pull request text. The e2e smoke runs again on the flow as it is (`43fae93a`).
 
+## 1e. DONE: one row the first host met on 2026-11-17
+
+Built on this branch on 2026-11-17. `CHANGELOG.md` says what it does.
+
+| Row | What | Handoff | Built in |
+| --- | --- | --- | --- |
+| 0o | A test the host's wrapper carries takes no seat on this machine's build wrapper | `inferno-remote-run-wrapped-in-local-seat-handoff.md` | `e659ab4a` |
+
 ## 2. BUILD NOW: nothing today
 
 A host's next finding arrives here as a row, with its section in the handoff file.

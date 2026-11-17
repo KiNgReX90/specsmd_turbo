@@ -24,3 +24,9 @@ All on Delta. `/tmp/claude-build.log` mixes zones: the outer wrapper logs in EST
 In `runShell`, never wrap a command that hands its work to remote-run: when the command contains `remote-run.sh` (or a host's `rr.sh` snapshot of it), run it with plain `bash`, the same as `wrap: false`. The target machine queues the real work on its own lock. A local build chained in front of the remote call (`npm run build && bash .../remote-run.sh ...`) is the one case that still needs the seat. So either split on the first `remote-run.sh` and test only the words before it, as Alpha's `claude-build` does, or keep the runner's remote commands free of a local prefix.
 
 Pin it with a fixture: a fake `claude-build` on PATH that records its calls. A mutant command that routes through `remote-run.sh` must never reach it, and a plain local `cargo test` must still be wrapped.
+
+## Built
+
+Built on this branch in `e659ab4a`, by what the host's config says and not by the wrapper's name. A test the host's wrapper carries takes no seat on this machine's build wrapper: a mutant's test in a `mutate.session`, one placed through `mutate.run` (in a batch and alone), and an item's check placed through `verification.run`. The commands of a `verification.session` already ran that way. `runShell` still queues by its words every command that runs here.
+
+Left as it is: an integrate or gate command that a host writes out with its wrapper, without a `verification.session` whose match reaches it, still takes a local seat. No config key says such a command is carried.
