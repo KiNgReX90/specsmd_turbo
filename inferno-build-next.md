@@ -89,9 +89,13 @@ Built on this branch on 2026-11-17. `CHANGELOG.md` says what it does.
 | --- | --- | --- | --- |
 | 0o | A test the host's wrapper carries takes no seat on this machine's build wrapper | `inferno-remote-run-wrapped-in-local-seat-handoff.md` | `e659ab4a` |
 
-## 2. BUILD NOW: nothing today
+## 2. BUILD NOW: one row
 
 A host's next finding arrives here as a row, with its section in the handoff file.
+
+| Row | What | Handoff |
+| --- | --- | --- |
+| 0p | The test of a first write reads its lower bound from the clock the file is stamped with | `inferno-first-write-clock-lag-handoff.md` |
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
