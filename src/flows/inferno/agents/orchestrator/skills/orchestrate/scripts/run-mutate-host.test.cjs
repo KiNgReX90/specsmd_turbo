@@ -167,6 +167,35 @@ test("a single mutant runs its bare test through mutate.run", (t) => {
   assert.equal(readIn(f, "src/m.txt").split("\n")[0], "alpha = 1");
 });
 
+test("a test that runs through mutate.run takes no seat on this machine's build wrapper, in a batch or alone, and a test that runs here still takes one", (t) => {
+  const f = hostTree(t);
+  const bin = path.join(f.dir, "bin");
+  fs.mkdirSync(bin);
+  const seats = path.join(f.dir, "seats");
+  writeFile(path.join(bin, "claude-build"), `#!/bin/sh\necho "$*" >> ${seats}\nshift\nexec "$@"\n`);
+  fs.chmodSync(path.join(bin, "claude-build"), 0o755);
+  const seated = () => (fs.existsSync(seats) ? fs.readFileSync(seats, "utf8").split("\n").filter(Boolean) : []);
+  const env = { PATH: `${bin}${path.delimiter}${process.env.PATH}`, WRAP_LOG: f.log };
+  // The test names a build, which the machine's wrapper would queue.
+  const bare = `: build; ${checks("alpha = 1")}`;
+  const entry = { criterion: "AC1", file: "src/m.txt", line: 1, find: "1", replace: "7", test: bare };
+  const config = outsideConfig(f, `mutate:\n${runKey(f)}`);
+
+  const hosted = sessionBatch(f, [entry], { config, json: true, env });
+  assert.equal(hosted.code, 0, hosted.out + hosted.err);
+  assert.deepEqual(hosted.payload.entries.map((e) => e.caught), [true]);
+  const single = spawnSync(process.execPath, [RUN, "mutate", "--tree", f.tree, "--file", "src/m.txt", "--line", "1", "--replace", "alpha = 7",
+    "--test", bare, "--config", config, "--json"], { cwd: f.tree, encoding: "utf8", env: sessionEnv(f, env) });
+  assert.equal(single.status, 0, single.stdout + single.stderr);
+  assert.deepEqual(f.wrapped().map((call) => call.test), [bare, bare]);
+  assert.deepEqual(seated(), [], "the host's wrapper queues the test on its own machine");
+
+  const local = sessionBatch(f, [entry], { json: true, env });
+  assert.equal(local.code, 0, local.out + local.err);
+  assert.deepEqual(local.payload.entries.map((e) => e.caught), [true]);
+  assert.equal(seated().length, 1, "a test that runs here is queued here");
+});
+
 test("a listed check that printed its finding line reads caught, and the same check ended by a wrapper error reads no verdict", (t) => {
   const f = hostTree(t);
   const config = `mutate:\n${runKey(f)}  checks:\n    - match: '^node lint\\.cjs\\b'\n      finding: '^LINT FINDING: '\n`;

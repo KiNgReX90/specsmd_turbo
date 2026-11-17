@@ -83,7 +83,7 @@ function single(options) {
   try {
     fs.writeFileSync(abs, mutant);
     unsealed = seals.reseal(ctx, sealed, [rel], 'mutant');
-    if (!unsealed) run = lib.runShell(commandOf(host, tree, options.test), tree, path.join(path.dirname(journal), `${logs}.log`));
+    if (!unsealed) run = lib.runShell(commandOf(host, tree, options.test), tree, path.join(path.dirname(journal), `${logs}.log`), { wrap: !host.run });
   } finally {
     failed = [journals.restore(tree, rel, abs, original), ...seals.unseal(ctx)].filter(Boolean);
     if (failed.length === 0) fs.rmSync(journal, { force: true });

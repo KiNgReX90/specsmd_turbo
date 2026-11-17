@@ -193,20 +193,21 @@ test("a close that a signal ended stops the batch after the verdicts it read", (
   assertWhole(f);
 });
 
-test("the session's open, send and close run bare, and only the test it runs goes through the machine's build wrapper, as the test did", (t) => {
+// The host's wrapper queues the test on the machine it runs on. A seat on this machine for a run
+// that only carries it there made a test wait behind its own caller, where both are one machine.
+test("the session's open, send, run and close all run bare: none takes a seat on this machine's build wrapper", (t) => {
   const f = sessionTree(t);
   const bin = path.join(f.dir, "bin");
   fs.mkdirSync(bin);
-  writeFile(path.join(bin, "claude-build"), `#!/bin/sh\necho "$*" >> ${path.join(f.dir, "wrapped")}\nshift\nexec "$@"\n`);
+  writeFile(path.join(bin, "claude-build"), `#!/bin/sh\necho "$*" >> ${path.join(f.dir, "seats")}\nshift\nexec "$@"\n`);
   fs.chmodSync(path.join(bin, "claude-build"), 0o755);
   // Each command names a build, which the machine's wrapper would queue.
   const config = outsideConfig(f, `mutate:\n${sessionBlock()}`.replace(/(node remote\.cjs (?:open|send|run|close))$/gm, "$1 build"));
   const result = sessionBatch(f, THREE, { config, json: true, env: { PATH: `${bin}${path.delimiter}${process.env.PATH}` } });
   assert.equal(result.code, 0, result.out + result.err);
   assert.deepEqual(result.payload.entries.map((e) => e.caught), [true, false, true]);
-  const wrappedLines = fs.readFileSync(path.join(f.dir, "wrapped"), "utf8").split("\n").filter(Boolean);
-  assert.equal(wrappedLines.length, 3, wrappedLines.join("\n"));
-  assert.ok(wrappedLines.every((line) => /node remote\.cjs run build$/.test(line)), wrappedLines.join("\n"));
+  assert.equal(count(f, "run"), 3);
+  assert.equal(fs.existsSync(path.join(f.dir, "seats")), false, "no session command went through the machine's build wrapper");
   assertWhole(f);
 });
 

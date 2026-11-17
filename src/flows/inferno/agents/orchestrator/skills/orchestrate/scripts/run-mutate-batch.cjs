@@ -87,9 +87,12 @@ async function signalled(session) {
   return signal ? `the batch stopped on ${signal}, so every entry still to run reads not run` : null;
 }
 
-/** Run entry `e`'s test behind `prefix`: in the session when it serves `e`, null when it serves `e` but reads no verdict now. */
+/**
+ * Run entry `e`'s test behind `prefix`: in the session when it serves `e`, null when it serves `e` but reads no verdict now.
+ * A test the host's `mutate.run` carries takes no seat on this machine's build wrapper (run-mutate-host.cjs).
+ */
 function runOf(hs, e, prefix, label) {
-  if (!hs.tests.has(e.k)) return lib.runShell(prefix + e.command, hs.session.tree, hs.session.log(label), { wrap: !e.check });
+  if (!hs.tests.has(e.k)) return lib.runShell(prefix + e.command, hs.session.tree, hs.session.log(label), { wrap: !e.check && !hs.carried });
   return noVerdict(hs) ? null : runIn(hs, e, prefix, label);
 }
 
@@ -220,7 +223,7 @@ async function runOwn(hs, entries, plans, state) {
  */
 async function runAll(session, sealed, entries, plans, groups) {
   const verdicts = new Map();
-  const hs = hostSession({ session, sealed, hosted: groups.hosted, tests: groups.tests, checks: groups.host.checks, verdicts, signalled });
+  const hs = hostSession({ session, sealed, hosted: groups.hosted, carried: Boolean(groups.host.run), tests: groups.tests, checks: groups.host.checks, verdicts, signalled });
   const state = { builds: 0 };
   let out = {};
   try {

@@ -199,6 +199,30 @@ test('a batch places each item\'s check, and its checks share one session', (t) 
   assert.deepEqual(proofOf(f, 'b').commands.map((entry) => [entry.item, entry.command]), [['a', placed(f.root, CHECK)], ['b', placed(f.root, other)]]);
 });
 
+test('a check placed through verification.run takes no seat on this machine\'s build wrapper, and a check that runs here still takes one', (t) => {
+  // The check names a build, which the machine's wrapper would queue.
+  const check = 'echo item build ran';
+  const f = host(t, { a: check }, configOf());
+  const bin = path.join(path.dirname(f.root), 'bin');
+  const seats = path.join(bin, 'seats');
+  fs.mkdirSync(bin);
+  writeFile(path.join(bin, 'claude-build'), `#!/bin/sh\necho "$*" >> ${seats}\nshift\nexec "$@"\n`);
+  fs.chmodSync(path.join(bin, 'claude-build'), 0o755);
+  const original = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${original}`;
+  t.after(() => { process.env.PATH = original; });
+  const seated = () => (fs.existsSync(seats) ? fs.readFileSync(seats, 'utf8').split('\n').filter(Boolean) : []);
+
+  const result = f.verify('a');
+  assert.equal(result.code, 0, result.out);
+  assert.deepEqual(wrapCalls(f).map((call) => call.test), [check]);
+  assert.deepEqual(seated(), [], 'the host\'s wrapper queues the check on its own machine');
+
+  const local = host(t, { a: check }, configOf({ run: false }));
+  assert.equal(local.verify('a').code, 0);
+  assert.equal(seated().length, 1, 'a check that runs here is queued here');
+});
+
 test('without verification.run the check runs in the tree as before: no wrapper, no session, and a refused line is a failed proof', (t) => {
   const bare = host(t, { a: CHECK }, configOf({ run: false, session: true, refused: REFUSED }));
   assert.equal(bare.verify('a').code, 0);

@@ -15,7 +15,10 @@
  * session and the slot up, and exits 0 when nothing is open. Each runs in the tree under bash
  * with INFERNO_TREE, the tree, and INFERNO_SESSION, an empty directory of this session beside the
  * batch's logs, outside the tree, for the host's own state. `send` also gets INFERNO_FILE, the path
- * relative to the tree, and `run` gets INFERNO_TEST, the test of the entry it runs for.
+ * relative to the tree, and `run` gets INFERNO_TEST, the test of the entry it runs for. None of
+ * the five takes a seat on this machine's build wrapper (run-lib.cjs runShell): the host's wrapper
+ * queues the test on the machine it runs on, and a seat here for the call that carries it there
+ * made the test wait behind its own caller where both are one machine.
  *
  * An entry whose test command `match` does not reach runs in place as before. `match` reads the
  * command as `mutate.run` wrapped it (run-mutate-host.cjs), and a session of a test the key wrapped
@@ -124,7 +127,7 @@ const noVerdict = (hs) => hs.lost || hs.missed;
 /** Run entry `e`'s test in the session, behind `prefix`. */
 function runIn(hs, e, prefix, label) {
   const test = exported({ ...hs.env, INFERNO_TEST: hs.tests.get(e.k) });
-  return lib.runShell(prefix + test + hs.hosted.run, hs.session.tree, hs.session.log(label));
+  return lib.runShell(prefix + test + hs.hosted.run, hs.session.tree, hs.session.log(label), { wrap: false });
 }
 
 /** Send each of `paths`; the first send that failed, with the path, or null. */

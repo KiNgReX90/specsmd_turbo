@@ -9,7 +9,8 @@
  * With it the check is placed as `mutate.run` places a mutant's test (run-mutate-host.cjs): a bare
  * check goes through the host's wrapper, the tree and the check one single-quoted shell word each,
  * and one that already starts with the wrapper's own words, or that `verification.wrapped` marks,
- * runs as written. The placed checks then run as integrate's commands do, through `checkRounds`
+ * runs as written, and neither takes a seat on this machine's build wrapper, as a mutant's test
+ * through `mutate.run` takes none. The placed checks then run as integrate's commands do, through `checkRounds`
  * (run-check-session.cjs): the checks of one verify-item, a batch's too, share one
  * `verification.session` where its match reaches them, as the commands of one integrate do, and a
  * session runs a placed check bare. A check the wrapper refused (`verification.refused`,
@@ -51,7 +52,7 @@ function runItemChecks(tree, config, checks, logOf) {
   const checked = checkRounds(tree, config, dir, (step) => checks.map(({ item, check }) => step(item, (shell) => {
     const command = commandOf({ run: wrapper }, tree, check);
     const log = logOf(item);
-    const read = readRun(config, shell, command, tree, log, command === check ? {} : { test: check });
+    const read = readRun(config, shell, command, tree, log, { wrap: false, ...(command === check ? {} : { test: check }) });
     return { item, command, run: read.run, output: readFrom(log, read.from), line: read.line, result: read.line ? 'refused' : 'ran' };
   })));
   return { runs: checked.value, left, notes: checked.notes };

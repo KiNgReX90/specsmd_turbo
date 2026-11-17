@@ -78,7 +78,7 @@ function checkSession(tree, config, dir) {
   return {
     shell(command, cwd, log, options = {}) {
       const inner = reach(match, command);
-      if (inner === null) return lib.runShell(command, cwd, log);
+      if (inner === null) return lib.runShell(command, cwd, log, options.wrap === false ? { wrap: false } : {});
       if (!opened) opened = open();
       if (opened.code === 0) return lib.runShell(exported({ ...env, INFERNO_TEST: options.test === undefined ? inner : options.test }) + key.run, tree, log, { wrap: false });
       fs.mkdirSync(path.dirname(log), { recursive: true });

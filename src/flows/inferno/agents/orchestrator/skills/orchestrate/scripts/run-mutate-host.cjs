@@ -16,7 +16,10 @@
  * this: it may match the wrapped command loosely enough to reach a bare test too.
  * `mutate.session` matches on the command as wrapped, as it does on a hand-written one, and a
  * session of a wrapped test runs the bare test. A Rust switch is exported before the wrapper, as
- * for a hand-written one, so the wrapper passes INFERNO_MUTANT on to the test.
+ * for a hand-written one, so the wrapper passes INFERNO_MUTANT on to the test. A test the wrapper
+ * carries takes no seat on this machine's build wrapper (run-lib.cjs runShell): the wrapper queues
+ * it on the machine it runs on, and a seat here for the call that carries it there made the test
+ * wait behind its own caller where both are one machine.
  *
  * `mutate.checks` names the host's checks. A contract check or a lint prints no test runner's
  * summary, so its red run reads no verdict. Each entry is `{match, finding}`: `match`, a regex
