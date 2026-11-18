@@ -2,15 +2,15 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURED ON THE HOST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-What waits for a builder is in section 2. Version 0.1.85 holds the six items of section 1b, the rows of sections 1c, 1d, 1e and 1g and the nine sections of section 1f, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
+Nothing on this branch waits for a builder today. Version 0.1.85 holds the six items of section 1b, the rows of sections 1c, 1d, 1e, 1g and 1h and the nine sections of section 1f, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
 Where the older text went, so that nothing built reads as open:
 
 - `inferno-future-improvements.md` is gone from this branch. Of its eight items six are built or struck (sections 1b and 3). The measurement of the first is section 4, its one standing rule is under section 2, and the one idea left unbuilt is in section 5. Its text is in this branch's history at `d5d82fa1`.
-- The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build: 24, 25 and 26, rows 0y, 0z and 0aa. Its sections 1 to 11 are in history at the same commit, 12 to 14 at `120be9b4`, and 15 to 23 at `1aa836a2`.
-- Every other handoff file keeps only its open defects. Once all it holds is built, it leaves the branch, and its row or section here names it with the commit that holds its text. Seven are gone this way: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f) and the five files of rows 0p to 0t (section 1g). Their text is in history at `f0f06aaf`, as it last stood, each with a first line that says it is built. Defects 3 and 5 of `inferno-review-record-defects-handoff.md` are cut from it, and their text is in history at `1aa836a2`.
+- The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build, and none is open today. Its sections 1 to 11 are in history at the same commit, 12 to 14 at `120be9b4`, 15 to 23 at `1aa836a2`, and 24 to 26 at `f0f06aaf`.
+- Every other handoff file keeps only its open defects. Once all it holds is built, it leaves the branch, and its row or section here names it with the commit that holds its text. Ten are gone this way, and none stands today: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f), the five files of rows 0p to 0t (section 1g) and the three files of rows 0u to 0x and 0ab (section 1h). Their text is in history at `f0f06aaf`, as it last stood, and the first seven each have a first line there that says they are built. Defects 3 and 5 of `inferno-review-record-defects-handoff.md` were cut from it before, and their text is in history at `1aa836a2`.
 - `inferno-generalization-plan.md` and `todo.md` are older backlogs that came from main. They ask nothing of whoever builds here, and what they hold is no commitment.
 
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
@@ -115,8 +115,8 @@ Three defects of handoff files that had no row are the same as two of these sect
 | Handoff | Defect | Built in |
 | --- | --- | --- |
 | `inferno-rename-proof-stale-handoff.md`, gone, in history at `f0f06aaf` | A proof over an item that renames a file is stale the moment it is written: section 15 | `1248629b` |
-| `inferno-review-record-defects-handoff.md`, defect 3 | verify-item's proof omits a committed rename's source: section 15 | `1248629b` |
-| `inferno-review-record-defects-handoff.md`, defect 5 | A reviewer does not know a check criterion can take a mutant: section 20, whose `check: true` the reviewer's texts and the runner's hint name, in place of the inline test wrapper the handoff asked for | `96c75c27` |
+| `inferno-review-record-defects-handoff.md`, defect 3, gone, in history at `1aa836a2` | verify-item's proof omits a committed rename's source: section 15 | `1248629b` |
+| `inferno-review-record-defects-handoff.md`, defect 5, gone, in history at `1aa836a2` | A reviewer does not know a check criterion can take a mutant: section 20, whose `check: true` the reviewer's texts and the runner's hint name, in place of the inline test wrapper the handoff asked for | `96c75c27` |
 
 ## 1g. DONE: five rows the first host met on 2026-11-17 and 2026-11-18
 
@@ -136,20 +136,28 @@ Row 0s: an entry that says `check: true` still reads caught under exit 126 or 12
 
 The release steps (row 7) ran on `28f9e200`, the tree that holds all five.
 
-## 2. BUILD NOW: eight rows
+## 1h. DONE: eight rows the first host met on 2026-11-16 and 2026-11-18
 
-A host's next finding arrives here as a row, with its section in the handoff file. Rows 0u to 0aa are the open defects of two handoff files and three sections that had no row; the triage of 2026-11-18 read each in the code and found it open. Row 0ab is the first host's finding of 2026-11-18 on row 0r as built, read in the code at `35f12380` before its install.
+Built on this branch on 2026-11-18. `CHANGELOG.md` says what each one does.
 
-| Row | What | Handoff |
-| --- | --- | --- |
-| 0u | A test file an item moves keeps the switch-off it already had, and verify-item reads it against the move's source | `inferno-moved-test-switch-off-handoff.md` |
-| 0v | A path the range deleted goes under `gone` and never under `paths`, in a first review and a delta, in both lenses | `inferno-review-record-defects-handoff.md`, defect 1 |
-| 0w | The record stamps the commit its review read, not HEAD, so a correction committed before the record still owes a review | `inferno-review-record-defects-handoff.md`, defect 2 |
-| 0x | A record that owes mutants runs detached, or the orchestrator's text says to run it in the background | `inferno-review-record-defects-handoff.md`, defect 4 |
-| 0y | A count probe that prints what `shows` says and exits 1 is no drift, or plan-lint names it | `inferno-0.1.84-run-defects-handoff.md`, section 24 |
-| 0z | A sibling's commit to a file two items own gives a fresh proof and an owed review, never `DISPATCH_PROOF` | `inferno-0.1.84-run-defects-handoff.md`, section 25 |
-| 0aa | A delta reviewer whose verdict holds writes its file again, or the record accepts an unchanged clean file | `inferno-0.1.84-run-defects-handoff.md`, section 26 |
-| 0ab | A rerun's cause is counted and written under its command's name, the rest after `verification.session.match`, never the wrapped command with a tree path in it | `inferno-rerun-cap-keyed-on-wrapped-command-handoff.md` |
+| Row | What | Handoff | Built in |
+| --- | --- | --- | --- |
+| 0u | A test file an item moves keeps the switch-off it already had: verify-item reads it against the move's source | `inferno-moved-test-switch-off-handoff.md`, gone, in history at `f0f06aaf` | `7983ecbd` |
+| 0v | A path the range deleted goes under `gone` and never under `paths`, in a first review and a delta, in both lenses | `inferno-review-record-defects-handoff.md`, defect 1, gone, in history at `f0f06aaf` | `480495b4` |
+| 0w | The record stamps the commit its review read, not HEAD, so a correction committed before the record owes the delta that reads it | `inferno-review-record-defects-handoff.md`, defect 2, gone, in history at `f0f06aaf` | `b26b876e`, `1e5d06bb` |
+| 0x | A record runs as its own process with `review ... --detach`, and `review ... --wait` blocks on it, as the gate's pair does | `inferno-review-record-defects-handoff.md`, defect 4, gone, in history at `f0f06aaf` | `81d5d674` |
+| 0y | A probe is judged by what it printed, so a count that prints what `shows` says and exits 1 is no drift | `inferno-0.1.84-run-defects-handoff.md`, section 24, in history at `f0f06aaf` | `74dde5c9` |
+| 0z | A sibling's commit to a file two items own, named in its `Item:` trailer, gives a fresh proof and an owed review, never `DISPATCH_PROOF` | `inferno-0.1.84-run-defects-handoff.md`, section 25, in history at `f0f06aaf` | `f5a2d440`, `a4f22d5d` |
+| 0aa | A delta whose earlier verdict holds writes the range it read into its file, so the record takes it | `inferno-0.1.84-run-defects-handoff.md`, section 26, in history at `f0f06aaf` | `b26b876e`, `1e5d06bb` |
+| 0ab | A rerun's cause is counted and written under its command's name: the rest after `verification.session.match`, else the command with the gate tree's path as `{tree}` | `inferno-rerun-cap-keyed-on-wrapped-command-handoff.md`, gone, in history at `f0f06aaf` | `771b05f0`, `a5e99826` |
+
+One more was found and built beside rows 0w and 0aa, with no row: an intent review dispatch printed again before its record no longer moves what the record binds, and a delta intent review whose earlier verdict holds can be recorded with its `read: <range>` line (`67e00841`, `07678051`).
+
+A host sets no new key. What a host may now use: `run.cjs review --item <id> --reviewer <agent-id> --detach` starts a record as its own process and `run.cjs review --item <id> --wait` blocks on it, and the intent review's record takes the same flags (row 0x). A delta's dispatch asks each lens for a `read: <range>` line, which a review file may hold (row 0aa). A rerun is counted under its command's name, so a commit with `Fixes-intermittent: <name>` lifts the limit (row 0ab). An item's commit carries one `Item: <id>` line per item it lands in its last paragraph, which lets a sibling's commit to a shared file pass (row 0z). The orchestrator's texts say to write it.
+
+## 2. BUILD NOW: nothing today
+
+A host's next finding arrives here as a row, with its section in the handoff file.
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 

@@ -12,6 +12,7 @@
  * - The reviewer gives a criterion only a check proves that check as its mutant's test.
  * - The orchestrator gates a red that is not the branch's work again, on the same code, with the
  *   cause call the red gate prints.
+ * - The orchestrator lands an item with one `Item:` trailer per item, beside its `Cases:` line.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -191,5 +192,18 @@ describe('the orchestrator gates a red that is not the branch\'s work again with
     expect(USAGE).toContain('node run.cjs gate --detach --cause "<why>" --by <who> [--tree <dir>]');
     const rerun = readFileSync(path.join(SCRIPTS, 'run-gate-rerun.cjs'), 'utf8');
     expect(rerun).toContain('if this red is not this branch\'s work, gate the same code again with its cause: ${gateCauseCall(tree)}');
+  });
+});
+
+describe('the orchestrator lands an item with its Item trailer', () => {
+  // verify-item reads a sibling's commit to a shared file by its `Item:` trailer, which git reads only
+  // from the message's last paragraph, so the `Cases:` line and the `Item:` lines share that paragraph.
+  it.each([
+    ['agents/orchestrator/agent.md', '{item-id}'],
+    ['codex/skills/specsmd-inferno/references/procedure.md', '<item-id>'],
+  ])('%s puts one Item line per item in the last paragraph', (rel, id) => {
+    expect(read(rel)).toContain(
+      `The message's last paragraph holds the \`Cases:\` line and one \`Item: ${id}\` line per item it lands.`
+    );
   });
 });
