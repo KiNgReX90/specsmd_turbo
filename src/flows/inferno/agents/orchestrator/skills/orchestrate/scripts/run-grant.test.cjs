@@ -9,13 +9,30 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { fixture, spec } = require('./run-attribution-fixture.cjs');
+const { dispatchDirectory } = require('./run-snapshot.cjs');
 
-/** Every file of the fixture's cache with its bytes, where the signed dispatch records live. */
+/** The stat index of run-snapshot.cjs in the fixture's cache, found the way the runner's own process finds it. */
+function statIndex(f) {
+  const saved = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = f.cache;
+  try {
+    return path.join(dispatchDirectory(f.root), 'index.json');
+  } finally {
+    if (saved === undefined) delete process.env.XDG_CACHE_HOME;
+    else process.env.XDG_CACHE_HOME = saved;
+  }
+}
+
+/**
+ * Every file of the fixture's cache with its bytes, where the signed dispatch records live. The stat index is no
+ * part of the record: every snapshot may warm it, and it fills in once the fixture's files are two seconds old.
+ */
 function cacheBytes(f) {
+  const index = statIndex(f);
   const files = {};
   for (const name of fs.readdirSync(f.cache, { recursive: true })) {
     const file = path.join(f.cache, name);
-    if (fs.statSync(file).isFile()) files[name] = fs.readFileSync(file, 'utf8');
+    if (file !== index && fs.statSync(file).isFile()) files[name] = fs.readFileSync(file, 'utf8');
   }
   return files;
 }
