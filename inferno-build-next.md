@@ -155,6 +155,8 @@ One more was found and built beside rows 0w and 0aa, with no row: an intent revi
 
 A host sets no new key. What a host may now use: `run.cjs review --item <id> --reviewer <agent-id> --detach` starts a record as its own process and `run.cjs review --item <id> --wait` blocks on it, and the intent review's record takes the same flags (row 0x). A delta's dispatch asks each lens for a `read: <range>` line, which a review file may hold (row 0aa). A rerun is counted under its command's name, so a commit with `Fixes-intermittent: <name>` lifts the limit (row 0ab). An item's commit carries one `Item: <id>` line per item it lands in its last paragraph, which lets a sibling's commit to a shared file pass (row 0z). The orchestrator's texts say to write it.
 
+The release steps (row 7) ran on `1ddb0401`, the tree that holds all eight.
+
 ## 2. BUILD NOW: two rows
 
 A host's next finding arrives here as a row, with its section in the handoff file. Rows 0ac and 0ad are two defects the first host met in runs on 2026-11-18, on the build at `f3be640a`, each read in the code at `f0f06aaf` and found unchanged there.
