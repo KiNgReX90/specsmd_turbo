@@ -90,6 +90,7 @@ test("under a session whose match ends past the tree, the gate counts another tr
   const usage = run(f, 'gate', '--cause', 'why');
   assert.equal(usage.code, 1, usage.out + usage.err);
   assert.match(usage.err, /never with --wait, --lane, --lanes-only or --test, since the cap counts the command by its name$/m);
+  assert.match(run(f, 'help').out, /^ {2}node run\.cjs gate --detach --cause "<why>" .* past two causes under its name on the base since a "Fixes-intermittent: <name>" commit$/m);
 
   // The build before names wrote another tree's whole command; a lane accepted the same check by its name.
   const first = onMain(f, cause(`tools/remote.sh auto ${path.join(f.dir, 'gate-a')} ${BARE}`, 'lead'));

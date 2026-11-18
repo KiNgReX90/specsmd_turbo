@@ -13,11 +13,11 @@ const { writeFile } = require("./test-write.cjs");
 const BARE = "node flaky.cjs";
 const SESSION = "  session:\n    match: '^tools/remote\\.sh auto \\S+ '\n    open: echo open\n    run: bash -c \"$INFERNO_TEST\"\n    close: echo close\n";
 const wrapped = (tree) => `tools/remote.sh auto ${tree} ${BARE}`;
-const configText = (tree, extra = "") => `delivery:\n  base_branch: main\nverification:\n  finalize:\n    - ${wrapped(tree)}\n${extra}`;
+const configText = (tree, extra = "", command = wrapped) => `delivery:\n  base_branch: main\nverification:\n  finalize:\n    - ${command(tree)}\n${extra}`;
 
-/** A repo whose main carries the flaky command, red while the mode file outside the tree says so, and the session every tree's config inherits. */
-function hosted() {
-  const fixture = repo({ config: CONFIG.replace("verification:\n", `verification:\n${SESSION}`) });
+/** A repo whose main carries the flaky command, red while the mode file outside the tree says so, and the session every tree's config inherits when `session`. */
+function hosted(session = true) {
+  const fixture = repo({ config: CONFIG.replace("verification:\n", `verification:\n${session ? SESSION : ""}`) });
   fixture.mode = path.join(fixture.dir, "mode");
   write(fixture.root, "flaky.cjs", `const fs = require("node:fs");\nconst mode = ${JSON.stringify(fixture.mode)};\n` +
     'if (fs.existsSync(mode) && fs.readFileSync(mode, "utf8").trim() === "red") { console.log("  1 failed"); process.exit(1); }\n');
@@ -27,10 +27,10 @@ function hosted() {
   return fixture;
 }
 
-/** The config file the host writes for one gate tree, outside every tree. */
-function configure(fixture, made, name) {
+/** The config file the host writes for one gate tree, outside every tree, with `command` as its finalize command. */
+function configure(fixture, made, name, command = wrapped) {
   const config = path.join(fixture.dir, `config-${name}.yaml`);
-  writeFile(config, configText(made.tree));
+  writeFile(config, configText(made.tree, "", command));
   return { ...made, config };
 }
 
@@ -140,4 +140,23 @@ test("ship counts the base lines the build before names wrote with whole wrapped
   git(fixture.root, ["push", "-q", "origin", "main"]);
   passed(ship(fixture, a));
   shippedBare(fixture, a, "the race");
+});
+
+test("without a session, a record from before names whose command holds the gate tree's path ships with {tree}, named by the gate tree and not the checkout it merges in", () => {
+  const fixture = hosted(false);
+  const named = (tree) => `node ${tree}/flaky.cjs`;
+  const a = configure(fixture, closed(fixture), "a", named);
+  assert.notEqual(a.tree, fixture.root);
+  passed(rerun(fixture, a, "the race"));
+  const [file] = recordFiles(fixture);
+  const record = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.deepEqual([record.command, record.tests], [named(a.tree), ["node {tree}/flaky.cjs"]]);
+  writeFile(file, `${JSON.stringify({ ...record, tests: [record.command] })}\n`);
+  passed(ship(fixture, a));
+  const text = message(fixture);
+  assert.equal(text.includes(a.tree), false, text);
+  assert.deepEqual(absolute(text), []);
+  const [[command, json]] = baseLines(fixture);
+  const shipped = JSON.parse(json);
+  assert.deepEqual([command, shipped.command, shipped.tests, shipped.cause], ["node {tree}/flaky.cjs", "node {tree}/flaky.cjs", ["node {tree}/flaky.cjs"], "the race"]);
 });
