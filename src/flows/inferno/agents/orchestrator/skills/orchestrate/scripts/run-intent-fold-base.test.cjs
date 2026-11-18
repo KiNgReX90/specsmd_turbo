@@ -150,3 +150,68 @@ test("with review.outside ** a sync folded from an origin the local base lags bi
   assert.deepEqual(foldBound(tree, lib.readConfig(tree), reviewed, "main").bound, []);
   assert.equal(reviewCurrent(tree, lib.readConfig(tree), parseFor(tree, REVIEW, "alpha", true)), true);
 });
+
+test("with review.outside ** a fold of a local base rebased since: the old copies' files are not the intent's own, and the review binds none of them", () => {
+  const fixture = repo({ config: BOUND });
+  const push = remote(fixture);
+  const tree = worktree(fixture, INTENT_TREE);
+  write(tree, "src/a.ts", "export const a = 3;\n");
+  git(tree, ["commit", "-qam", "the work"]);
+  // A page only the local base holds, folded in before the review; then origin moves and the local base is rebased onto it.
+  forward(fixture, commitOn(fixture, "main", KB));
+  fold(tree, "main");
+  intentReviewed(tree, "alpha", "verdict: clean\n", lib.readConfig(tree));
+  const reviewed = git(tree, ["rev-parse", "HEAD"]);
+  push({ "kb/y.md": "a page origin synced\n" });
+  git(fixture.root, ["fetch", "-q", "origin"]);
+  git(fixture.root, ["rebase", "-q", "origin/main"]);
+  const mine = (at) => own(tree, "main", at).filter((file) => !lib.inLedger(file));
+  assert.deepEqual(mine(), ["src/a.ts"]);
+  assert.deepEqual(mine(reviewed), ["src/a.ts"]);
+  assert.equal(reviewCurrent(tree, lib.readConfig(tree), parseFor(tree, REVIEW, "alpha", true)), true);
+  write(tree, "kb/x.md", "the intent edits the page\n");
+  assert.deepEqual(mine(), ["kb/x.md", "src/a.ts"], "a page the intent edits is its own");
+  git(tree, ["checkout", "--", "kb/x.md"]);
+  const gated = run(fixture, ["gate", "--tree", tree]);
+  assert.equal(gated.code, 0, gated.out + gated.err);
+  assert.doesNotMatch(gated.out, /intent review owed/);
+  assert.deepEqual(foldBound(tree, lib.readConfig(tree), reviewed, "main").bound, []);
+  // The intent edits the page in one commit and takes it back in the next: at the first it was the intent's own.
+  write(tree, "kb/x.md", "the intent edits the page\n");
+  git(tree, ["commit", "-qam", "the intent edits the page"]);
+  const edited = git(tree, ["rev-parse", "HEAD"]);
+  git(tree, ["revert", "--no-edit", "HEAD"]);
+  assert.deepEqual(mine(edited), ["kb/x.md", "src/a.ts"]);
+  assert.deepEqual(mine(), ["src/a.ts"]);
+});
+
+test("a local base and origin's that diverged and were both folded are both read, so a file only one of them synced stays in", () => {
+  const { fixture, tree } = opened();
+  const local = commitOn(fixture, "main", KB);
+  origin(fixture, commitOn(fixture, "main", { "kb/y.md": "a page origin synced\n" }));
+  forward(fixture, local);
+  fold(tree, "main");
+  fold(tree, "origin/main");
+  assert.deepEqual(own(tree), ["kb/x.md", "kb/y.md", "src/a.ts"]);
+});
+
+test("only origin's base, rewritten to the same patch since the fold: the old copy's files are not the intent's own", () => {
+  const { fixture, tree } = opened();
+  const synced = commitOn(fixture, "main", KB);
+  origin(fixture, synced, "release");
+  fold(tree, "origin/release");
+  const copy = git(fixture.root, ["commit-tree", `${synced}^{tree}`, "-p", `${synced}^`, "-m", "synced, reworded"]);
+  origin(fixture, copy, "release");
+  assert.deepEqual(own(tree, "release"), ["src/a.ts"]);
+});
+
+test("a commit before a fold of a base rewritten since reads only the folds it holds: the intent's edit the base landed later is its own there", () => {
+  const { fixture, tree } = opened();
+  const at = git(tree, ["rev-parse", "HEAD"]);
+  const landed = commitOn(fixture, "main", { "src/a.ts": "export const a = 3;\n" });
+  forward(fixture, landed);
+  fold(tree, "main");
+  git(fixture.root, ["reset", "-q", "--hard", git(fixture.root, ["commit-tree", `${landed}^{tree}`, "-p", `${landed}^`, "-m", "landed, reworded"])]);
+  assert.deepEqual(own(tree, "main", at), ["src/a.ts"]);
+  assert.deepEqual(own(tree), []);
+});
