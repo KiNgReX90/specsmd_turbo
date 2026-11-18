@@ -34,8 +34,8 @@ const { caseBlocks, namesId } = require('./run-cases-blocks.cjs');
 /** The largest text read from history. A larger registry reads as unreadable, which re-owes. */
 const MAX_TEXT = 64 * 1024 * 1024;
 
-/** The hash a review is recorded under: every file it lists, whole, as the tree holds it. */
-const filesHash = (tree, files) => proofs.scopeHash(tree, files, { exact: true });
+/** The hash a review is recorded under: every file it lists, whole, as the tree holds it, or as commit `ref` holds it. */
+const filesHash = (tree, files, ref) => proofs.scopeHash(tree, files, { exact: true, ref });
 
 function gitOut(tree, args) {
   const result = spawnSync('git', args, { cwd: tree, encoding: 'utf8', maxBuffer: MAX_TEXT });

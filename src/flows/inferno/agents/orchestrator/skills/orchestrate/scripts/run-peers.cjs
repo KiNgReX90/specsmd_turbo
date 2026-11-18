@@ -160,14 +160,17 @@ function histories(tree, own, editable) {
   return lines;
 }
 
-/** A peer's change must lie inside its own ownership, and outside this item's when it ran beside the item. */
-function checkPeerChange(tree, run, file) {
+/**
+ * A peer's change must lie inside its own ownership, and outside this item's when it ran beside the
+ * item, but where `excused` reads it as a sibling's run after the item (run-attribute.cjs).
+ */
+function checkPeerChange(tree, run, file, excused) {
   const { peer } = run;
   if (!lib.ownedBy(file, peer.assignment.ownership.editable, tree)) {
     throw dispatch.refuse(`dispatch ${peer.dispatchId} for ${dispatch.itemsOf(peer).join(', ')} claims ${file} outside its ` +
       'ownership: review that item first, its verify-item names the file');
   }
-  if (run.overlaps(file)) {
+  if (run.overlaps(file) && !excused(run, file)) {
     throw dispatch.refuse(`dispatch ownership overlaps at ${file} with dispatch ${peer.dispatchId}: ` +
       'a serial chain one builder builds takes one dispatch-log for all its items, with --items a,b');
   }
@@ -221,9 +224,10 @@ function runAt(runs, before, after, file, claimed) {
 /**
  * The paths that nobody's changes since the item's first baseline leave on other bytes. `now`
  * is the tree as verify-item reads it, and `folded` the paths the fold of the base brought in.
- * `peers` are accepted records, `open` the records still running beside the item.
+ * `peers` are accepted records, `open` the records still running beside the item, and `excused`
+ * the overlaps a sibling's commit explains.
  */
-function unexplainedChanges(tree, own, editable, peers, now, folded, open = []) {
+function unexplainedChanges(tree, own, editable, peers, now, folded, open, excused) {
   const { runs, timeline } = layout(tree, own, peers, open, now, editable);
   const flagged = new Set();
   const stretches = new Map();
@@ -238,7 +242,7 @@ function unexplainedChanges(tree, own, editable, peers, now, folded, open = []) 
       const claimed = own.claimed.includes(file);
       if (folded.has(file) && !claimed) continue;
       const run = runAt(runs, before, after, file, claimed);
-      if (run) checkPeerChange(tree, run, file);
+      if (run) checkPeerChange(tree, run, file, excused);
       if (run || claimed) {
         close(file);
         continue;

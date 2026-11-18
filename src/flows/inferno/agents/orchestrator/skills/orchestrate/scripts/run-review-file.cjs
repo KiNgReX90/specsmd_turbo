@@ -23,6 +23,8 @@ const { RunError } = lib;
 const ITEM_KEYS = ['item', 'verdict', 'files', 'findings', 'mutants', 'pins'];
 /** What run.cjs adds when it records a review. A reviewer that writes them is refused, save the runner's own (runnerKeys). */
 const RECORDED_KEYS = ['tree', 'commit', 'reviewer'];
+/** The range a reviewer names as read, an optional key its delta dispatch teaches and the record holds (run-review-read.cjs). */
+const READ_KEY = 'read';
 /**
  * A reviewer's agent id as the host returns it: the id on Claude, the task path such as
  * /root/review_a_one on Codex. One token, so never the placeholder a record call prints.
@@ -225,7 +227,7 @@ function parseItemReview(tree, rel, itemId, { recorded }) {
   if (!isMap(doc)) throw bad(rel, `an item review is a map of ${ITEM_KEYS.join(', ')}`);
   const own = recorded ? RECORDED_KEYS : runnerKeys(tree, rel, doc, RECORDED_KEYS);
   for (const key of Object.keys(doc)) {
-    if (ITEM_KEYS.includes(key) || own.includes(key)) continue;
+    if (ITEM_KEYS.includes(key) || key === READ_KEY || own.includes(key)) continue;
     if (RECORDED_KEYS.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
     throw bad(rel, `unknown key ${key}: an item review holds ${ITEM_KEYS.join(', ')} only`);
   }
@@ -433,4 +435,5 @@ module.exports = {
   FINDING_KEYS, ITEM_KEYS, ITEM_MUTANT_KEYS, ITEM_PIN_KEYS, MUTANT_KEYS, PIN_KEYS, RECORDED_KEYS, SEVERITIES, bad, boundFiles, commentMarker, entries, isMap, itemCriterion, mutantsOf,
   parseItemReview, pinsOf, proposalsOf, readDoc, recordedReviewer, refuseComments, refuseNew, relativePath, reviewPath, reviewerId, runnerKeys, sameMutant, samePin, sentBack,
   verdictParts, weightOf, withSays, withoutRunnerKeys,
+  READ_KEY,
 };

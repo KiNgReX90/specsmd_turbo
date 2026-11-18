@@ -49,6 +49,7 @@ const path = require('path');
 const lib = require('./run-lib.cjs');
 const {
   ITEM_KEYS, isMap, itemCriterion, mutantsOf, pinsOf, proposalsOf, readDoc, refuseComments, refuseNew, sameMutant, samePin, bad, withSays,
+  READ_KEY,
 } = require('./run-review-file.cjs');
 const { saysProblem } = require('./run-criterion-says.cjs');
 const { MOVE_HOW, carryMoves } = require('./run-mutant-moves.cjs');
@@ -139,7 +140,7 @@ async function itemMutants(tree, context) {
   const elsewhere = () => changedSince(tree, rel, spec.manifest.ownership.editable);
   const result = await runEntries(tree, entries.filter(due), { configFile, rel, signs, elsewhere });
   const survivors = entries.filter((entry) => entry.caught === 'no');
-  rewrite(path.join(tree, rel), doc, ITEM_KEYS, {
+  rewrite(path.join(tree, rel), doc, [...ITEM_KEYS, READ_KEY], {
     verdict: own.length > 0 || survivors.length > 0 ? 'fix' : 'clean',
     findings: [...own, ...survivors.map((entry) => survivorFinding(entry))],
     mutants: entries.map(keptSaid),
@@ -300,7 +301,7 @@ async function intentMutants(tree, context) {
   const survivors = entries.filter((entry) => entry.caught === 'no');
   const ownedBy = (entry) => ({ owner: entry.criterion.split(':')[0] });
   const verdict = own.length > 0 || survivors.length > 0 ? 'fix' : 'clean';
-  rewrite(abs, doc, INTENT_KEYS, {
+  rewrite(abs, doc, [...INTENT_KEYS, READ_KEY], {
     verdict,
     findings: [...own, ...survivors.map((entry) => survivorFinding(entry, ownedBy(entry)))],
     mutants: entries.map(kept),

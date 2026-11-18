@@ -35,9 +35,11 @@ const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
 const { criteriaLines } = require('./run-criterion-says.cjs');
 const { dirtyFiles } = require('./run-dirt.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
+const { otherItemCommit } = require('./run-sibling.cjs');
 const ladder = require('./run-review-ladder.cjs');
 const lens = require('./run-review-quality.cjs');
 const { changedSince, dispatchClaims, goneLine, itemFiles, rangeLines, splitGone } = require('./run-review-span.cjs');
+const { afterRecord, heldRanges, readLine, stampOf } = require('./run-review-read.cjs');
 
 const { builtBy, hostActor, nextActor, nextLine } = ladder;
 
@@ -52,7 +54,7 @@ const { RunError } = lib;
  */
 function reviewerLines(config, subject, previous, body, actor = 'reviewer') {
   const { agent, model } = hostActor(actor, config);
-  return [`dispatch ${agent}${model ? ` model ${model}` : ''} ${subject}`, ...(previous ? [`  previous ${previous}`] : []), ...body];
+  return [`dispatch ${agent}${model ? ` model ${model}` : ''} ${subject}`, ...(previous ? [`  previous ${previous}`] : []), ...body, ...readLine(previous, body)];
 }
 
 function itemOf(ledger, id, options) {
@@ -112,7 +114,7 @@ function owed(tree, context, reason, from, paths) {
   }
   const lenses = ['contract', ...(lens.qualityOwed(tree, context, forkPoint(tree, context.config, intent)) ? ['quality'] : [])];
   const [contract, quality] = lenses.map((one) => lensDispatch(tree, context, one, { from, paths }, proof));
-  lens.noteDispatched(tree, intent.id, item.id, lenses);
+  lens.noteDispatched(tree, intent.id, item.id, lenses, lenses.map((one, at) => [one, [contract, quality][at].payload.range]));
   const named = contract.payload.proof;
   return {
     exit: 3,
@@ -213,7 +215,7 @@ async function record(tree, context, ledger) {
   const lenses = context.dispatched;
   const waiting = lens.lensesWaiting(tree, context, {
     fork: () => forkPoint(tree, context.config, intent),
-    dispatch: (which, span) => lensDispatch(tree, context, which, span, itemProof(tree, context)).lines,
+    dispatch: (which, span) => lensDispatch(tree, context, which, span, itemProof(tree, context)),
   });
   if (waiting) return waiting;
   const both = lenses.includes('quality');
@@ -230,11 +232,12 @@ async function record(tree, context, ledger) {
   // The runner runs the review's mutants and writes what they said into the file (run-review-mutants.cjs),
   // beside every file this record signs.
   const signed = [[rel, reviewer], ...(both ? [[qualityRel, qualityReviewer]] : [])];
+  // The ranges the lenses read, each file's read line held to them before anything runs (run-review-read.cjs).
+  const ranges = heldRanges(tree, context, signed.map(([file]) => file));
   const ran = await itemMutants(tree, { ...context, signs: signed.map(([file]) => file) });
   const review = lens.mergeReviews(parseItemReview(tree, rel, item.id, { recorded: false }),
     quality || lens.readQuality(tree, qualityRel, item.id, { recorded: true }));
-  const commit = lib.git(tree, ['rev-parse', 'HEAD']);
-  const hash = filesHash(tree, review.files);
+  const { commit, hash } = stampOf(tree, ranges, review.files);
   const result = writer.reviewItem({
     file: ledger.file, intent: intent.id, item: item.id, verdict: review.verdict,
     files_hash: hash, tier: builtBy(item), commit,
@@ -248,11 +251,12 @@ async function record(tree, context, ledger) {
   const paths = [path.join(lib.SPECS_DIR, 'state.yaml'), ...signed.map(([file]) => file)];
   lib.git(tree, ['add', '--', ...paths]);
   lib.git(tree, ['commit', '-q', '-m', `specsmd(${intent.id}): review ${item.id} ${review.verdict}`, '--', ...paths]);
+  lens.noteDispatched(tree, intent.id, item.id, null, [], true);
   const updated = itemOf(lib.readLedger(tree), item.id, { intent: intent.id }).item;
   const head = `review ${item.id} ${review.verdict}, recorded at ${short(tree, commit)} ` +
     `(${result.tier}, ${result.misses} miss${result.misses === 1 ? '' : 'es'})`;
   const verdict = verdictResult(tree, { ...context, item: updated }, review, head);
-  return { ...verdict, out: [...ran, ...verdict.out] };
+  return afterRecord(tree, { ...context, item: updated }, commit, review, { ...verdict, out: [...ran, ...verdict.out] });
 }
 
 /**
@@ -346,6 +350,8 @@ function step(tree, context, { ledger, exists, pending, current }) {
   const from = item.review_commit || forkPoint(tree, config, intent);
   if (item.review === 'fix' && item.review_weight === 'minor' && touched.length > 0) {
     const unlisted = touched.filter((file) => !current.files.includes(file));
+    const other = otherItemCommit(tree, item.id, item.review_commit, touched);
+    if (other) return owed(tree, context, other, from, paths);
     if (unlisted.length === 0) return settle(tree, context, ledger, current, touched);
     return owed(tree, context, `the correction of the minor findings touches ${unlisted.join(', ')}, which the review does not list`, from, paths);
   }

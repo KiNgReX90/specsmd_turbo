@@ -372,6 +372,7 @@ function verifyItem(itemId, options) {
   const outside = attribution ? attribution.outside : sinceOutside(tree, since, editable);
   const unreported = attribution ? attribution.unreported : [];
   const attributed = attribution ? attribution.attributed : [];
+  if (attribution) out.push(...attribution.lines);
   let failed = outside.length > 0;
   const checks = [];
   const commands = [];
