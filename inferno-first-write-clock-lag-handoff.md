@@ -1,5 +1,7 @@
 # Handoff: the test of a first write reads two clocks, and fails when they straddle a second
 
+Built in `7b3df6ef`, as row 0p of `inferno-build-next.md`. This file can be removed from the branch; its text stays in history.
+
 Found 2026-11-17 in Skoft_CRA, in `npm run test:definitions` of the intent `the-product-page-wears-chapter-arcs`, run on Delta. One red in 1765 tests. It blocked one integrate, and the next run of the same tree was green.
 
 ## What is wrong

@@ -1,5 +1,7 @@
 # Handoff: a proof over an item that renames a file is stale the moment it is written
 
+Built in `1248629b`, as section 15 of `inferno-0.1.84-run-defects-handoff.md`, in section 1f of `inferno-build-next.md`. This file can be removed from the branch; its text stays in history.
+
 Found 2026-11-16 in Skoft_CRA, while building `the-definitions-layer-owns-its-models-and-calls-nothing-above-it` (item `dlm-the-engine-tests-leave-the-requirement-tree`, a `git mv` of one test file).
 
 ## What is wrong

@@ -1,5 +1,7 @@
 # Handoff: the flow's real cargo test starts the machine's sccache server on its own throwaway cache
 
+Built in `93b7f0a3`, as row 0t of `inferno-build-next.md`. This file can be removed from the branch; its text stays in history.
+
 Found 2026-11-18 on Delta, the machine Skoft_CRA's intents build from. For as long as the server stood, every Rust build on the machine compiled against an empty cache.
 
 ## What is wrong
