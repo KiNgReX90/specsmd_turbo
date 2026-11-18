@@ -27,7 +27,7 @@
  * (run-mutate-verdict.cjs) has no control run to tell it from the rest, so every later entry of the
  * batch with that test, the same command as the batch runs it, is not written and not run: it reads
  * not run, marked `skipped`, and the record leaves it owed. A check's run on the tree as it is
- * proved its command, so a check neither skips nor is skipped.
+ * proved its command, so its 126 or 127 on a mutant reads caught and it is never skipped.
  *
  * A clean tree only, every touched file restored in a finally, and signals held until then.
  * A held signal is read before every run, so the batch starts no run after it, and every entry
@@ -203,9 +203,9 @@ function skipped(hs, e) {
   return Boolean(first);
 }
 
-/** Once `e`'s own run found no command, the entry every later one with its test is skipped for. */
+/** Once `e`'s own run found no command, the entry every later one with its test is skipped for; a check's never reads so. */
 function remember(hs, e) {
-  if (hs.verdicts.get(e.k).missing && !e.check) hs.missing.set(e.command, e);
+  if (hs.verdicts.get(e.k).missing) hs.missing.set(e.command, e);
 }
 
 /** Every entry on a build or a run of its own: in place, or in the session when it serves the entry. */

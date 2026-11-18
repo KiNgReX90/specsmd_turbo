@@ -42,8 +42,10 @@ const { refusal } = require('./run-check-refused.cjs');
  * failed build and a parse failure, such a run reads no verdict with a reason of its own: the exit,
  * the last line of the log's tail that names why a command could not run (else its last line), and
  * what the host does. A failing summary or a check's finding line still reads caught, since the test
- * ran and noticed. A run whose last line is the host's `verification.refused` line was the wrapper
- * refusing (run-check-refused.cjs): it ran nothing, so it reads as any other red run without a summary.
+ * ran and noticed, and so does an entry that says `check: true`: its check was green on the tree as
+ * it is, so the command is there and a 126 or 127 on the mutant is the mutant's. A run whose last
+ * line is the host's `verification.refused` line was the wrapper refusing (run-check-refused.cjs):
+ * it ran nothing, so it reads as any other red run without a summary.
  */
 
 /** Exit codes of a run whose child a signal ended: SIGINT, SIGKILL, SIGTERM. */
@@ -204,8 +206,8 @@ function verdictOf(run, text, abs, { files = abs ? [abs] : [], test = null, chec
   }
   const lines = clean.split('\n');
   if (abs && (nodeParseFailed(lines, abs) || vitestParseFailed(lines, abs))) return { caught: null, why: 'did not parse' };
+  if (plain) return { caught: true };
   const missing = commandMissing(run, clean, config);
-  if (plain) return missing || { caught: true };
   const check = test === null ? null : checks.find((entry) => entry.match.test(test));
   if (check && check.finding.test(clean)) return { caught: true };
   if (!FAILED_SUMMARY.some((summary) => summary.test(clean))) {

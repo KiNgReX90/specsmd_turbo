@@ -80,6 +80,22 @@ test("the text names the reason once and how many entries did not run for it, an
   assert.match(one.out, /^1 entry did not run, as the test of criterion AC1 found no command$/m);
 });
 
+test("two tests that each find no command get a line each, with their own count and their own criterion", (t) => {
+  const f = sessionTree(t);
+  const other = "echo ran >> ../ran.log; shopgen-cli check";
+  const result = batch(f, [
+    on("AC1", "src/m.txt", 1, "1", "7", SHOPGEN),
+    on("AC2", "src/m.txt", 2, "2", "8", other),
+    on("AC3", "src/m.txt", 3, "3", "9", SHOPGEN),
+    on("AC4", "src/m.txt", 1, "1", "6", SHOPGEN),
+    on("AC5", "src/m.txt", 2, "2", "5", other),
+  ], { json: false });
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /^2 entries did not run, as the test of criterion AC1 found no command$/m);
+  assert.match(result.out, /^1 entry did not run, as the test of criterion AC2 found no command$/m);
+  assert.equal(ran(f), 2);
+});
+
 // The same test is the same command as the batch runs it: a test written bare and the same test
 // written through the host's wrapper as `mutate.run` would place it run one command, while a test
 // that differs in any byte of that command is another one.
@@ -109,6 +125,15 @@ test("through mutate.run the skip holds the command as placed: a test written th
   assert.match(rows[2].why, MISSING);
   assert.equal(rows[2].skipped, undefined);
   assert.equal(ran(f), 2, "the bare test ran once, the one with a byte more ran too");
+  fs.rmSync(path.join(f.dir, "ran.log"));
+  const placedFirst = batch(f, [
+    on("AC1", "src/m.txt", 1, "1", "7", `node ${wrap} ${word(f.tree)} ${word(SHOPGEN)}`),
+    on("AC2", "src/m.txt", 2, "2", "8", SHOPGEN),
+  ], { config });
+  assert.equal(placedFirst.code, 0, placedFirst.out + placedFirst.err);
+  assert.match(placedFirst.payload.entries[0].why, MISSING);
+  assert.deepEqual([placedFirst.payload.entries[1].why, placedFirst.payload.entries[1].skipped], [NOT_RUN("AC1"), 1], "the bare test after the placed one");
+  assert.equal(ran(f), 1);
 });
 
 test("inside a mutate.session the skip holds too: one run in the session, and an entry with another test still runs there", (t) => {
@@ -207,6 +232,13 @@ test("a check whose run on the tree as it is exits 127 gives each of its entries
   assert.equal(ran(f), 1, "only the run on the tree as it is");
 });
 
+test("a check whose script a mutant breaks into a command not found reads caught yes", (t) => {
+  const f = sessionTree(t, { "tools/check.sh": "grep -q 'alpha = 1' src/m.txt\n" });
+  const result = batch(f, [{ ...on("AC1", "tools/check.sh", 1, "grep", "grpe", "sh tools/check.sh"), check: true }], { json: false });
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /^caught yes \| tools\/check\.sh:1 \| AC1$/m);
+});
+
 test("a check proven on the tree as it is neither skips an entry with its command nor is skipped by one", (t) => {
   const f = sessionTree(t);
   const test = "echo ran >> ../ran.log; grep -q 'alpha = 1' src/m.txt || shopgen build";
@@ -217,10 +249,10 @@ test("a check proven on the tree as it is neither skips an entry with its comman
       { ...on("AC2", "src/m.txt", 1, "1", "6", test), ...(first ? {} : { check: true }) },
     ]);
     assert.equal(result.code, 0, result.out + result.err);
-    for (const row of result.payload.entries) {
-      assert.match(row.why, MISSING);
-      assert.equal(row.skipped, undefined);
-    }
+    const [check, plain] = first ? result.payload.entries : [...result.payload.entries].reverse();
+    assert.deepEqual([check.caught, check.skipped], [true, undefined], "the check noticed the mutant");
+    assert.match(plain.why, MISSING);
+    assert.equal(plain.skipped, undefined);
     assert.equal(ran(f), 3, "the check's run on the tree as it is, then both mutants");
   }
 });

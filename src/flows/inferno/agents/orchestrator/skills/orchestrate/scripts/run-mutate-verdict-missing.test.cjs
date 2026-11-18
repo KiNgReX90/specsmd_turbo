@@ -41,6 +41,8 @@ test("the line named is the last one that says why a command could not run, past
     const text = `building\n${line}\nremote-test: the run ended\nremote-test: exit 127\n`;
     assert.equal(verdictOf(run(127), text, ABS).why, NOT_FOUND(line), line);
   }
+  const two = "sh: 1: shopgen: not found\nretrying\nsh: 1: shopgen-cli: not found\nremote-test: exit 127\n";
+  assert.equal(verdictOf(run(127), two, ABS).why, NOT_FOUND("sh: 1: shopgen-cli: not found"), "of two such lines, the last");
 });
 
 test("without a line that names the failure the last line is named, colour codes cut, a carriage return ending a line", () => {
@@ -89,9 +91,12 @@ test("a failing summary or a listed check's finding line under exit 127 is the t
   assert.equal(verdictOf(run(127), "sh: 1: wire: not found\n", ABS, { test: "npm run check:wire", checks: CHECKS }).why, NOT_FOUND("sh: 1: wire: not found"));
 });
 
-test("a plain check or a command no runner starts reads the reason too, without the check hint", () => {
-  assert.deepEqual(verdictOf(run(127), "sh: 1: rg: not found\n", null, { test: "test $(rg -c X src) -eq 0", check: true }),
-    { caught: null, why: NOT_FOUND("sh: 1: rg: not found"), missing: true });
+// An entry that says `check: true` runs its mutant only once its check was green on the tree as it
+// is (run-mutate-check.cjs): its command is there, so a 126 or 127 on the mutant is the mutant's
+// doing, such as a misspelt command in a script the check runs, and the check noticed it.
+test("a plain check's 127 on its mutant reads caught, and a command no runner starts reads the reason without the check hint", () => {
+  assert.deepEqual(verdictOf(run(127), "tools/check.sh: 1: grpe: not found\n", null, { test: "sh tools/check.sh", check: true }), { caught: true });
+  assert.deepEqual(verdictOf(run(126), "tools/check.sh: 1: ./bin/x: Permission denied\n", null, { test: "sh tools/check.sh", check: true }), { caught: true });
   assert.deepEqual(verdictOf(run(1), "", null, { test: "test $(rg -c X src) -eq 0", check: true }), { caught: true });
   assert.equal(verdictOf(run(127), "sh: 1: rg: not found\n", ABS, { test: "bash tools/lint.sh src" }).why, NOT_FOUND("sh: 1: rg: not found"));
   assert.match(verdictOf(run(2), "", ABS, { test: "bash tools/lint.sh src" }).why, /check: true/, "any other exit keeps the hint");
