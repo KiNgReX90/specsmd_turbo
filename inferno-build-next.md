@@ -136,9 +136,9 @@ Row 0s: an entry that says `check: true` still reads caught under exit 126 or 12
 
 The release steps (row 7) ran on `28f9e200`, the tree that holds all five.
 
-## 2. BUILD NOW: seven rows
+## 2. BUILD NOW: eight rows
 
-A host's next finding arrives here as a row, with its section in the handoff file. Rows 0u to 0aa are the open defects of two handoff files and three sections that had no row; the triage of 2026-11-18 read each in the code and found it open.
+A host's next finding arrives here as a row, with its section in the handoff file. Rows 0u to 0aa are the open defects of two handoff files and three sections that had no row; the triage of 2026-11-18 read each in the code and found it open. Row 0ab is the first host's finding of 2026-11-18 on row 0r as built, read in the code at `35f12380` before its install.
 
 | Row | What | Handoff |
 | --- | --- | --- |
@@ -149,6 +149,7 @@ A host's next finding arrives here as a row, with its section in the handoff fil
 | 0y | A count probe that prints what `shows` says and exits 1 is no drift, or plan-lint names it | `inferno-0.1.84-run-defects-handoff.md`, section 24 |
 | 0z | A sibling's commit to a file two items own gives a fresh proof and an owed review, never `DISPATCH_PROOF` | `inferno-0.1.84-run-defects-handoff.md`, section 25 |
 | 0aa | A delta reviewer whose verdict holds writes its file again, or the record accepts an unchanged clean file | `inferno-0.1.84-run-defects-handoff.md`, section 26 |
+| 0ab | A rerun's cause is counted and written under its command's name, the rest after `verification.session.match`, never the wrapped command with a tree path in it | `inferno-rerun-cap-keyed-on-wrapped-command-handoff.md` |
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
