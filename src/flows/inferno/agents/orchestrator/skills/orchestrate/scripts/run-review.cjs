@@ -27,6 +27,7 @@ const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { RECORDED_KEYS, bad, parseItemReview, reviewPath, reviewerId, withoutRunnerKeys } = require('./run-review-file.cjs');
 const { REINSTALL, completedBeforeReviewRule, reviewLands, reviewRuleSince } = require('./state-review.cjs');
 const { integrateCall, itemRecordCall, itemReviewCall, realAppCall, verifyItemCall } = require('./run-call.cjs');
+const { recordStartCall, recordWaitCall } = require('./run-call.cjs');
 const { realAppPaths } = require('./run-real-app.cjs');
 const { filesHash, itemReviewCurrent } = require('./run-review-hash.cjs');
 const { itemMutants } = require('./run-review-mutants.cjs');
@@ -120,8 +121,8 @@ function owed(tree, context, reason, from, paths) {
       `review owed for ${item.id}: ${reason}`,
       ...contract.lines,
       ...(quality ? [...quality.lines, lens.ONE_MESSAGE] : []),
-      `then ${itemRecordCall(tree, item.id, null, Boolean(quality))} records ${quality ? 'both files' : 'it'}; ` +
-        'it runs the review\'s mutants first, so give it the time those tests take',
+      `then ${recordStartCall(tree, item.id, Boolean(quality))} records ${quality ? 'both files' : 'it'} as its own process, ` +
+        `and ${recordWaitCall(tree, item.id)} blocks on it`,
       ...(named ? [] : [`no proof for ${item.id}, so its reviewer runs the item's tests itself: ${verify} writes one, and review again names it`]),
     ],
   };

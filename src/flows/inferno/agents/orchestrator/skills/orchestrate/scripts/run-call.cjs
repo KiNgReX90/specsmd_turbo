@@ -84,6 +84,16 @@ const itemReviewCall = (tree, id, intent = null) => runCall('review', tree, inte
 const itemRecordCall = (tree, id, intent = null, quality = false) => runCall('review', tree, intent,
   ['--item', id, '--reviewer', '<agent-id>', ...(quality ? ['--quality-reviewer', '<quality-agent-id>'] : [])]);
 
+/**
+ * Start the record of item `id`, or of the intent review without one, as its own process; with
+ * `quality` it records both lens files.
+ */
+const recordStartCall = (tree, id = null, quality = false) => runCall('review', tree, null,
+  [...(id ? ['--item', id] : []), '--reviewer', '<agent-id>', ...(quality ? ['--quality-reviewer', '<quality-agent-id>'] : []), '--detach']);
+
+/** Wait on the record started for item `id`, or for the intent review without one, by the runner's own path. */
+const recordWaitCall = (tree, id = null) => nodeCall('review', tree, null, [...(id ? ['--item', id] : []), '--wait']);
+
 /** The check and the proof of one item, or of the batch `ids` names, as verify-item checks it. */
 const verifyItemCall = (tree, ids) => runCall('verify-item', tree, null, ids.length > 1 ? ['--items', ids.join(',')] : [ids[0]]);
 
@@ -173,4 +183,6 @@ module.exports = {
   intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, laneIntermittentCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
   verifyItemCall,
   gateCauseCall,
+  recordStartCall,
+  recordWaitCall,
 };
