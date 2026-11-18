@@ -25,6 +25,7 @@ const { reviewerId } = require('./run-review-file.cjs');
 const { unrecorded } = require('./run-intent-review-file.cjs');
 const owed = require('./run-intent-owed.cjs');
 const { gateStartCall, intentRecordCall, intentReviewCall, itemReviewCall, scanCall } = require('./run-call.cjs');
+const { recordStartCall, recordWaitCall } = require('./run-call.cjs');
 const { afterRecovery, recoverInterrupted } = require('./run-mutate.cjs');
 const { intentMutants, reopenIntentReview } = require('./run-review-mutants.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
@@ -104,7 +105,7 @@ function dispatch(tree, context, reasons, from, folded, previous = null, base = 
         ...settled.map((entry) => `  settled ${entry.item} ${entry.range}`),
         `  write ${rel}`,
       ]),
-      `then ${intentRecordCall(tree)} records it`,
+      `then ${recordStartCall(tree)} records it as its own process, and ${recordWaitCall(tree)} blocks on it`,
     ],
   };
 }

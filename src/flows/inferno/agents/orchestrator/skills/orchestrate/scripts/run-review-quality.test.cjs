@@ -71,7 +71,7 @@ test("a first review prints the contract and the quality dispatch, to be sent in
     `  write ${QUALITY}`,
   ]);
   assert.match(result.out, /^send both dispatches in one message/m);
-  assert.match(result.out, /review --item a-one --reviewer <agent-id> --quality-reviewer <quality-agent-id> --tree /);
+  assert.match(result.out, /^then run\.cjs review --item a-one --reviewer <agent-id> --quality-reviewer <quality-agent-id> --detach --tree \S+ records both files as its own process, /m);
   const payload = JSON.parse(h.review(["--json"]).out);
   assert.equal(payload.quality.agent, "specsmd-inferno-reviewer-quality");
   assert.equal(payload.quality.write, QUALITY);

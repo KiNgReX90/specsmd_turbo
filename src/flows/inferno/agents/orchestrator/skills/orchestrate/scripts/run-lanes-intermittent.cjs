@@ -20,10 +20,16 @@
  * answers the tester case checks with ids split on spaces, so a test name would answer them.
  *
  * A finalize command a gate ran again on the code it was red on, with its cause, is one ledger with
- * these (run-gate-rerun.cjs): ship writes `exception: <command> rerun <json>`, the JSON naming the
- * command again, and its tests count toward the same limit, since one flake is one flake wherever
- * it was seen. A command holds spaces and may hold ` rerun {` itself, so the record is the JSON whose
+ * these (run-gate-rerun.cjs): ship writes `exception: <name> rerun <json>`, the JSON naming it
+ * again, and its tests count toward the same limit, since one flake is one flake wherever it was
+ * seen. A command holds spaces and may hold ` rerun {` itself, so the record is the JSON whose
  * command is the text before it; the released flow's lane reader parses no such line.
+ *
+ * The name is the one `commandName` gives: a host's wrapper may take the tree as an argument, and
+ * the command it spells per tree is one check. A line counts under a test as written or under its
+ * name, so a lane's test is never renamed and a line written with the whole command before names
+ * counts with them; a fix line too. A whole command holding another tree's path, on a host with no
+ * session, cannot be named, since that tree is unknown here.
  */
 
 const fs = require('fs');
@@ -36,6 +42,7 @@ const { atomicWrite } = require('./state-store.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { gateStartCall, gateWaitCall } = require('./run-call.cjs');
+const { reach } = require('./run-host-session.cjs');
 
 const { RunError } = lib;
 const RECORD = '.intermittent';
@@ -47,6 +54,10 @@ const PREFIX = 'exception: ';
 const RERUN = ' rerun {';
 /** The verdicts file's shape, in the one line a lane without the key and a body without a red test print. */
 const SHAPE = '{"red": [{"name": "<test>", "base": "green", "again": "green"}]}';
+/** A name's word for the gate tree, the placeholder `mutate.run` and `verification.run` hold. */
+const TREE = '{tree}';
+/** What may stand beside a path in a command: a space, a quote, or a shell or assignment sign. */
+const EDGE = '[\\s\'"`=:;,&|()<>]';
 
 const filled = (text) => typeof text === 'string' && text.trim().length > 0;
 
@@ -129,6 +140,23 @@ function parsed(json) {
   }
 }
 
+/** Every whole spelling of the path `dir` in a command: never part of a longer name, nor the end of one. */
+const spelled = (dir) => new RegExp(`(?<=^|${EDGE})${dir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=$|/|${EDGE})`, 'g');
+
+/**
+ * The name a finalize command's rerun is counted and written under, by the config and tree of the
+ * gate that ran it: the rest after `verification.session.match` where the match reaches the
+ * command, as a gate mark names it (run-criterion-marks.cjs), else the command as written, which
+ * also stands when the match leaves nothing. The tree's path, as the gate names it or resolved, is
+ * written `{tree}` wherever it stands whole, so the base holds no path of the machine.
+ */
+function commandName(config, command, tree) {
+  const session = (config.verification || {}).session;
+  const rest = session ? reach(new RegExp(session.match), command) : null;
+  const name = (rest || '').trim() || command;
+  return [tree, fs.realpathSync(tree)].reduce((text, dir) => text.replace(spelled(dir), TREE), name);
+}
+
 /** A command as a rerun line shows it: one line, whatever line breaks it holds. */
 const oneLine = (command) => command.replace(/[\r\n]+/g, ' ');
 
@@ -170,22 +198,23 @@ function baseLedger(tree, base) {
   });
 }
 
-/** The base's accepts of `test`, oldest first, in commits that no commit naming its fix comes after. */
-function earlierAccepts(tree, ledger, test) {
-  const fixes = ledger.filter((commit) => commit.fixes.includes(test)).map((commit) => commit.sha);
+/** The base's accepts of `test`, oldest first, in commits that no commit naming its fix comes after; `name` names a line's entry. */
+function earlierAccepts(tree, ledger, test, name) {
+  const counts = (entry) => entry === test || (typeof entry === 'string' && name(entry) === test);
+  const fixes = ledger.filter((commit) => commit.fixes.some(counts)).map((commit) => commit.sha);
   const since = (commit) => fixes.every((fix) => lib.git(tree, ['merge-base', '--is-ancestor', commit.sha, fix], { tolerate: true }) === null);
-  return ledger.filter(since).flatMap((commit) => commit.exceptions.filter((record) => record.tests.includes(test)).map((record) => ({ ...commit, record })))
+  return ledger.filter(since).flatMap((commit) => commit.exceptions.filter((record) => record.tests.some(counts)).map((record) => ({ ...commit, record })))
     .reverse();
 }
 
 /**
  * The earlier accepts of `tests` on the base, as lines to print; refused when one of them reached
  * the limit, since two accepts of one test make its race a defect to fix on the host. `again` is
- * the step the refusal names once the fix landed.
+ * the step the refusal names once the fix landed; `name` reads a line's entry as `commandName` does.
  */
-function repeats(tree, base, tests, again = 'accept again') {
+function repeats(tree, base, tests, again = 'accept again', name = (test) => test) {
   const ledger = baseLedger(tree, base);
-  const earlier = tests.map((test) => ({ test, accepts: earlierAccepts(tree, ledger, test) }));
+  const earlier = tests.map((test) => ({ test, accepts: earlierAccepts(tree, ledger, test, name) }));
   const over = earlier.filter((entry) => entry.accepts.length >= MAX_EARLIER);
   if (over.length > 0) {
     throw new RunError(over.map(({ test, accepts }) =>
@@ -208,7 +237,7 @@ function accept(tree, config, lane, proof, options) {
   const unnamed = read.tests.filter((test) => !tests.includes(test));
   if (unnamed.length > 0) throw new RunError(`no --test names the red test ${unnamed.join('; ')}: one accept names every red test of the run`, 'NOT_PROVEN');
   // The configured base, as ship's merge lands there; no --base reads another branch's ledger.
-  const earlier = repeats(tree, resolveBase(config, null, tree), tests);
+  const earlier = repeats(tree, resolveBase(config, null, tree), tests, 'accept again', (test) => commandName(config, test, tree));
   const { file, ...identity } = proof;
   const record = {
     ...identity, tests, reason: options.reason.trim(), by: options.by.trim(), run: last.run, log: last.log, verdicts: read.file, named: lane.verdicts,
@@ -246,6 +275,7 @@ function shipExceptions(primary, base, held) {
 module.exports = {
   SHAPE, accept, intermittentTests, proven, readAccepted, repeats, shipExceptions, unproven, usage,
   exceptionRecord,
+  commandName,
   rerunLine,
   rerunRecord,
 };

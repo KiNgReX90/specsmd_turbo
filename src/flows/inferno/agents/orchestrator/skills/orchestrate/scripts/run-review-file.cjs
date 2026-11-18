@@ -16,6 +16,7 @@ const lib = require('./run-lib.cjs');
 const { SAME_ITEM, deltaProblem } = require('./run-review-delta.cjs');
 const { NO_SAYS, saysProblem } = require('./run-criterion-says.cjs');
 const { CHECK_HOW } = require('./run-mutate-check.cjs');
+const { readsNone } = require('./run-review-span.cjs');
 
 const { RunError } = lib;
 
@@ -185,10 +186,12 @@ function relativePath(rel, file, what) {
  * the review binds the same set, and a list of ledger paths alone binds nothing and is refused.
  * A recorded review keeps a path that left the tree since: a file deleted or renamed after its
  * review is a file that changed, so the review's hash no longer holds and the review reads as
- * stale (itemReviewCurrent), never as a malformed file.
+ * stale (itemReviewCurrent), never as a malformed file. An empty list is the review of an item
+ * whose dispatch printed no paths, every one being gone (run-review-span.cjs), and is recorded so.
  */
 function boundFiles(tree, rel, doc, { recorded = false } = {}) {
   const listed = listOf(rel, doc, 'files');
+  if (listed.length === 0 && (recorded || readsNone(tree, rel))) return [];
   const empty = () => bad(rel, 'files must list every file the review read for this item');
   if (listed.length === 0) throw empty();
   const files = [];

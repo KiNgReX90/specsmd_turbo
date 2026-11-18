@@ -1,7 +1,8 @@
 'use strict';
 
 /**
- * What a review round of one item reads: the item's files, and the paths of a correction round.
+ * What a review round of one item reads: the item's files, the paths of a correction round, and
+ * which of the paths a dispatch reads the range deleted, which no reviewer can list.
  *
  * An item's files are those its spec owns and those any dispatch of the item claimed, a path the
  * orchestrator granted it included (run-grant.cjs). A grant sits on the dispatch record and never
@@ -95,12 +96,29 @@ function changedSince(tree, context, from, listed) {
 const LISTED_PATHS = 40;
 
 /**
+ * Where the cache notes that the last dispatch asking for review file `rel` printed no paths, every
+ * path it read being gone, so that file may list none (boundFiles in run-review-file.cjs).
+ */
+const noneNote = (tree, rel) => path.join(lib.cacheDir(tree), 'review-none', rel);
+
+const readsNone = (tree, rel) => fs.existsSync(noneNote(tree, rel));
+
+/**
  * The range line of one lens's dispatch, and the file that lists its paths when the line does not.
  * Up to LISTED_PATHS paths stay on the line, as always. A longer list would make the reviewer's
  * brief hundreds of paths long, so it goes one per line into the run's cache, outside the tree,
- * and the line gives the count, with a `paths-file` line under it naming that file.
+ * and the line gives the count, with a `paths-file` line under it naming that file. With no path
+ * left because every one is `gone`, the line says so and the note lets the file list none; any
+ * other dispatch of the lens clears that note.
  */
-function rangeLines(tree, context, which, range, read) {
+function rangeLines(tree, context, which, range, read, gone) {
+  const note = noneNote(tree, which === 'quality' ? context.qualityRel : context.rel);
+  fs.rmSync(note, { force: true });
+  if (read.length === 0 && gone.length > 0) {
+    fs.mkdirSync(path.dirname(note), { recursive: true });
+    fs.writeFileSync(note, '');
+    return { file: null, lines: [`  range ${range} paths none: every path is gone, so write files: []`] };
+  }
   if (read.length <= LISTED_PATHS) return { file: null, lines: [`  range ${range} paths ${read.join(' ') || '(the whole range)'}`] };
   const file = path.join(lib.cacheDir(tree), 'review-paths', context.intent.id, context.item.id, `${which}.txt`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -108,18 +126,31 @@ function rangeLines(tree, context, which, range, read) {
   return { file, lines: [`  range ${range} paths ${read.length}, one per line in the paths-file below`, `  paths-file ${file}`] };
 }
 
-/** The paths a delta reads that left the tree since the previous review: deleted, or renamed away. */
-const goneFiles = (tree, read) => read.filter((file) => !fs.existsSync(path.join(tree, file)));
+/**
+ * The paths a dispatch reads, split: those the range deleted are `gone`, the rest are `paths`. A
+ * path is gone when the tree the reviewer reads does not hold it and the range's start `from`
+ * did, so a path deleted and put back stands, and an owned path the item never wrote, which the
+ * owned entries of a first review without a proof can name, is no deletion and stays read. A
+ * start no longer in this history, as a delta's review commit can be, holds nothing to ask: every
+ * path the tree lacks is gone, which only a delta reads.
+ */
+function splitGone(tree, from, read) {
+  const missing = read.filter((file) => !fs.existsSync(path.join(tree, file)));
+  const held = lib.git(tree, ['--literal-pathspecs', 'ls-tree', '-z', '--name-only', from, '--', ...missing], { tolerate: true });
+  const at = (file) => held.split('\0').some((entry) => `${entry}/`.startsWith(file.endsWith('/') ? file : `${file}/`));
+  const gone = missing.filter((file) => held === null || at(file));
+  return { paths: read.filter((file) => !gone.includes(file)), gone };
+}
 
 /**
- * The line that tells a delta's reviewer which paths are gone, so it reads their removal in the
- * range, never looks for them, and leaves them out of the files it lists, which hold only files
- * the tree holds.
+ * The line that tells a reviewer which paths are gone, so it reads their removal in the range,
+ * never looks for them, and leaves them out of the files it lists, which hold only files the tree
+ * holds.
  */
 function goneLine(gone) {
   if (gone.length === 0) return [];
   const it = gone.length > 1 ? 'them' : 'it';
-  return [`  gone ${gone.join(' ')}: not in the tree since the previous review, so read the removal in the range and leave ${it} out of files`];
+  return [`  gone ${gone.join(' ')}: the range deleted ${it}, so read the removal in the range and leave ${it} out of files`];
 }
 
-module.exports = { changedSince, dispatchClaims, goneFiles, goneLine, itemFiles, rangeLines };
+module.exports = { changedSince, dispatchClaims, goneLine, itemFiles, rangeLines, readsNone, splitGone };
