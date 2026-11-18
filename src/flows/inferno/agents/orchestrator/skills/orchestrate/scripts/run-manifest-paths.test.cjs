@@ -108,14 +108,36 @@ test("a recorded review starts the item as a dispatch line does, and the frontie
   assert.deepEqual(named.map(kind), ["ready", "next", "batch"], named.join("\n"));
 });
 
+/** fold-harness's review file, written and not yet recorded. */
+const reviewFile = (tree) => {
+  const file = path.join(tree.root, ".specs-inferno/intents/gift/reviews/fold-harness.yaml");
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  writeFile(file, "verdict: fix\n", "utf8");
+};
+
 test("a review file written and not yet recorded starts the item too", () => {
-  const review = (tree) => {
-    const file = path.join(tree.root, ".specs-inferno/intents/gift/reviews/fold-harness.yaml");
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    writeFile(file, "verdict: fix\n", "utf8");
-  };
-  assertOffered(folded("reads", { before: review }));
+  assertOffered(folded("reads", { before: reviewFile }));
 });
+
+// Each sign starts its own item only: fold-harness, the first item of the intent, is started and
+// its file is gone; show-balance, which nobody took, names a file that does not exist.
+const SIGNS = [
+  ["a dispatch line", {}, (tree) => dispatched(tree)],
+  ["a review field", { state: STATE("\n        review: fix") }, () => {}],
+  ["a review file", {}, reviewFile],
+];
+
+for (const [sign, options, mark] of SIGNS) {
+  test(`${sign} starts its own item only: a later item nobody took is still a finding, at plan-lint and at frontier`, () => {
+    const tree = folded("required", { ...options, before: (one) => { mark(one); fs.rmSync(path.join(one.root, "src/cards.ts")); } });
+    const finding = "FINDING show-balance: context.required path does not exist: src/cards.ts, and no item show-balance depends on owns it";
+    for (const step of ["plan-lint", "frontier"]) {
+      const result = run(tree, [step, "gift"]);
+      assert.equal(result.code, 2, `${step}: ${result.out}${result.err}`);
+      assert.deepEqual(lines(result.out), [finding], step);
+    }
+  });
+}
 
 test("an oracle ask on the item starts nothing: plan-lint still finds the missing path", () => {
   const tree = folded("required", { before: (one) => dispatched(one, "gift", "fold-harness", ORACLE) });
