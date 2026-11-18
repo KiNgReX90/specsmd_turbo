@@ -134,7 +134,7 @@ What a host may now use, from row 0r: a gate run again on the code a finalize co
 
 Row 0s: an entry that says `check: true` still reads caught under exit 126 or 127, since its check was green on the tree as it is. Row 0t: the test sets one key, an empty `RUSTC_WRAPPER`, not the two the handoff named. Measured on cargo 1.94.1, an empty `RUSTC_WRAPPER` beats a wrapper named in a config and one named by `CARGO_BUILD_RUSTC_WRAPPER`, so the second key never decides.
 
-The release steps (row 7) ran on `TREE`, the tree that holds all five.
+The release steps (row 7) ran on `28f9e200`, the tree that holds all five.
 
 ## 2. BUILD NOW: seven rows
 
