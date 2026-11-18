@@ -52,7 +52,7 @@ const { RunError } = lib;
  */
 function reviewerLines(config, subject, previous, body, actor = 'reviewer') {
   const { agent, model } = hostActor(actor, config);
-  return [`dispatch ${agent}${model ? ` model ${model}` : ''} ${subject}`, ...(previous ? [`  previous ${previous}`] : []), ...body, ...readLine(subject, previous, body)];
+  return [`dispatch ${agent}${model ? ` model ${model}` : ''} ${subject}`, ...(previous ? [`  previous ${previous}`] : []), ...body, ...readLine(previous, body)];
 }
 
 function itemOf(ledger, id, options) {

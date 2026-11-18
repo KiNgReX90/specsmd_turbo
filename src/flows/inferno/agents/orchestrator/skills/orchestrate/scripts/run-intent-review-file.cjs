@@ -13,6 +13,7 @@
 
 const {
   FINDING_KEYS, RECORDED_KEYS, bad, entries, isMap, pinsOf, readDoc, recordedReviewer, relativePath, runnerKeys, verdictParts, withoutRunnerKeys,
+  READ_KEY,
 } = require('./run-review-file.cjs');
 const { gapRefusal, mutantGaps } = require('./run-mutant-coverage.cjs');
 const { SAME_INTENT, deltaProblem } = require('./run-review-delta.cjs');
@@ -91,7 +92,7 @@ function parseIntentReview(tree, rel, { recorded, items, scanIds, proofs = [] })
   // A recorded file sent back and edited in place keeps the runner's keys, which its record writes anew (run-review-file.cjs).
   const own = recorded ? INTENT_RECORDED : runnerKeys(tree, rel, doc, INTENT_RECORDED);
   for (const key of Object.keys(doc)) {
-    if (INTENT_KEYS.includes(key) || own.includes(key)) continue;
+    if (INTENT_KEYS.includes(key) || key === READ_KEY || own.includes(key)) continue;
     if (INTENT_RECORDED.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
     throw bad(rel, `unknown key ${key}: an intent review holds ${INTENT_KEYS.join(', ')} only`);
   }

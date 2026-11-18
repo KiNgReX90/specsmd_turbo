@@ -38,30 +38,35 @@ const { itemReviewCall } = require('./run-call.cjs');
 const short = (tree, rev) => lib.git(tree, ['rev-parse', '--short', rev]);
 
 /**
- * The line under a delta's dispatch of an item lens that asks its reviewer to name the range it
- * read, the range `body` prints. A first review, with no `previous`, and the intent review get none.
+ * The line under a delta's dispatch, of an item lens or of the intent review, that asks its reviewer
+ * to name the range it read, the range `body` prints. A first review, with no `previous`, gets none.
  */
-function readLine(subject, previous, body) {
-  const range = previous && subject.startsWith('item ') && body.map((line) => /^ {2}range (\S+)/.exec(line)).find(Boolean);
+function readLine(previous, body) {
+  const range = previous && body.map((line) => /^ {2}range (\S+)/.exec(line)).find(Boolean);
   return range ? [`  ${READ_KEY} ${range[1]}: write ${READ_KEY}: ${range[1]} into the file, also when the earlier verdict still holds`] : [];
+}
+
+/**
+ * Refuse the review file `file` when its `read` line names no range of `printed`, the ranges its
+ * dispatch printed since the last record as noted (`{ range, printed }`). A file without the line,
+ * or with no range noted, reads as before.
+ */
+function holdRead(tree, file, printed) {
+  const named = readDoc(tree, file)[READ_KEY];
+  if (named === undefined || printed.length === 0) return;
+  if (typeof named === 'string' && printed.some((one) => one.range === fullRange(tree, named))) return;
+  const shown = [...new Set(printed.map((one) => one.printed))].join(' or ');
+  throw bad(file, `${READ_KEY} names ${JSON.stringify(named)}, and its dispatch printed ${shown}: write the range it printed`);
 }
 
 /**
  * The ranges the dispatches of the item printed since its last record, once the `read` line of each
  * file the record signs (`files`, the contract file at `context.rel`) is held to those of its lens.
- * A file without the line, or a lens no dispatch on record printed a range for, reads as before.
  */
 function heldRanges(tree, context, files) {
   const { intent, item, rel } = context;
   const ranges = notedRanges(tree, intent.id, item.id);
-  for (const file of files) {
-    const named = readDoc(tree, file)[READ_KEY];
-    const printed = ranges.filter((one) => one.lens === (file === rel ? 'contract' : 'quality'));
-    if (named === undefined || printed.length === 0) continue;
-    if (typeof named === 'string' && printed.some((one) => one.range === fullRange(tree, named))) continue;
-    const shown = [...new Set(printed.map((one) => one.printed))].join(' or ');
-    throw bad(file, `${READ_KEY} names ${JSON.stringify(named)}, and the dispatch of this lens printed ${shown}: write the range it printed`);
-  }
+  for (const file of files) holdRead(tree, file, ranges.filter((one) => one.lens === (file === rel ? 'contract' : 'quality')));
   return ranges;
 }
 
@@ -96,4 +101,4 @@ function afterRecord(tree, context, commit, review, result) {
   };
 }
 
-module.exports = { afterRecord, heldRanges, readLine, stampOf };
+module.exports = { afterRecord, heldRanges, holdRead, readLine, stampOf };

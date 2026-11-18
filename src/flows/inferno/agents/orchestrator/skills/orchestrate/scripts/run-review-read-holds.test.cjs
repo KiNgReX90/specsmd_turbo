@@ -14,8 +14,8 @@ const { parseQualityReview, readItemReview } = require("./run-review-quality.cjs
 // dispatch asks each lens to name the range it read under `read`, also when its verdict holds: the
 // file is then written anew, and the record holds the line to the ranges its lens's dispatches
 // printed since the last record. A file left untouched is refused as before, with that line in the
-// dispatch sent again; a range no dispatch printed is refused naming both. A first review, and the
-// intent review, get no such line, and a file without it reads as before.
+// dispatch sent again; a range no dispatch printed is refused naming both. A first review gets no
+// such line, and a file without it reads as before. The intent review's: run-intent-review-read.test.cjs.
 
 const head = (tree) => git(tree, ["rev-parse", "HEAD"]);
 const read = (tree, rel) => fs.readFileSync(path.join(tree, rel), "utf8");
@@ -136,7 +136,7 @@ test("a range no dispatch of the lens printed is refused, the refusal naming bot
     write(h.tree, QUALITY, `${recordedAt}read: ${line}\n`);
     const refused = h.review();
     assert.equal(refused.code, 2, shown(refused));
-    assert.match(refused.err, new RegExp(`BAD_REVIEW.*quality/a-one\\.yaml: read names ${dots(JSON.stringify(named || line))}, and the dispatch of this lens printed ` +
+    assert.match(refused.err, new RegExp(`BAD_REVIEW.*quality/a-one\\.yaml: read names ${dots(JSON.stringify(named || line))}, and its dispatch printed ` +
       `${dots(range)}: write the range it printed`));
     assert.equal(ledger(h.tree), state);
   }
@@ -166,7 +166,7 @@ test("a range a waiting refusal sends again is noted beside the first, so the le
   write(h.tree, QUALITY, `${recordedAt}read: zzzzzzz..${firstEnd}\n`);
   const refused = h.review();
   assert.equal(refused.code, 2, shown(refused));
-  assert.match(refused.err, new RegExp(`the dispatch of this lens printed ${range.replace(/\./g, "\\.")} or ${again.replace(/\./g, "\\.")}: `));
+  assert.match(refused.err, new RegExp(`its dispatch printed ${range.replace(/\./g, "\\.")} or ${again.replace(/\./g, "\\.")}: `));
   write(h.tree, QUALITY, recordedAt);
   holding(h.tree, QUALITY, again);
 
@@ -206,7 +206,7 @@ test("each lens's read line is held to its own dispatch: a quality lens reading 
   write(h.tree, QUALITY, `${QCLEAN}read: ${contract}\n`);
   const refused = h.review();
   assert.equal(refused.code, 2, shown(refused));
-  assert.match(refused.err, new RegExp(`quality/a-one\\.yaml: read names "${contract.replace(/\./g, "\\.")}", and the dispatch of this lens printed ${quality.replace(/\./g, "\\.")}: `));
+  assert.match(refused.err, new RegExp(`quality/a-one\\.yaml: read names "${contract.replace(/\./g, "\\.")}", and its dispatch printed ${quality.replace(/\./g, "\\.")}: `));
   write(h.tree, QUALITY, QCLEAN);
   const recorded = h.review();
   assert.equal(recorded.code, 0, shown(recorded));
@@ -229,7 +229,7 @@ test("a range whose start this history does not hold is held as it was printed",
   write(fixture.root, REVIEW, `${CLEAN}read: eeeeeee..${range.split("..")[1]}\n`);
   const refused = at(["review", "--item", "a-one", "--reviewer", "rev-2"]);
   assert.equal(refused.code, 2, shown(refused));
-  assert.match(refused.err, new RegExp(`the dispatch of this lens printed ${range.replace(/\./g, "\\.")}: `));
+  assert.match(refused.err, new RegExp(`its dispatch printed ${range.replace(/\./g, "\\.")}: `));
   write(fixture.root, REVIEW, `${CLEAN}read: ${range}\n`);
   const recorded = at(["review", "--item", "a-one", "--reviewer", "rev-2"]);
   assert.equal(recorded.code, 0, shown(recorded));
@@ -260,25 +260,4 @@ test("the runner's rewrite of a delta with carried mutants keeps the range its r
   assert.equal(recorded.code, 0, shown(recorded));
   assert.match(read(tree, REVIEW), /^mutants:$/m, "the runner wrote its carried mutants");
   assert.match(read(tree, REVIEW), new RegExp(`^read: ${range}$`, "m"));
-});
-
-test("the intent review's delta dispatch carries no read line", () => {
-  const fixture = repo();
-  const tree = worktree(fixture, INTENT_TREE);
-  write(tree, "src/a.ts", "export const a = 3;\n");
-  write(tree, ".specs-inferno/intents/alpha/scan.yaml", "lines: []\n");
-  git(tree, ["add", "-A"]);
-  git(tree, ["commit", "-qm", "the work"]);
-  write(tree, REVIEW, CLEAN);
-  assert.equal(run(fixture, ["review", "--item", "a-one", "--tree", tree, "--reviewer", "rev-item"]).code, 0);
-  assert.equal(run(fixture, ["review", "--tree", tree]).code, 3);
-  write(tree, ".specs-inferno/intents/alpha/review.yaml", "verdict: clean\n");
-  assert.equal(run(fixture, ["review", "--tree", tree, "--reviewer", "rev-int"]).code, 0);
-  write(tree, "src/a.ts", "export const a = 4;\n");
-  git(tree, ["commit", "-qm", "a later change", "--", "src/a.ts"]);
-
-  const delta = run(fixture, ["review", "--tree", tree]);
-
-  assert.match(delta.out, /^ {2}previous \.specs-inferno\/intents\/alpha\/review\.yaml$/m);
-  assert.doesNotMatch(delta.out, /^ {2}read /m);
 });

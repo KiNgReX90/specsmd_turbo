@@ -32,6 +32,7 @@ const { foldLines } = require('./run-intent-fold.cjs');
 const slot = require('./run-slot.cjs');
 const { deferredItems } = require('./state-defer.cjs');
 const { proofOwed } = require('./run-review-aside.cjs');
+const { dropIntentDispatch, holdIntentRead, noteIntentDispatch } = require('./run-intent-read.cjs');
 
 const { RunError } = lib;
 
@@ -82,9 +83,7 @@ function dispatch(tree, context, reasons, from, folded, previous = null, base = 
   const scanned = fs.existsSync(path.join(tree, scan));
   // The corrections of minor findings no item review re-read, which this reviewer reads closely.
   const settled = owed.settledItems(tree, intent, from);
-  fs.mkdirSync(path.dirname(dispatchPath(tree)), { recursive: true });
-  const at = { intent, head: lib.git(tree, ['rev-parse', 'HEAD']), hash: proofs.scopeHash(tree) };
-  fs.writeFileSync(dispatchPath(tree), `${JSON.stringify(at)}\n`);
+  noteIntentDispatch(tree, context, range, readDispatch(tree, intent));
   return {
     exit: 3,
     payload: {
@@ -206,6 +205,7 @@ function reviewIntent(options) {
     const sent = readDispatch(tree, intent);
     if (!sent || sent.hash !== proofs.scopeHash(tree)) {
       const since = sent ? `moved since the dispatch at ${sent.head.slice(0, 7)}` : 'has no dispatch on record';
+      dropIntentDispatch(tree);
       return {
         exit: 3,
         payload: { ok: false, intent, owed: 'dispatch', dispatched: sent && sent.head },
@@ -213,6 +213,7 @@ function reviewIntent(options) {
           `discard the unrecorded ${rel}, then run ${intentReviewCall(tree)} for a fresh dispatch of the delta`],
       };
     }
+    holdIntentRead(tree, rel, sent);
     return record(tree, context, sent.head, restored);
   }
 

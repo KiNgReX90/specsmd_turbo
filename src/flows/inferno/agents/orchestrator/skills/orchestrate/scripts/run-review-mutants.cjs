@@ -301,7 +301,7 @@ async function intentMutants(tree, context) {
   const survivors = entries.filter((entry) => entry.caught === 'no');
   const ownedBy = (entry) => ({ owner: entry.criterion.split(':')[0] });
   const verdict = own.length > 0 || survivors.length > 0 ? 'fix' : 'clean';
-  rewrite(abs, doc, INTENT_KEYS, {
+  rewrite(abs, doc, [...INTENT_KEYS, READ_KEY], {
     verdict,
     findings: [...own, ...survivors.map((entry) => survivorFinding(entry, ownedBy(entry)))],
     mutants: entries.map(kept),
