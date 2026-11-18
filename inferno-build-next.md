@@ -157,7 +157,7 @@ One more was found and built beside rows 0w and 0aa, with no row: an intent revi
 
 A host sets no new key. What a host may now use: `run.cjs review --item <id> --reviewer <agent-id> --detach` starts a record as its own process and `run.cjs review --item <id> --wait` blocks on it, and the intent review's record takes the same flags (row 0x). A delta's dispatch asks each lens for a `read: <range>` line, which a review file may hold (row 0aa). A rerun is counted under its command's name, so a commit with `Fixes-intermittent: <name>` lifts the limit (row 0ab). An item's commit carries one `Item: <id>` line per item it lands in its last paragraph, which lets a sibling's commit to a shared file pass (row 0z). The orchestrator's texts say to write it. What a host will see differently: an item a builder took is no longer held to the paths its `context.required` and `reads` name, while an item nobody took is checked as before, and an oracle ask in the dispatch log is no longer read as a builder having taken the item, as `defer-item` already reads it, so the diagnosis probe of an item that only had an oracle ask is replayed (row 0ad). A fold of a local base rebased or amended before its push keeps the files it brought in as the base's, as long as the base holds a commit of the same patch for each commit the run branch merged (row 0ac). Row 0ac leaves two cases as they are, each with its line in section 5.
 
-The release steps (row 7) ran on `1ddb0401`, the tree that holds the first eight, rows 0u to 0ab.
+The release steps (row 7) ran on `1ddb0401`, the tree that holds the first eight, rows 0u to 0ab, and again on `de204782`, the tree that holds all ten.
 
 ## 2. BUILD NOW: nothing today
 
