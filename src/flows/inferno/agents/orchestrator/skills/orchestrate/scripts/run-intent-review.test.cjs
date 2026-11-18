@@ -202,7 +202,7 @@ const A_THREE = { find: "a = 3", replace: "a = 4", expect: "checks/a.expect" };
 const B_TWO = { file: "src/b.ts", find: "b = 2", replace: "b = 5", expect: "checks/b.expect" };
 
 function covered(specs, itemReviews = {}) {
-  const { fixture, tree } = opened();
+  const { fixture, tree } = started();
   for (const [id, [criteria, tests]] of Object.entries(specs)) {
     write(tree, `.specs-inferno/intents/alpha/work-items/${id}.md`, itemSpec(id, criteria, tests));
   }

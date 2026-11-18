@@ -26,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
-const { bad, boundFiles, entries, isMap, parseItemReview, readDoc, recordedReviewer, reviewPath, runnerKeys, verdictParts, RECORDED_KEYS } =
+const { bad, boundFiles, entries, isMap, parseItemReview, readDoc, recordedReviewer, reviewPath, runnerKeys, verdictParts, RECORDED_KEYS, READ_KEY } =
   require('./run-review-file.cjs');
 const { deltaProblem, previousReview } = require('./run-review-delta.cjs');
 const { itemRecordCall } = require('./run-call.cjs');
@@ -143,11 +143,32 @@ function dispatchRecord(tree, intentId, itemId) {
   return path.join(lib.cacheDir(tree), 'review-lenses', intentId, `${itemId}.json`);
 }
 
-/** Note the lenses a review dispatch printed, so the record step waits for each of them. */
-function noteDispatched(tree, intentId, itemId, lenses) {
+/** The note of the item's last review dispatch, `{ lenses }` with no dispatch on record. */
+function readNote(tree, intentId, itemId) {
+  const file = dispatchRecord(tree, intentId, itemId);
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { lenses: [] };
+}
+
+/**
+ * Note the lenses a review dispatch printed, so the record step waits for each of them, and under
+ * `ranges` each `[lens, range]` of `printed`, after the ranges noted since the last record
+ * (run-review-read.cjs). `lenses` null keeps the lenses noted; `forget`, the record's, drops the ranges.
+ */
+function noteDispatched(tree, intentId, itemId, lenses, printed = [], forget = false) {
+  const ranges = [...(forget ? [] : notedRanges(tree, intentId, itemId)), ...printed.map(([lens, range]) => ({ lens, range: fullRange(tree, range), printed: range }))];
   const file = dispatchRecord(tree, intentId, itemId);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify({ lenses })}\n`, 'utf8');
+  fs.writeFileSync(file, `${JSON.stringify({ lenses: lenses || readNote(tree, intentId, itemId).lenses, ranges })}\n`, 'utf8');
+}
+
+/** A range as the full commits it names, an end this history does not hold kept as written. */
+const fullRange = (tree, range) => range.split('..')
+  .map((rev) => lib.git(tree, ['rev-parse', '--verify', '--quiet', `${rev}^{commit}`], { tolerate: true }) || rev).join('..');
+
+/** The ranges the item's review dispatches printed since its last record, oldest first; a note the released flow wrote holds none. */
+function notedRanges(tree, intentId, itemId) {
+  const { ranges } = readNote(tree, intentId, itemId);
+  return Array.isArray(ranges) ? ranges : [];
 }
 
 /**
@@ -155,8 +176,7 @@ function noteDispatched(tree, intentId, itemId, lenses) {
  * dispatched by the released flow, the contract lens alone.
  */
 function dispatchedLenses(tree, intentId, itemId) {
-  const file = dispatchRecord(tree, intentId, itemId);
-  const { lenses } = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { lenses: [] };
+  const { lenses } = readNote(tree, intentId, itemId);
   return LENSES.filter((lens) => lens === 'contract' || lenses.includes(lens));
 }
 
@@ -164,7 +184,8 @@ function dispatchedLenses(tree, intentId, itemId) {
  * The refusal of a record that waits on a lens, or null when every lens the dispatch printed
  * (`context.dispatched`) has written its file since. Nothing reaches the ledger before. The
  * refusal names each missing file and its dispatch again, through `dispatch(lens, span)`, over the
- * range that dispatch read: the fix since the review on record, else the item from `fork()`.
+ * range that dispatch read: the fix since the review on record, else the item from `fork()`. The
+ * range sent again is noted beside the first, since its reviewer may read either.
  */
 function lensesWaiting(tree, context, { fork, dispatch }) {
   const { item, rel, qualityRel, dispatched } = context;
@@ -179,13 +200,15 @@ function lensesWaiting(tree, context, { fork, dispatch }) {
     span = { from, paths: [...new Set([...listed, ...changedSince(tree, context, from, listed)])] };
   }
   const files = missing.map(fileOf);
+  const sent = missing.map((lens) => [lens, dispatch(lens, span)]);
+  noteDispatched(tree, context.intent.id, item.id, null, sent.map(([lens, one]) => [lens, one.payload.range]));
   return {
     exit: 3,
     payload: { ok: false, item: item.id, owed: 'lens', missing: files },
     out: [
       `refusing to record the review of ${item.id}: ${files.join(' and ')} ${files.length > 1 ? 'are' : 'is'} not written, and nothing is ` +
         'recorded before every lens dispatched has written its file. Send this dispatch again',
-      ...missing.flatMap((lens) => dispatch(lens, span)),
+      ...sent.flatMap(([, one]) => one.lines),
       `then ${itemRecordCall(tree, item.id, null, dispatched.includes('quality'))} records ${dispatched.length > 1 ? 'both files' : 'it'}`,
     ],
   };
@@ -212,7 +235,7 @@ function parseQualityReview(tree, rel, itemId, { recorded }) {
   // A recorded file sent back and edited in place keeps the runner's keys, which its record writes anew (run-review-file.cjs).
   const own = recorded ? RECORDED_KEYS : runnerKeys(tree, rel, doc, RECORDED_KEYS);
   for (const key of Object.keys(doc)) {
-    if (QUALITY_KEYS.includes(key) || own.includes(key)) continue;
+    if (QUALITY_KEYS.includes(key) || key === READ_KEY || own.includes(key)) continue;
     if (RECORDED_KEYS.includes(key)) throw bad(rel, `${key} is written when the review is recorded, so drop it`);
     throw bad(rel, `unknown key ${key}: a quality review holds ${QUALITY_KEYS.join(', ')} only`);
   }
@@ -307,4 +330,6 @@ module.exports = {
   CHECKS, ONE_MESSAGE, QUALITY_FINDING_KEYS, QUALITY_KEYS, SAME_QUALITY, changedPaths, dispatchedLenses, findingLabel, isConfig, isDoc,
   lensesWaiting, lintCommands, mergeReviews, noteDispatched, parseQualityReview, qualityBody, qualityLens, qualityOwed, qualityPath,
   qualityReviewerId, readItemReview, readQuality,
+  fullRange,
+  notedRanges,
 };

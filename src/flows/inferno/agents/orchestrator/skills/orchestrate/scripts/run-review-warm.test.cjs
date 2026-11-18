@@ -94,7 +94,8 @@ test("a review owed after a recorded one is a fresh dispatch that names the prev
   assert.equal(lines[at + 3], "  spec .specs-inferno/intents/alpha/work-items/a-one.md");
   assert.equal(lines[at + 4], "  brief .specs-inferno/intents/alpha/brief.md");
   assert.equal(lines[at + 5], `  write ${ITEM_REVIEW}`);
-  assert.match(lines[at + 6], /^then run\.cjs review --item a-one --reviewer <agent-id> --detach --tree /);
+  assert.equal(lines[at + 6], `  read ${range}: write read: ${range} into the file, also when the earlier verdict still holds`);
+  assert.match(lines[at + 7], /^then run\.cjs review --item a-one --reviewer <agent-id> --detach --tree /);
   const payload = JSON.parse(run(fixture, ["review", "--item", "a-one", "--tree", fixture.root, "--json"]).out);
   assert.equal(payload.previous, ITEM_REVIEW);
   assert.equal(payload.range, range);
