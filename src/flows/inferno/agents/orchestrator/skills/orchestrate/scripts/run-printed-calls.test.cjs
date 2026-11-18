@@ -62,7 +62,11 @@ test("on Codex the item review's calls run as printed on Codex, from the integra
   const [dispatched] = asPrinted(fixture, refused.err, "review --item");
   itemReviewer(dispatched);
   write(fixture.root, ".specs-inferno/intents/alpha/reviews/a-one.yaml", "item: a-one\nverdict: clean\nfiles: [src/a.ts]\n");
-  const [recorded] = asPrinted(fixture, dispatched.out.replace("<agent-id>", "rev-a1"), "review --item");
+  // The record starts as its own process, and its wait, run next, ends as the record did.
+  const [started, recorded] = asPrinted(fixture, dispatched.out.replace("<agent-id>", "rev-a1"), "review --item");
+  assert.ok(started.argv.includes("--detach"), started.argv.join(" "));
+  assert.equal(started.code, 0, started.out + started.err);
+  assert.ok(recorded.argv.includes("--wait"), recorded.argv.join(" "));
   assert.equal(recorded.code, 0, recorded.out + recorded.err);
   const [landed] = asPrinted(fixture, recorded.out, "integrate --item");
   assert.equal(landed.code, 0, landed.out + landed.err);
@@ -224,6 +228,15 @@ test("each call builder prints its exact line from its own flags, the site's dec
     ],
     intentReviewCall: [[["/w"], `run.cjs review --tree /w${tail}`]],
     intentRecordCall: [[["/w"], `run.cjs review --reviewer <agent-id> --tree /w${tail}`]],
+    recordStartCall: [
+      [["/w", "a-one"], `run.cjs review --item a-one --reviewer <agent-id> --detach --tree /w${tail}`],
+      [["/w", "a-one", true], `run.cjs review --item a-one --reviewer <agent-id> --quality-reviewer <quality-agent-id> --detach --tree /w${tail}`],
+      [["/w"], `run.cjs review --reviewer <agent-id> --detach --tree /w${tail}`],
+    ],
+    recordWaitCall: [
+      [["/w", "a-one"], `node ${calls.RUNNER_PATH} review --item a-one --wait --tree /w${tail}`],
+      [["/w"], `node ${calls.RUNNER_PATH} review --wait --tree /w${tail}`],
+    ],
     scanCall: [
       [["/w"], `run.cjs scan --tree /w${tail}`],
       [["/w", null, true], `run.cjs scan --collect --tree /w${tail}`],

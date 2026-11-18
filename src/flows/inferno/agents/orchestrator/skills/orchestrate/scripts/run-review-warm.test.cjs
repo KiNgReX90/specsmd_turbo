@@ -48,7 +48,8 @@ test("an item's first review dispatches a cold reviewer, and its record call nam
   assert.equal(first.code, 3, shown(first));
   assert.match(first.out, /^dispatch specsmd-inferno-reviewer model model-review item a-one$/m);
   assert.doesNotMatch(first.out, /^resume /m);
-  assert.match(first.out, new RegExp(`^then run\\.cjs review --item a-one --reviewer <agent-id> --tree ${fixture.root} records it; it runs the review's mutants first`, "m"));
+  assert.match(first.out, new RegExp(`^then run\\.cjs review --item a-one --reviewer <agent-id> --detach --tree ${fixture.root} records it as its own process, ` +
+    `and node \\S+/run\\.cjs review --item a-one --wait --tree ${fixture.root} blocks on it$`, "m"));
 });
 
 test("the record writes the reviewer's id beside the tree and the commit", () => {
@@ -93,7 +94,7 @@ test("a review owed after a recorded one is a fresh dispatch that names the prev
   assert.equal(lines[at + 3], "  spec .specs-inferno/intents/alpha/work-items/a-one.md");
   assert.equal(lines[at + 4], "  brief .specs-inferno/intents/alpha/brief.md");
   assert.equal(lines[at + 5], `  write ${ITEM_REVIEW}`);
-  assert.match(lines[at + 6], /^then run\.cjs review --item a-one --reviewer <agent-id> --tree /);
+  assert.match(lines[at + 6], /^then run\.cjs review --item a-one --reviewer <agent-id> --detach --tree /);
   const payload = JSON.parse(run(fixture, ["review", "--item", "a-one", "--tree", fixture.root, "--json"]).out);
   assert.equal(payload.previous, ITEM_REVIEW);
   assert.equal(payload.range, range);
@@ -139,7 +140,8 @@ test("the intent's first review dispatches cold, names no previous review and ne
   assert.equal(first.code, 3, shown(first));
   assert.match(first.out, /^dispatch specsmd-inferno-reviewer model model-review intent alpha$/m);
   assert.doesNotMatch(first.out, /resume|rev-item|^ {2}previous /m);
-  assert.match(first.out, new RegExp(`^then run\\.cjs review --reviewer <agent-id> --tree ${tree} records it$`, "m"));
+  assert.match(first.out, new RegExp(`^then run\\.cjs review --reviewer <agent-id> --detach --tree ${tree} records it as its own process, ` +
+    `and node \\S+/run\\.cjs review --wait --tree ${tree} blocks on it$`, "m"));
 });
 
 test("the intent review's record refuses without the reviewer's id, writes it, and the next intent review is a fresh dispatch of the delta", () => {

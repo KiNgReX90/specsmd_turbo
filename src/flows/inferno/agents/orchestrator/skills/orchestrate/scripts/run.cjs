@@ -14,7 +14,8 @@
  * because state.yaml has one writer and this is not it.
  *
  * Exit codes: 0 ok, 1 usage, 2 failure (details printed), 3 a step is owed first,
- * 4 gate still running, or queued behind another intent's ticket (gate --wait: call it again),
+ * 4 gate or a review's record still running, or queued behind another intent's ticket (gate or
+ * review --wait: call it again),
  * or a slot --take queued behind another holder (take again), 5 no verdict: the host's wrapper ran
  * nothing for a check of integrate or the gate twice (verification.refused), so the step runs again.
  */
@@ -26,8 +27,7 @@ const intents = require('./run-intents.cjs');
 const gate = require('./run-gate.cjs');
 const { integrate } = require('./run-integrate.cjs');
 const { checkDoubles } = require('./check-doubles.cjs');
-const { review } = require('./run-review.cjs');
-const { reviewIntent } = require('./run-intent-review.cjs');
+const { keepOut, reviewCall } = require('./run-review-job.cjs');
 const { scan } = require('./run-scan.cjs');
 const { mutate } = require('./run-mutate.cjs');
 const { probes } = require('./run-probes.cjs');
@@ -64,6 +64,8 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs scan [--collect] --item <id> [--tree <dir>] the slice check of one item before its dispatch, once and only after a predecessor: 3 spawn, then 0 the lines for the dispatch, 2 a conflict for the planner
   node run.cjs scan [--collect] --plan <intent-id>       the plan-time cross-check, a pass and at most two fix rounds: 3 spawn, wait on an unmerged intent or ask the oracle, then 0 no finding, 2 every finding for the planner or the oracle
   node run.cjs review --tree <dir> [--intent <id>] [--reviewer <agent-id>] the intent's cold review before the gate: 3 dispatch or owed, 0 clean, 2 fix
+  node run.cjs review [--item <id>] --tree <dir> --reviewer <agent-id> [--quality-reviewer <agent-id>] --detach start that record, its mutants first, as its own process: 2 while another record runs in the tree
+  node run.cjs review [--item <id>] --tree <dir> --wait [--minutes <n>] block on the record started for the item, or for the intent without --item: its exit code and output, 4 still running (default 9 min)
   node run.cjs mutate --file <f> --line <n> --replace <text> --test <cmd> [--tree <dir>] [--config <file>] break one line, run the test, restore: caught yes|no
   node run.cjs mutate --batch <file> [--tree <dir>] [--config <file>] every mistake of a review, the Rust ones on one build: caught yes|no or no verdict per entry
   node run.cjs integrate --item <id> [--since <ref>] [--tree <dir>] fold the base in, run the checks, complete the item
@@ -77,7 +79,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base, origin/<base> on the base branch): no fold, no finalize command, no ticket
   node run.cjs gate --detach --supersede [--tree <dir>] stop the tree's running lanes a fix touched, prove each stopped by its verification.<lane>.stop, then start the gate: 2 refused or not proven stopped
   node run.cjs gate --detach --lane <name> [--tree <dir>] walk that one lane again, also while the gate job runs, and make gate --wait wait on it: 2 while that lane still runs
-  node run.cjs gate --detach --cause "<why>" --by <who> [--tree <dir>] run the gate again on the code a finalize command was red on, with why that red is not the branch's work: ship writes it into the merge commit; refused on any other gate, and past two causes of the command on the base since a "Fixes-intermittent: <command>" commit
+  node run.cjs gate --detach --cause "<why>" --by <who> [--tree <dir>] run the gate again on the code a finalize command was red on, with why that red is not the branch's work: ship writes it into the merge commit; refused on any other gate, and past two causes under its name on the base since a "Fixes-intermittent: <name>" commit
   node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
@@ -123,6 +125,8 @@ Options
                     scan, review, gate and green: the intent a tree on no intent branch builds
   --force           gate: rerun every finalize command, revoking each proof before its run
   --minutes <n>     gate --wait: how long one call blocks before exiting 4 (default 9)
+                    review --wait: the same for the record
+  --job             review: record in this process as review --detach starts it, and print its exit code, lines and payload as one JSON line
   --plan <id>       scan: cross-check the captured plan of this intent instead of scanning its diff
   --lane <name>     gate: run one configured lane in this process, as gate --detach starts it; with --detach, start that lane alone as its own job
   --harness-fix <sha> smoke|windows --accept: the harness fix on the base branch the instrument red is accepted against
@@ -132,7 +136,7 @@ Options
   --cause <why>     gate, on the code a finalize command was red on: why that red is not the branch's work
   --batch <file>    mutate: a JSON or YAML list of {criterion, file, line, find, replace, test}; find occurs once on that line
 
-Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder, 5 integrate or gate got no verdict, the host ran nothing twice: run the step again.`;
+Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate, a lane or a review's record still running, or slot --take queued behind another holder, 5 integrate or gate got no verdict, the host ran nothing twice: run the step again.`;
 
 function required(value, usage) {
   if (!value) throw new RunError(`usage: node run.cjs ${usage}`, 'BAD_ARGS', 1);
@@ -166,7 +170,7 @@ const COMMANDS = {
   doubles: (args, options) => checkDoubles(options),
   'real-app': (args, options) => realApp(options),
   cases: (args, options) => cases(options),
-  review: (args, options) => (options.item ? review(options) : reviewIntent(options)),
+  review: (args, options) => reviewCall(options),
   scan: (args, options) => scan(options),
   mutate: (args, options) => mutate(options),
   gate: (args, options) => gate.gate(options),
@@ -192,6 +196,7 @@ const OWNING = new Set(['frontier', 'probes', 'verify-item', 'scan', 'review', '
 /** Options that take no value. Everything else starting with `--` takes the next argument. */
 const FLAGS = new Set([
   '--json', '--detach', '--wait', '--force', '--collect', '--accept', '--accept-intermittent', '--take', '--renew', '--release', '--lanes-only', '--supersede',
+  '--job',
 ]);
 /** Options that may repeat: each value is also kept, in order, under the plural name. */
 const REPEATED = new Set(['--test']);
@@ -247,6 +252,8 @@ function main(argv) {
   // step that learns the path. `select` reads the stamp; see run-owner.cjs. A plan-time scan
   // reads the primary checkout, which no run owns.
   if (OWNING.has(command) && options.tree && !options.plan) recordOwner(options.tree, command);
+  // A review's record running as its own job keeps out every call that would race its mutants (run-review-job.cjs).
+  keepOut(command, options);
   const result = handler(args, options);
   // A batch mutate yields to the event loop between its runs, so its result is a promise.
   const done = (returned) => {

@@ -102,7 +102,8 @@ function clip(text) {
 }
 
 /**
- * Run one probe in the tree and hand back what it printed, or the code it failed with.
+ * Run one probe in the tree and hand back what it printed, on both streams as the log holds
+ * them, and how it ended.
  *
  * A `probes:` measurement is a grep or a count, so it carries its own minute-long cap. A
  * diagnosis probe is whatever shows the cause, a browser run included, so it goes bare through
@@ -117,8 +118,23 @@ function measure(command, tree, logDir, index, options = {}) {
     log,
     { wrap: capped }
   );
-  if (result.code !== 0) return `exit ${result.code}`;
-  return fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim() : '';
+  const printed = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim() : '';
+  return { printed, code: result.code, signal: result.signal };
+}
+
+/**
+ * What a probe printed decides it, not its exit: `grep -c` prints 0 and exits 1 when nothing
+ * matches. A command that printed nothing, timed out (124), could not start (125 to 127), ended
+ * fatally or by a signal (128 and up) never answered, so it never reads as planned, and the
+ * drift line names that end beside what it printed.
+ */
+function compare(measured, shows) {
+  const printed = clip(measured.printed);
+  const answered = measured.code === 0 || (measured.code < 124 && !measured.signal && measured.printed !== '');
+  const ok = answered && measured.printed === shows;
+  if (ok || measured.code === 0) return { ok, got: printed };
+  const ended = measured.signal ? `signal ${measured.signal}` : `exit ${measured.code}`;
+  return { ok, got: `${ended}, printed ${printed || 'nothing'}` };
 }
 
 /** Replay one item's diagnosis probe. Stale evidence is evidence nobody measured on this tree. */
@@ -129,8 +145,8 @@ function replayDiagnosis(tree, item) {
   const shows = String(block.shows).trim();
   const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'inferno-diagnosis-'));
   try {
-    const got = measure(command, tree, logDir, 'diagnosis', { cap: false });
-    return { command, shows, got: clip(got), ok: got === shows };
+    const { got, ok } = compare(measure(command, tree, logDir, 'diagnosis', { cap: false }), shows);
+    return { command, shows, got, ok };
   } finally {
     fs.rmSync(logDir, { recursive: true, force: true });
   }
@@ -189,13 +205,12 @@ function probes(itemId, options) {
       declared.forEach((entry, index) => {
         const command = entry.run.trim();
         const shows = String(entry.shows).trim();
-        const got = measure(command, tree, logDir, index);
-        const ok = got === shows;
-        results.push({ run: command, shows, got: clip(got), ok });
+        const { got, ok } = compare(measure(command, tree, logDir, index), shows);
+        results.push({ run: command, shows, got, ok });
         out.push(
           ok
             ? `probe ok ${itemId} ${command}`
-            : `drift ${itemId} ${command} expected ${clip(shows)} got ${clip(got)}`
+            : `drift ${itemId} ${command} expected ${clip(shows)} got ${got}`
         );
       });
     } finally {

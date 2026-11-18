@@ -301,6 +301,24 @@ test('a second accept of a test prints the earlier one from the base, and a thir
   passed(run(f, 'gate', '--wait', '--minutes', '0.5'));
 });
 
+test("an accept counts the base's rerun lines a wrapped command wrote before names under the rest the session's match leaves", (t) => {
+  const session = "  session:\n    match: '^tools/remote\\.sh auto \\S+ '\n    open: echo open\n    run: echo run\n    close: echo close\n";
+  const f = fixture(t, withVerdicts() + session);
+  const { rerunLine } = require('./run-lanes-intermittent.cjs');
+  const whole = (tree, by) => {
+    const command = `tools/remote.sh auto ${tree} ${TEST}`;
+    return rerunLine({ command, tests: [command], cause: 'a race', by, run: 'gate-a', log: 'rerun-evidence/a/0.log' });
+  };
+  const first = onMain(f, whole('/trees/gate-a', 'lead'));
+  const second = onMain(f, whole('/trees/gate-b', 'release-lead'));
+  nextVerdicts(f, PROVEN);
+  touch(f);
+  assert.equal(gated(f).code, 3);
+  const third = accept(f, [TEST]);
+  assert.equal(third.code, 2, third.out + third.err);
+  assert.match(third.err, new RegExp(`accepted as intermittent 2 times on main since a commit there last named its fix: ${first} .* by lead, ${second} .* by release-lead`));
+});
+
 test('the verdicts key and form the config example documents are the ones the flow reads', (t) => {
   const { SHAPE, intermittentTests } = require('./run-lanes-intermittent.cjs');
   const { configuredLanes } = require('./run-lane-config.cjs');
