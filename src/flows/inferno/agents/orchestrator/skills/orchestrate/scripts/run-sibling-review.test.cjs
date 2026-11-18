@@ -35,10 +35,10 @@ function turn(host, item, files) {
   assert.equal(accepted.code, 0, accepted.out + accepted.err);
 }
 
-/** Commit the files under `item`'s trailer, the way the orchestrator lands an item. Returns the commit. */
-function land(host, item, files) {
+/** Commit the files under `item`'s trailer and the `extra` trailer lines, the way the orchestrator lands an item. Returns the commit. */
+function land(host, item, files, extra = []) {
   git(host.tree, ["add", "--", ...files]);
-  git(host.tree, ["commit", "-q", "-m", `land ${item}`, "-m", `Item: ${item}`]);
+  git(host.tree, ["commit", "-q", "-m", `land ${item}`, "-m", [`Item: ${item}`, ...extra].join("\n")]);
   return git(host.tree, ["rev-parse", "HEAD"]);
 }
 
@@ -65,11 +65,14 @@ function reviewed(body, code, before = () => {}) {
   return host;
 }
 
-/** Sibling a-two changes the shared file after a-one's accept and lands under its own trailer. */
-function siblingLands(host) {
+/** Sibling a-two changes the shared file after a-one's accept and lands under its own trailer and the `extra` lines. */
+function siblingLands(host, extra = []) {
   turn(host, "a-two", { [SHARED]: "docs\nby a-one\nby a-two\n", "src/b.ts": "export const b = 3;\n" });
-  return land(host, "a-two", [SHARED, "src/b.ts"]);
+  return land(host, "a-two", [SHARED, "src/b.ts"], extra);
 }
+
+/** The lines an item commit carries beside its Item line: the builder's cases and a host's co-author. */
+const BESIDE = ["Cases: TC-1", "Co-Authored-By: A Builder <builder@example.test>"];
 
 /**
  * The sibling's commit read by verify-item owes a-one's review over a range from the commit the
@@ -155,6 +158,22 @@ test("a minor fix whose correction touches a file named with a leading dash sett
   turn(host, "a-one", { "-notes.md": "notes\nby a-one, named\n" });
   verified(host);
   land(host, "a-one", ["-notes.md"]);
+  const settled = host.at("review", "--item", "a-one");
+  assert.equal(settled.code, 0, settled.out + settled.err);
+  assert.match(settled.out, /^review a-one settled at /m);
+});
+
+test("a sibling's commit naming another item beside its Cases and co-author lines still owes the minor fix a review", () => {
+  const host = reviewed(fix("minor"), 2);
+  const sibling = siblingLands(host, BESIDE);
+  owedUntilReviewed(host, sibling, new RegExp(`^commit ${sibling.slice(0, 7)}[0-9a-f]* of a-two changed a file the review lists, and a settle takes only the warm builder's correction$`));
+});
+
+test("a correction landed with its Cases and co-author lines beside the item's own Item line still settles", () => {
+  const host = reviewed(fix("minor"), 2);
+  turn(host, "a-one", { "src/a.ts": "export const count = 1; // built\n" });
+  verified(host);
+  land(host, "a-one", ["src/a.ts"], BESIDE);
   const settled = host.at("review", "--item", "a-one");
   assert.equal(settled.code, 0, settled.out + settled.err);
   assert.match(settled.out, /^review a-one settled at /m);

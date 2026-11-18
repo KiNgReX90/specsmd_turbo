@@ -31,7 +31,10 @@ const { grantedPaths } = require('./run-grant.cjs');
 const { dispatchClaims } = require('./run-review-span.cjs');
 const { itemReviewCall } = require('./run-call.cjs');
 
-/** The values of the `Item:` trailers of `commit`, parsed and trimmed the way git parses trailers. */
+/**
+ * The values of the `Item:` trailers of `commit`, parsed and trimmed the way git parses trailers:
+ * from the message's last paragraph only, beside any other trailer there such as `Cases:`.
+ */
 const trailerItems = (tree, commit) => lib.gitLines(tree, ['log', '-1', '--format=%(trailers:key=Item,valueonly)', commit]);
 
 /** `file` at `rev` as `ls-tree` prints it, which reads a path as itself: empty when `rev` lacks it, null when git cannot read `rev`. */

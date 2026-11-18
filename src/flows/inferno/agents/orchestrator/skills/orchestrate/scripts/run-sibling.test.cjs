@@ -47,7 +47,22 @@ test('a shared file named with a leading dash and larger than a pipe\'s default 
   assert.deepEqual(result.data.dispatches[0].siblings, [{ file: '-guide.md', items: ['b'], commit: sibling, from: landed }]);
 });
 
+const COAUTHOR = 'Co-Authored-By: A Builder <builder@example.test>';
+
+test('a sibling\'s commit with its Cases and co-author lines beside its Item line explains the change, read by its Item line alone', (t) => {
+  const { f, landed, sibling } = siblingChanged(t, ['Item: b', 'Cases: TC-1, TC-2', COAUTHOR]);
+  const result = f.verify('a');
+  assert.equal(result.code, 0, result.out);
+  assert.deepEqual(result.data.dispatches[0].siblings, [{ file: SHARED, items: ['b'], commit: sibling, from: landed }]);
+  const human = f.human('verify-item', 'a', '--tree', f.root);
+  assert.match(human.out, said(f, { commit: sibling, from: landed }));
+  assert.doesNotMatch(human.out, /DISPATCH_PROOF/);
+});
+
 for (const [why, trailers] of [
+  ['carries Cases and co-author trailers but no Item trailer', ['Cases: TC-1', COAUTHOR]],
+  // git reads trailers from the last paragraph only, so an Item line above a Cases paragraph is body text.
+  ['names the sibling in a paragraph above its Cases paragraph', ['Item: b\n\nCases: TC-1']],
   ['carries no Item trailer', []],
   ['names the item itself', ['Item: a']],
   ['names an id that is no item', ['Item: nobody']],
