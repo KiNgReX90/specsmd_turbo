@@ -17,6 +17,8 @@ The host's part is none: a shared rustc wrapper is an ordinary setup, and the te
 - Delta's real cache, `~/.cache/sccache`, 16 GiB, served nothing in that time.
 - Delta, `~/.cargo/config.toml`: `rustc-wrapper = "/home/ruben/.local/bin/rustc-cached"`, which runs sccache.
 - `inferno-mutate-cargo-` is the prefix of `run-mutate-cargo.test.cjs:80`. No other test of the flow runs real cargo.
+- It came back the same day. Delta, 2026-11-18 06:50Z: the first server was gone and a new one stood, pid 3452344, started 06:09:10Z, with `XDG_CACHE_HOME=/tmp/inferno-tests-mqN4dJ/inferno-mutate-cargo-VRIk1p/cache` and `SCCACHE_START_SERVER=1` in `/proc/3452344/environ`. The host's lead saw two `rustc` of another tree's build run through it at 06:27Z. So it recurs each time the server idles out before a run of the host's flow tests.
+- Read the server without touching it: `pgrep -x sccache`, then `tr '\0' '\n' < /proc/<pid>/environ | grep XDG_CACHE_HOME`. `sccache --show-stats` starts a server when none runs, with the caller's environment.
 
 ## How to fix
 
