@@ -176,6 +176,54 @@ test("a range a waiting refusal sends again is noted beside the first, so the le
   assert.ok(/review_commit: ([0-9a-f]+)/.exec(ledger(h.tree))[1].startsWith(firstEnd), "the stamp is the oldest end printed");
 });
 
+test("a record refused for a lens file not written is refused again while that file is still missing, and nothing is recorded", () => {
+  const { h } = delta(contractFix("major"), QCLEAN);
+  write(h.tree, REVIEW, CLEAN);
+  const state = ledger(h.tree);
+  // The refusal notes the range it sends again and keeps the lenses the dispatch printed.
+  for (let round = 0; round < 2; round += 1) {
+    const waiting = h.review();
+    assert.equal(waiting.code, 3, shown(waiting));
+    assert.match(waiting.out, /^refusing to record the review of a-one: \.specs-inferno\/intents\/alpha\/reviews\/quality\/a-one\.yaml is not written/m);
+    assert.equal(ledger(h.tree), state);
+  }
+});
+
+test("the lenses noted outlive the record's forget: a recorded contract file edited in place waits for the quality lens as before", () => {
+  const h = host();
+  assert.equal(firstRound(h, CLEAN, QCLEAN).code, 0);
+  const state = ledger(h.tree);
+  // Sent back and edited in place, it is recorded with no dispatch between, reading the lenses noted.
+  write(h.tree, REVIEW, `# read again\n${read(h.tree, REVIEW)}`);
+
+  const waiting = h.review();
+
+  assert.equal(waiting.code, 3, shown(waiting));
+  assert.match(waiting.out, /^refusing to record the review of a-one: \.specs-inferno\/intents\/alpha\/reviews\/quality\/a-one\.yaml is not written/m);
+  assert.equal(ledger(h.tree), state);
+});
+
+test("a read line naming the printed commits in full or by longer short ids is held to them; an end this history does not hold is refused", () => {
+  const { h, range } = delta(contractFix("major"), QCLEAN);
+  const state = ledger(h.tree);
+  const recordedAt = read(h.tree, QUALITY);
+  const spelled = (args) => range.split("..").map((rev) => git(h.tree, ["rev-parse", ...args, rev])).join("..");
+  const unknown = `${range.split("..")[0]}..${"e".repeat(40)}`;
+  write(h.tree, REVIEW, `${CLEAN}read: ${spelled(["--short=12"])}\n`);
+  write(h.tree, QUALITY, `${recordedAt}read: ${unknown}\n`);
+  const refused = h.review();
+  assert.equal(refused.code, 2, shown(refused));
+  assert.match(refused.err, new RegExp(`BAD_REVIEW.*quality/a-one\\.yaml: read names "${unknown.replace(/\./g, "\\.")}", ` +
+    `and its dispatch printed ${range.replace(/\./g, "\\.")}: write the range it printed`));
+  assert.equal(ledger(h.tree), state);
+  write(h.tree, QUALITY, `${recordedAt}read: ${spelled([])}\n`);
+
+  const recorded = h.review();
+
+  assert.equal(recorded.code, 0, shown(recorded));
+  assert.match(ledger(h.tree), /review: clean/);
+});
+
 /** a-one on the host's main, reviewed fix with no dispatch on record, a fix committed and its delta dispatched. */
 function deltaOnMain() {
   const fixture = repo();
