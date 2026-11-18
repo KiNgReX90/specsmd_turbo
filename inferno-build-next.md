@@ -10,7 +10,7 @@ Where the older text went, so that nothing built reads as open:
 
 - `inferno-future-improvements.md` is gone from this branch. Of its eight items six are built or struck (sections 1b and 3). The measurement of the first is section 4, its one standing rule is under section 2, and the one idea left unbuilt is in section 5. Its text is in this branch's history at `d5d82fa1`.
 - The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build: 24, 25 and 26, rows 0y, 0z and 0aa. Its sections 1 to 11 are in history at the same commit, 12 to 14 at `120be9b4`, and 15 to 23 at `1aa836a2`.
-- Every other handoff file keeps only its open defects, or, once all it holds is built, says so in its first line, with the commit and its row or section here, and that it can be removed from the branch, its text staying in history. Seven are marked built: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f) and the five files of rows 0p to 0t (section 1g). Defects 3 and 5 of `inferno-review-record-defects-handoff.md` are cut from it, and their text is in history at `1aa836a2`.
+- Every other handoff file keeps only its open defects. Once all it holds is built, it leaves the branch, and its row or section here names it with the commit that holds its text. Seven are gone this way: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f) and the five files of rows 0p to 0t (section 1g). Their text is in history at `f0f06aaf`, as it last stood, each with a first line that says it is built. Defects 3 and 5 of `inferno-review-record-defects-handoff.md` are cut from it, and their text is in history at `1aa836a2`.
 - `inferno-generalization-plan.md` and `todo.md` are older backlogs that came from main. They ask nothing of whoever builds here, and what they hold is no commitment.
 
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
@@ -88,9 +88,9 @@ Built on this branch on 2026-11-17. `CHANGELOG.md` says what it does.
 
 | Row | What | Handoff | Built in |
 | --- | --- | --- | --- |
-| 0o | A test the host's wrapper carries takes no seat on this machine's build wrapper | `inferno-remote-run-wrapped-in-local-seat-handoff.md`, marked built | `e659ab4a` |
+| 0o | A test the host's wrapper carries takes no seat on this machine's build wrapper | `inferno-remote-run-wrapped-in-local-seat-handoff.md`, gone, in history at `f0f06aaf` | `e659ab4a` |
 
-That handoff file names one case it leaves as it is: an integrate or gate command a host writes out with its wrapper, with no `verification.session` whose match reaches it, still takes a local seat, since no config key says such a command is carried.
+That handoff named one case it left as it is: an integrate or gate command a host writes out with its wrapper, with no `verification.session` whose match reaches it, still takes a local seat, since no config key says such a command is carried.
 
 ## 1f. DONE: nine sections of the handoff file, built into 0.1.85
 
@@ -114,7 +114,7 @@ Three defects of handoff files that had no row are the same as two of these sect
 
 | Handoff | Defect | Built in |
 | --- | --- | --- |
-| `inferno-rename-proof-stale-handoff.md`, marked built | A proof over an item that renames a file is stale the moment it is written: section 15 | `1248629b` |
+| `inferno-rename-proof-stale-handoff.md`, gone, in history at `f0f06aaf` | A proof over an item that renames a file is stale the moment it is written: section 15 | `1248629b` |
 | `inferno-review-record-defects-handoff.md`, defect 3 | verify-item's proof omits a committed rename's source: section 15 | `1248629b` |
 | `inferno-review-record-defects-handoff.md`, defect 5 | A reviewer does not know a check criterion can take a mutant: section 20, whose `check: true` the reviewer's texts and the runner's hint name, in place of the inline test wrapper the handoff asked for | `96c75c27` |
 
@@ -124,11 +124,11 @@ Built on this branch on 2026-11-18. `CHANGELOG.md` says what each one does.
 
 | Row | What | Handoff | Built in |
 | --- | --- | --- | --- |
-| 0p | The test of a first write reads its lower bound from the clock the file is stamped with | `inferno-first-write-clock-lag-handoff.md`, marked built | `7b3df6ef` |
-| 0q | The test of a refused grant compares the record, never the stat index | `inferno-grant-test-stat-index-age-handoff.md`, marked built | `7b3df6ef` |
-| 0r | A gate run again after a red command on unchanged code records its cause, and ship keeps the red log | `inferno-regate-cause-not-recorded-handoff.md`, marked built | `7fdf4b8b`, `a0eb164b`, `f6ad13a7` |
-| 0s | A mutant test whose command is missing reads that as its reason, and the batch runs it once | `inferno-mutant-command-not-found-handoff.md`, marked built | `17490143`, `d3c0ee95` |
-| 0t | The real cargo test runs without the host's rustc wrapper, so it never starts the machine's sccache server | `inferno-cargo-test-takes-sccache-server-handoff.md`, marked built | `93b7f0a3` |
+| 0p | The test of a first write reads its lower bound from the clock the file is stamped with | `inferno-first-write-clock-lag-handoff.md`, gone, in history at `f0f06aaf` | `7b3df6ef` |
+| 0q | The test of a refused grant compares the record, never the stat index | `inferno-grant-test-stat-index-age-handoff.md`, gone, in history at `f0f06aaf` | `7b3df6ef` |
+| 0r | A gate run again after a red command on unchanged code records its cause, and ship keeps the red log | `inferno-regate-cause-not-recorded-handoff.md`, gone, in history at `f0f06aaf` | `7fdf4b8b`, `a0eb164b`, `f6ad13a7` |
+| 0s | A mutant test whose command is missing reads that as its reason, and the batch runs it once | `inferno-mutant-command-not-found-handoff.md`, gone, in history at `f0f06aaf` | `17490143`, `d3c0ee95` |
+| 0t | The real cargo test runs without the host's rustc wrapper, so it never starts the machine's sccache server | `inferno-cargo-test-takes-sccache-server-handoff.md`, gone, in history at `f0f06aaf` | `93b7f0a3` |
 
 What a host may now use, from row 0r: a gate run again on the code a finalize command was red on takes `run.cjs gate --detach --cause "<why>" --by <who>`. The cause is bound to the proof the rerun's green minted, so a commit outside a scoped command's scope keeps it and one inside it drops it. Ship writes that cause into the merge commit as one `exception: <command> rerun <json>` line, under the same limit as a lane accept: two of a command on the base refuse the next, until a commit carries `Fixes-intermittent: <command>`. The red log is kept under `<cache>/rerun-evidence/`, which no branch cleanup owns, and ship removes the record once the merge commit that carries its line is written. The orchestrator's texts say when to use the call.
 
