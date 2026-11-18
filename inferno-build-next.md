@@ -2,7 +2,7 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURED ON THE HOST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-Nothing on this branch waits for a builder today. Version 0.1.85 holds the six items of section 1b, the rows of sections 1c, 1d, 1e, 1g and 1h and the nine sections of section 1f, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
+What waits for a builder is in section 2. Version 0.1.85 holds the six items of section 1b, the rows of sections 1c, 1d, 1e, 1g and 1h and the nine sections of section 1f, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -10,7 +10,7 @@ Where the older text went, so that nothing built reads as open:
 
 - `inferno-future-improvements.md` is gone from this branch. Of its eight items six are built or struck (sections 1b and 3). The measurement of the first is section 4, its one standing rule is under section 2, and the one idea left unbuilt is in section 5. Its text is in this branch's history at `d5d82fa1`.
 - The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build, and none is open today. Its sections 1 to 11 are in history at the same commit, 12 to 14 at `120be9b4`, 15 to 23 at `1aa836a2`, and 24 to 26 at `f0f06aaf`.
-- Every other handoff file keeps only its open defects. Once all it holds is built, it leaves the branch, and its row or section here names it with the commit that holds its text. Ten are gone this way, and none stands today: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f), the five files of rows 0p to 0t (section 1g) and the three files of rows 0u to 0x and 0ab (section 1h). Their text is in history at `f0f06aaf`, as it last stood, and the first seven each have a first line there that says they are built. Defects 3 and 5 of `inferno-review-record-defects-handoff.md` were cut from it before, and their text is in history at `1aa836a2`.
+- Every other handoff file keeps only its open defects. Once all it holds is built, it leaves the branch, and its row or section here names it with the commit that holds its text. Ten are gone this way, and two stand today, those of rows 0ac and 0ad: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f), the five files of rows 0p to 0t (section 1g) and the three files of rows 0u to 0x and 0ab (section 1h). Their text is in history at `f0f06aaf`, as it last stood, and the first seven each have a first line there that says they are built. Defects 3 and 5 of `inferno-review-record-defects-handoff.md` were cut from it before, and their text is in history at `1aa836a2`.
 - `inferno-generalization-plan.md` and `todo.md` are older backlogs that came from main. They ask nothing of whoever builds here, and what they hold is no commitment.
 
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
@@ -155,9 +155,14 @@ One more was found and built beside rows 0w and 0aa, with no row: an intent revi
 
 A host sets no new key. What a host may now use: `run.cjs review --item <id> --reviewer <agent-id> --detach` starts a record as its own process and `run.cjs review --item <id> --wait` blocks on it, and the intent review's record takes the same flags (row 0x). A delta's dispatch asks each lens for a `read: <range>` line, which a review file may hold (row 0aa). A rerun is counted under its command's name, so a commit with `Fixes-intermittent: <name>` lifts the limit (row 0ab). An item's commit carries one `Item: <id>` line per item it lands in its last paragraph, which lets a sibling's commit to a shared file pass (row 0z). The orchestrator's texts say to write it.
 
-## 2. BUILD NOW: nothing today
+## 2. BUILD NOW: two rows
 
-A host's next finding arrives here as a row, with its section in the handoff file.
+A host's next finding arrives here as a row, with its section in the handoff file. Rows 0ac and 0ad are two defects the first host met in runs on 2026-11-18, on the build at `f3be640a`, each read in the code at `f0f06aaf` and found unchanged there.
+
+| Row | What | Handoff |
+| --- | --- | --- |
+| 0ac | A fold is read from what HEAD merged, so a base rewritten after the fold no longer turns the files it brought in into changes outside the item's ownership | `inferno-fold-read-from-moved-base-handoff.md` |
+| 0ad | The existence check of `context.required` and `reads` holds an item only until a builder took it, so a built item that deleted a file it had to read no longer stops the frontier | `inferno-frontier-stops-on-built-items-deleted-read-handoff.md` |
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
