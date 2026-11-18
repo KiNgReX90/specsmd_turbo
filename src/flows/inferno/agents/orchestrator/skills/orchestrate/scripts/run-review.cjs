@@ -36,7 +36,7 @@ const { dirtyFiles } = require('./run-dirt.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
 const ladder = require('./run-review-ladder.cjs');
 const lens = require('./run-review-quality.cjs');
-const { changedSince, dispatchClaims, goneFiles, goneLine, itemFiles, rangeLines } = require('./run-review-span.cjs');
+const { changedSince, dispatchClaims, goneLine, itemFiles, rangeLines, splitGone } = require('./run-review-span.cjs');
 
 const { builtBy, hostActor, nextActor, nextLine } = ladder;
 
@@ -149,17 +149,17 @@ function lensDispatch(tree, context, which, span, proof) {
   const own = named && !previous && proof.paths.length > 0;
   const whole = quality && !previous && Boolean(item.review);
   const start = own ? proof.from : whole ? forkPoint(tree, config, intent) : span.from;
-  const read = own ? proof.paths : whole ? itemFiles(context) : span.paths;
   const range = `${short(tree, start)}..${short(tree, 'HEAD')}`;
+  // A path the range deleted is gone, never among the paths the reviewer copies into its files.
+  const { paths, gone } = splitGone(tree, start, own ? proof.paths : whole ? itemFiles(context) : span.paths);
   const specFile = lib.readItemSpec(tree, intent.id, item.id).file;
   const spec = path.relative(tree, specFile);
   const brief = path.join(lib.SPECS_DIR, 'intents', intent.id, 'brief.md');
-  const ranged = rangeLines(tree, context, which, range, read);
-  const gone = previous ? goneFiles(tree, read) : [];
+  const ranged = rangeLines(tree, context, which, range, paths, gone);
   const lines = [...ranged.lines, ...goneLine(gone)];
-  const payload = { agent, model, range, previous, paths: read, paths_file: ranged.file, gone, spec, brief, write: rel };
+  const payload = { agent, model, range, previous, paths, paths_file: ranged.file, gone, spec, brief, write: rel };
   if (quality) {
-    const body = lens.qualityBody(tree, context, { ranged: lines, read, spec, brief });
+    const body = lens.qualityBody(tree, context, { ranged: lines, read: paths, spec, brief });
     return { payload: { ...payload, standards: body.standards, lint: body.lint }, lines: reviewerLines(config, `item ${item.id}`, previous, body.lines, 'quality') };
   }
   return {
