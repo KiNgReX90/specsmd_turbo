@@ -1,5 +1,7 @@
 # Handoff: the runner takes a local build seat for work it sends to another machine
 
+Built in `e659ab4a`, as row 0o of `inferno-build-next.md`. This file can be removed from the branch; its text stays in history.
+
 Found 2026-11-17 in Skoft_CRA, during the `run.cjs review --reviewer` mutant batches of `the-definitions-layer-owns-its-models-and-calls-nothing-above-it`. The session ran on Delta. Two batches died with no verdict. The second one hung for the full 3600 s cap.
 
 ## What is wrong

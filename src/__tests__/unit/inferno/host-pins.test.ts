@@ -10,6 +10,8 @@
  * - The reviewer carries no rule of one host and no ownership check: a host's own rules live in
  *   its standards folder, and ownership is held by the attribution in `verify-item`.
  * - The reviewer gives a criterion only a check proves that check as its mutant's test.
+ * - The orchestrator gates a red that is not the branch's work again, on the same code, with the
+ *   cause call the red gate prints.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -172,5 +174,22 @@ describe('the reviewer gives a check-only criterion its check as the test', () =
     expect(text).toContain('a criterion only a check proves takes that check, with `check: true`.');
     expect(text).toContain('name a criterion no mutant can reach in your review, for the orchestrator.');
     expect(text).not.toMatch(/or only a check proves/);
+  });
+});
+
+describe('the orchestrator gates a red that is not the branch\'s work again with its cause', () => {
+  // A finalize command red on code the branch did not break is gated again, unchanged, with the call
+  // the red gate prints (run-gate-rerun.cjs), and ship writes the cause into the merge commit.
+  const RULE = 'On a finalize command red for a cause that is not the branch\'s work, gate the unchanged code again ' +
+    'with the `--cause` call the red gate prints; ship writes that cause into the merge commit.';
+
+  it.each(['agents/orchestrator/agent.md', 'codex/skills/specsmd-inferno/references/procedure.md'])('%s says when to gate again with a cause', (rel) => {
+    expect(read(rel)).toContain(RULE);
+  });
+
+  it('the red gate prints that call, and the runner takes it', () => {
+    expect(USAGE).toContain('node run.cjs gate --detach --cause "<why>" --by <who> [--tree <dir>]');
+    const rerun = readFileSync(path.join(SCRIPTS, 'run-gate-rerun.cjs'), 'utf8');
+    expect(rerun).toContain('if this red is not this branch\'s work, gate the same code again with its cause: ${gateCauseCall(tree)}');
   });
 });

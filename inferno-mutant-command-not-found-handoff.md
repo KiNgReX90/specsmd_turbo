@@ -1,5 +1,7 @@
 # Handoff: a mutant test whose command is missing on the wrapper's tree reads "no test summary", once per mutant
 
+Built in `17490143` and `d3c0ee95`, as row 0s of `inferno-build-next.md`. This file can be removed from the branch; its text stays in history.
+
 Found 2026-11-17 in Skoft_CRA, in the review of the item `spl-the-light-ground-is-the-spectrum-field` of the intent `the-public-sites-light-theme-is-spectrum-on-every-page`, run from Delta. Four mutants of four read no verdict, and the review said nothing about why that a reader could act on.
 
 ## What happened, and which part is the host's

@@ -1,5 +1,7 @@
 # Handoff: a gate run again after a red finalize command records nowhere why, and the red run's log goes at ship
 
+Built in `7fdf4b8b`, `a0eb164b` and `f6ad13a7`, as row 0r of `inferno-build-next.md`, so its last section, "Until it is built", no longer applies. This file can be removed from the branch; its text stays in history.
+
 Found 2026-11-17 in Skoft_CRA, at the ship of the intent `the-definitions-layer-owns-its-models-and-calls-nothing-above-it` (shipped as `c9f5f0114`). Its final gate was red once on `npm run test:definitions`, on the flow's own test of row 0q, and green on the next gate of the same tree.
 
 ## What is wrong

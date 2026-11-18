@@ -1,5 +1,7 @@
 # Handoff: the test of a refused grant compares the stat index, which fills in once the files are two seconds old
 
+Built in `7b3df6ef`, as row 0q of `inferno-build-next.md`. This file can be removed from the branch; its text stays in history.
+
 Found 2026-11-17 in Skoft_CRA, in `npm run test:definitions` of the final gate of the intent `the-definitions-layer-owns-its-models-and-calls-nothing-above-it`, run on Beta. One red in 1765 tests. It turned the gate red, and one more gate of the same tree was green.
 
 ## What is wrong
