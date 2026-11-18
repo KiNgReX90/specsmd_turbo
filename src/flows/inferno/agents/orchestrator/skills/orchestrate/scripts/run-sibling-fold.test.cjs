@@ -13,6 +13,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { fixture, write } = require('./run-attribution-fixture.cjs');
+const { reword } = require('./run-fold-fixture.cjs');
 const { ITEMS, SHARED, build, commit, refused, said, verifyFrom } = require('./run-sibling-fixture.cjs');
 
 /** The guide in three parts far enough apart that a change to one merges cleanly with a change to another. */
@@ -52,6 +53,17 @@ test('a fold that changed the shared file, then a sibling\'s commit, is explaine
   f.moveBase(SHARED, guide(3, 0, 0));
   f.git('merge', '-q', '--no-edit', 'main');
   const sibling = bLands(f, 3);
+  const result = f.verify('a');
+  assert.equal(result.code, 0, result.out);
+  assert.deepEqual(result.data.dispatches[0].siblings, [{ file: SHARED, items: ['b'], commit: sibling, from: landed }]);
+});
+
+test('a sibling\'s commit, then a fold of a local base rewritten to the same patch since, is explained whole', (t) => {
+  const { f, landed } = folding(t);
+  const sibling = bLands(f, 0);
+  f.moveBase(SHARED, guide(3, 0, 0));
+  f.git('merge', '-q', '--no-edit', 'main');
+  reword(f);
   const result = f.verify('a');
   assert.equal(result.code, 0, result.out);
   assert.deepEqual(result.data.dispatches[0].siblings, [{ file: SHARED, items: ['b'], commit: sibling, from: landed }]);

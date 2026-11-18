@@ -130,3 +130,20 @@ test('a line of the base tip is followed into the tree past insertions, deletion
   const hunks = hunksOf('@@ -2,0 +3,2 @@\n+a\n+b\n@@ -5 +7,0 @@\n-c\n@@ -8,2 +9 @@\n-d\n-e\n+f\n');
   assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((line) => carried(hunks, line)), [1, 2, 5, 6, null, 7, 8, null, null, 10]);
 });
+
+test('a binary file the base took from the item and then changed alone asks no new dispatch', (t) => {
+  const f = fixture(t, { a: ['logo.bin'] });
+  const bin = (byte) => Buffer.from([0, byte, 0, byte]);
+  f.moveBase('logo.bin', bin(1));
+  f.git('merge', '-q', '--ff-only', 'main');
+  const dispatch = f.start('--item', 'a');
+  f.write('logo.bin', bin(2));
+  f.accepted(dispatch, ['logo.bin']);
+  f.land('logo.bin');
+  f.moveBase('logo.bin', bin(2));
+  f.git('merge', '-q', '--no-edit', 'main');
+  f.moveBase('logo.bin', bin(3));
+  f.git('merge', '-q', '--no-edit', 'main');
+  const result = f.verify('a');
+  assert.equal(result.code, 0, result.out);
+});

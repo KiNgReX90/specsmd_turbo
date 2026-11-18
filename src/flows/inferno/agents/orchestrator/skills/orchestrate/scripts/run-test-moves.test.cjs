@@ -13,6 +13,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { fixture } = require('./run-attribution-fixture.cjs');
+const { reword } = require('./run-fold-fixture.cjs');
 
 const JS_OLD = 'cards/balance.test.cjs';
 const JS_NEW = 'wallet/balance.test.cjs';
@@ -303,4 +304,40 @@ test('a test file the intent wrote, moved across a fold of a base that never hel
   const result = f.verify('a');
   assert.equal(result.code, 0, result.out);
   assert.deepEqual(switchedOff(result), []);
+});
+
+/** The moved file with the base's switch-off on shrinks_on_spend and a second one of the item's on that test, at line 17. */
+const TWICE = rust(...BASE_OFF).replace('#[ignore]\n// Runs on purpose with --ignored from the end-to-end suite.\nfn shrinks_on_spend',
+  '#[ignore]\n#[ignore]\n// Runs on purpose with --ignored from the end-to-end suite.\nfn shrinks_on_spend');
+
+/** Item `a` moves the Rust test file and lands; the base then switches shrinks_on_spend off at the old path and moves other.cjs. */
+function movedThenSwitchedOff(t, between = () => {}) {
+  const f = fixture(t, { a: ['src/gift_cards/', 'src/wallet/'] });
+  f.moveBase(RS_OLD, rust(...HELD));
+  f.git('merge', '-q', '--ff-only', 'main');
+  turn(f, [[RS_OLD, RS_NEW]]);
+  f.git('commit', '-qm', 'the item moved its test');
+  f.moveBase(RS_OLD, rust(...BASE_OFF));
+  between(f);
+  f.moveBase('other.cjs', 'moved on the base\n');
+  return f;
+}
+
+test('a switch-off the base brought in through both of its refs counts once, so a second one on that test is the item\'s', (t) => {
+  // Origin holds the switch-off and the local base one commit more: both refs reach the same commit.
+  const f = movedThenSwitchedOff(t, (fixtureNow) => fixtureNow.git('update-ref', 'refs/remotes/origin/main', 'main'));
+  f.git('merge', '-q', '--no-edit', 'main');
+  const result = fixed(f, TWICE);
+  assert.equal(result.code, 2, result.out);
+  assert.deepEqual(switchedOff(result), [{ file: RS_NEW, line: 17, text: '#[ignore]' }]);
+});
+
+test('a fold of a base rewritten since counts the switch-off of the commit the base kept once, so a second one on that test is the item\'s', (t) => {
+  const f = movedThenSwitchedOff(t);
+  f.git('merge', '-q', '--no-edit', 'main');
+  reword(f);
+  const result = fixed(f, TWICE);
+  assert.equal(result.code, 2, result.out);
+  assert.deepEqual(result.data.outside, []);
+  assert.deepEqual(switchedOff(result), [{ file: RS_NEW, line: 17, text: '#[ignore]' }]);
 });
