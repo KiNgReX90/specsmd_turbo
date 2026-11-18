@@ -18,10 +18,14 @@ const BY = 'release "lead" {one}\nsecond line';
 /** The cleanup a host runs: the branch's folder of the flow's cache, and nothing else of it. */
 const CLEANUP = 'rm -rf "$XDG_CACHE_HOME/specsmd-inferno/$(basename "$PWD")/$INFERNO_BRANCH"\necho cleaned\n';
 
-/** A repo whose main carries the flaky command, red while the mode file outside the tree says so, and the host cleanup when `cleanup`. */
-function hosted(cleanup = true) {
+/**
+ * A repo whose main carries the flaky command, red while the mode file outside the tree says so,
+ * the host cleanup when `cleanup`, and the command scoped to `src/**` when `scoped`.
+ */
+function hosted(cleanup = true, scoped = false) {
   const config = CONFIG.replace("    - echo always\n", `    - ${FLAKY}\n`)
-    .replace("verification:\n", `verification:\n${cleanup ? '  ship_cleanup: "bash ship-cleanup.sh"\n' : ""}`);
+    .replace("verification:\n", `verification:\n${cleanup ? '  ship_cleanup: "bash ship-cleanup.sh"\n' : ""}`)
+    .replace('    "echo scoped": ["docs/**"]\n', `    "echo scoped": ["docs/**"]\n${scoped ? `    "${FLAKY}": ["src/**"]\n` : ""}`);
   const fixture = repo({ config });
   fixture.mode = path.join(fixture.dir, "mode");
   write(fixture.root, "flaky.cjs", `const fs = require("node:fs");\nconst mode = ${JSON.stringify(fixture.mode)};\n` +
@@ -145,6 +149,42 @@ test("a later commit makes new code: its green gate carries no cause and ship wr
   const gate = run(fixture, ["gate", "--tree", tree]);
   assert.equal(gate.code, 0, gate.out + gate.err);
   assert.doesNotMatch(gate.out, /^RERUN /m);
+  const shipped = run(fixture, ["ship", "alpha", "--tree", tree]);
+  assert.equal(shipped.code, 0, shipped.out + shipped.err);
+  assert.deepEqual(exceptionLines(fixture), []);
+  assert.equal(fs.existsSync(evidence(fixture)), false);
+});
+
+// The cause sits beside the proof the rerun's green minted, so it lives as long as that green: a
+// commit outside a scoped command's scope keeps both, and one inside it makes the command run again.
+test("a commit outside a scoped command's scope keeps the green its rerun minted, and with it the cause, the line and the kept log", () => {
+  const fixture = hosted(true, true);
+  const { tree } = rerun(fixture);
+  write(tree, "docs/b.md", "more docs\n");
+  git(tree, ["commit", "-qam", "docs"]);
+  const gate = run(fixture, ["gate", "--tree", tree]);
+  assert.equal(gate.code, 0, gate.out + gate.err);
+  assert.match(gate.out, /^GREEN \d+s node flaky\.cjs \(unchanged since /m);
+  assert.match(gate.out, new RegExp(`^RERUN node flaky\\.cjs: red in gate-\\S+, cause by `, "m"));
+  const payload = JSON.parse(run(fixture, ["gate", "--tree", tree, "--json"]).out);
+  assert.deepEqual(payload.rerun.map((record) => [record.command, record.cause, record.by]), [[FLAKY, CAUSE, BY]]);
+  const shipped = run(fixture, ["ship", "alpha", "--tree", tree]);
+  assert.equal(shipped.code, 0, shipped.out + shipped.err);
+  const record = shippedRecord(fixture);
+  assert.equal(record.cause, CAUSE);
+  assert.match(fs.readFileSync(path.join(cacheOf(fixture), record.log), "utf8"), /1 failed/);
+});
+
+test("a commit inside a scoped command's scope runs it again: that gate carries no cause and ship writes no line", () => {
+  const fixture = hosted(true, true);
+  const { tree } = rerun(fixture);
+  write(tree, "src/b.ts", "export const b = 3;\n");
+  git(tree, ["commit", "-qam", "more work"]);
+  const gate = run(fixture, ["gate", "--tree", tree, "--json"]);
+  assert.equal(gate.code, 0, gate.out + gate.err);
+  const payload = JSON.parse(gate.out);
+  assert.equal(payload.results.find((entry) => entry.command === FLAKY).result, "pass");
+  assert.equal("rerun" in payload, false);
   const shipped = run(fixture, ["ship", "alpha", "--tree", tree]);
   assert.equal(shipped.code, 0, shipped.out + shipped.err);
   assert.deepEqual(exceptionLines(fixture), []);
