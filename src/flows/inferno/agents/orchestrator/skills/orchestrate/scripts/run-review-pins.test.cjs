@@ -185,9 +185,13 @@ test("an item review's checked pin counts at the intent review, and stops counti
   assert.equal(refused.code, 2, shown(refused));
   assert.match(refused.err, /a-one owes a caught mutant or a checked pin for criteria 2 "a2 reads two"/);
 
-  fs.rmSync(path.join(tree, INTENT_REVIEW));
   write(tree, 'src/notice.html', COPY['src/notice.html']);
   git(tree, ['commit', '-qam', 'the copy is back']);
+  // The review sent back read the tree before that commit, so its record asks for a fresh dispatch.
+  const moved = run(fixture, ['review', '--tree', tree, '--reviewer', 'rev-1']);
+  assert.equal(moved.code, 3, shown(moved));
+  assert.match(moved.out, /the code moved since the dispatch at [0-9a-f]{7}/);
+  fs.rmSync(path.join(tree, INTENT_REVIEW));
   const clean = intentReview(fixture, tree, 'verdict: clean\n');
   assert.equal(clean.code, 0, shown(clean));
 });
