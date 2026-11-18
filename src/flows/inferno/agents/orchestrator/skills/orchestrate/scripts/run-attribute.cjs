@@ -15,6 +15,7 @@ const dispatch = require('./run-dispatch.cjs');
 const { foldRanges, foldedAlone } = require('./run-fold.cjs');
 const { grantedPaths } = require('./run-grant.cjs');
 const { ownershipOverlaps, unexplainedChanges } = require('./run-peers.cjs');
+const { siblingCommits, siblingLines } = require('./run-sibling.cjs');
 
 const { RunError } = lib;
 const refuse = dispatch.refuse;
@@ -78,7 +79,9 @@ function newlyHidden(tree, before, now) {
  * brought in is the base's. Any other commit since the baseline, a sibling's landing or a
  * builder's own, counts like an uncommitted change. `options.open` are the records still running
  * beside the item, each claiming what its frozen ownership covers. A path the orchestrator
- * granted the dispatch (run-grant.cjs) is the item's as if its spec listed it.
+ * granted the dispatch (run-grant.cjs) is the item's as if its spec listed it. Accepted bytes a
+ * sibling's commits changed since (run-sibling.cjs) are that sibling's, `siblings` names those
+ * commits, and the sibling's run after the accept is no overlap at that path.
  */
 function verifyDispatch(tree, record, specEditable, options = {}) {
   dispatch.validateDispatch(tree, record);
@@ -95,15 +98,22 @@ function verifyDispatch(tree, record, specEditable, options = {}) {
     throw refuse(`${dispatch.excludeFile(tree)} hides ${hidden.slice(0, 5).join(', ')}, new or changed since the dispatch baseline: ` +
       'make it visible to git, then verify again');
   }
+  const siblings = [];
   for (const file of own.claimed) {
     if (!dispatch.same(snapshot, record.acceptedSnapshot, file) && !foldedAlone(tree, options.base, record.acceptedSnapshot, snapshot, file)) {
-      throw refuse(`accepted dispatch bytes changed at ${file}: run dispatch-log before a correction resumes the builder, ` +
-        'then accept-dispatch its result');
+      const theirs = siblingCommits(tree, record, file, options.base);
+      if (!theirs) {
+        throw refuse(`accepted dispatch bytes changed at ${file}: run dispatch-log before a correction resumes the builder, ` +
+          'then accept-dispatch its result');
+      }
+      siblings.push(...theirs);
     }
   }
+  const after = (run, file) => run.start > record.acceptedSnapshot.seq &&
+    siblings.some((entry) => entry.file === file && entry.items.some((id) => dispatch.itemsOf(run.peer).includes(id)));
   const folded = foldedSince(tree, own.before.head_sha, options.base);
   const peers = options.peers || dispatch.currentRecords(tree).filter((entry) => entry.phase === 'accepted');
-  const flagged = unexplainedChanges(tree, own, editable, peers, snapshot, folded, options.open || []);
+  const flagged = unexplainedChanges(tree, own, editable, peers, snapshot, folded, options.open || [], after);
   const owned = (file) => lib.ownedBy(file, editable, tree) && lib.ownedBy(file, record.assignment.ownership.editable, tree);
   const outside = own.claimed.filter((file) => !owned(file));
   const unreported = [];
@@ -116,6 +126,7 @@ function verifyDispatch(tree, record, specEditable, options = {}) {
     outside: [...new Set(outside)].sort(),
     unreported: unreported.sort(),
     unclaimed: [...flagged].sort(),
+    siblings,
   };
 }
 
@@ -202,6 +213,7 @@ function attribute(tree, items, options) {
   const outside = new Set();
   const unreported = new Set();
   const attributed = [];
+  const lines = [];
   for (const record of records.values()) {
     const ids = dispatch.itemsOf(record);
     const editable = editableOf(tree, record.assignment.intent, ids);
@@ -213,9 +225,11 @@ function attribute(tree, items, options) {
     if (open.length > 0 && result.unclaimed.some((file) => !ledger(file))) throw stillOpen(open[0]);
     for (const file of result.outside) if (!ledger(file)) outside.add(file);
     for (const file of result.unreported) if (!ledger(file)) unreported.add(file);
-    attributed.push({ items: ids, dispatch_id: result.dispatch_id, since: result.since, changed: result.changed, granted: grantedPaths(record) });
+    attributed.push({ items: ids, dispatch_id: result.dispatch_id, since: result.since, changed: result.changed, granted: grantedPaths(record),
+      siblings: result.siblings });
+    lines.push(...siblingLines(tree, record, result.siblings));
   }
-  return { since: attributed[0].since, outside: [...outside].sort(), unreported: [...unreported].sort(), attributed };
+  return { since: attributed[0].since, outside: [...outside].sort(), unreported: [...unreported].sort(), attributed, lines };
 }
 
 module.exports = { attribute, openDispatches, verifyDispatch };

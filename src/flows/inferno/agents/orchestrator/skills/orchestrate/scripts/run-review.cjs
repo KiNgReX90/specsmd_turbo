@@ -34,6 +34,7 @@ const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
 const { criteriaLines } = require('./run-criterion-says.cjs');
 const { dirtyFiles } = require('./run-dirt.cjs');
 const { previousReview } = require('./run-review-delta.cjs');
+const { otherItemCommit } = require('./run-sibling.cjs');
 const ladder = require('./run-review-ladder.cjs');
 const lens = require('./run-review-quality.cjs');
 const { changedSince, dispatchClaims, goneFiles, goneLine, itemFiles, rangeLines } = require('./run-review-span.cjs');
@@ -345,6 +346,8 @@ function step(tree, context, { ledger, exists, pending, current }) {
   const from = item.review_commit || forkPoint(tree, config, intent);
   if (item.review === 'fix' && item.review_weight === 'minor' && touched.length > 0) {
     const unlisted = touched.filter((file) => !current.files.includes(file));
+    const other = otherItemCommit(tree, item.id, item.review_commit, touched);
+    if (other) return owed(tree, context, other, from, paths);
     if (unlisted.length === 0) return settle(tree, context, ledger, current, touched);
     return owed(tree, context, `the correction of the minor findings touches ${unlisted.join(', ')}, which the review does not list`, from, paths);
   }
