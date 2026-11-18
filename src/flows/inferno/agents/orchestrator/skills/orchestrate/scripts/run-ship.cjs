@@ -126,11 +126,14 @@ function ship(intentId, options) {
   // The lane reds accepted as intermittent, refused before anything merges once the base holds two accepts of a test.
   const exceptions = shipExceptions(primary, base, intermittentHeld(tree, lib.readConfig(tree, options.config), options.config));
   // A finalize command gated again on the code it was red on, with its cause: its line, its red log kept outside the folder the cleanup removes.
-  exceptions.push(...shipReruns(primary, base, tree, options.config, out));
+  const reruns = shipReruns(primary, base, tree, options.config, out);
+  exceptions.push(...reruns.lines);
 
   // (3) Merge, from the primary checkout.
   const tip = lib.git(tree, ['rev-parse', 'HEAD']);
   lib.git(primary, ['merge', '--no-ff', '--autostash', '-m', `Merge branch '${branch}'`, ...exceptions.flatMap((line) => ['-m', line]), branch]);
+  // The merge commit carries each rerun's line now, so its record is spent: no later branch of the same name ships it twice.
+  reruns.spend();
   const sha = lib.git(primary, ['rev-parse', '--short', 'HEAD']);
   out.push(`merged ${branch} into ${base} as ${sha}`);
 
