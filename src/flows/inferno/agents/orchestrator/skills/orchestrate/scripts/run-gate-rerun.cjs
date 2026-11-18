@@ -16,9 +16,13 @@
  * A rerun takes `--cause "<why>" --by <who>`; any other gate refuses them, and the cap a lane accept
  * has refuses them once the base holds two of the command since a commit named its fix. Without
  * them it runs and says what its green loses. A red rerun keeps the red verdict, adding its own red,
- * so the gate after it is a rerun again. A green one writes its cause beside each red command's
- * proof (`<proof>.rerun`), bound to the code tree hash and the branch: every green gate of that code
- * shows it, and ship reads it from there, never from the operator's words at ship time.
+ * so the gate after it is a rerun again. A green one writes its cause beside the proof each red
+ * command's green minted (`<proof>.rerun`), bound to that proof and the branch: it lives as long as
+ * that green, which a commit outside a scoped command's scope keeps and one inside it replaces. Every
+ * gate that reads that green shows the cause, and ship reads it from there, never from the operator's
+ * words at ship time. Whether a gate is a rerun stays decided by the code tree hash. The record
+ * ends once the merge commit that carries its line is written, so no later branch of the same name
+ * that reads the same green ships it twice.
  *
  * No reader of the flow takes a test name from a log, so the command stands in for the tests its
  * red log names, and `Fixes-intermittent: <command>` lifts its cap. Ship writes one line per cause
@@ -111,12 +115,15 @@ function detachRerun(tree, config, options) {
   }
 }
 
-/** Each finalize command's rerun record bound to the code `hash` names on this branch: the causes that code holds. */
-function heldReruns(tree, config, selected, hash) {
+/** Where the rerun record of `command` sits: beside its proof as the tree stands. */
+const recordFile = (tree, config, selected, command) => `${proofs.commandProof(tree, config, selected, command).file}${RECORD}`;
+
+/** Each finalize command's rerun record beside its proof as it stands, from this branch: the causes the greens it reads hold. */
+function heldReruns(tree, config, selected) {
   const branch = lib.currentBranch(tree);
   return config.verification.finalize
-    .map((command) => jobs.readJson(`${proofs.commandProof(tree, config, selected, command).file}${RECORD}`))
-    .filter((record) => record && record.hash === hash && record.branch === branch);
+    .map((command) => jobs.readJson(recordFile(tree, config, selected, command)))
+    .filter((record) => record && record.branch === branch);
 }
 
 /**
@@ -134,13 +141,13 @@ function settle(tree, config, selected, again, { hash, dir, failed, green }) {
   }
   if (!green) return { notes: [], payload: {} };
   const branch = lib.currentBranch(tree);
-  for (const red of again.cause ? again.reds : []) {
-    save(`${proofs.commandProof(tree, config, selected, red.command).file}${RECORD}`, {
+  for (const red of again.reds || []) {
+    save(recordFile(tree, config, selected, red.command), {
       hash, branch, command: red.command, tests: [red.command], cause: again.cause, by: again.by, run: path.basename(red.dir), dir: red.dir, log: red.log, stamp: new Date().toISOString(),
     });
   }
   save(file, { hash });
-  const held = heldReruns(tree, config, selected, hash);
+  const held = heldReruns(tree, config, selected);
   return {
     notes: held.map((record) => `RERUN ${record.command}: red in ${record.run}, cause by ${record.by}: ${JSON.stringify(record.cause)}`),
     payload: held.length > 0 ? { rerun: held } : {},
@@ -164,17 +171,20 @@ function keep(primary, branch, record, out) {
 
 /**
  * Ship, before the merge commit is written and before any cleanup runs: the exception line of each
- * cause the shipped code holds, every one refused first once the base holds its limit, then each
- * red log kept where the line names it.
+ * cause the shipped greens hold, every one refused first once the base holds its limit, then each
+ * red log kept where the line names it. `spend` removes those records, and only them, once the merge
+ * commit is written; a record something else already removed by then stops nothing, as the merge stands.
  */
 function shipReruns(primary, base, tree, selected, out) {
   const config = lib.readConfig(tree, selected);
-  const held = heldReruns(tree, config, selected, lib.codeTreeHash(tree));
+  const held = heldReruns(tree, config, selected);
   for (const record of held) repeats(primary, base, record.tests, 'ship again');
   const branch = lib.currentBranch(tree);
-  return held.map((record) => rerunLine({
+  const lines = held.map((record) => rerunLine({
     command: record.command, tests: record.tests, cause: record.cause, by: record.by, run: record.run, log: keep(primary, branch, record, out),
   }));
+  const files = held.map((record) => recordFile(tree, config, selected, record.command));
+  return { lines, spend: () => files.forEach((file) => fs.rmSync(file, { force: true })) };
 }
 
 module.exports = { causeUsage, detachRerun, pend, rerunOf, settle, shipReruns };
