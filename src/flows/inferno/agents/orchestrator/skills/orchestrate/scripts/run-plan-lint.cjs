@@ -50,7 +50,7 @@ const { isComplete, isDeferred } = require('./state-transition.cjs');
 const { acceptanceCriteria } = require('./run-mutant-coverage.cjs');
 const { gateHeld, gateMark } = require('./run-criterion-marks.cjs');
 const { MARK, NEAR } = require('./run-after-ship.cjs');
-const { editableReader, pathErrors } = require('./run-manifest-paths.cjs');
+const { pathCheck } = require('./run-manifest-paths.cjs');
 const { provesFindings } = require('./run-cases.cjs');
 
 const ITEM_SECTIONS = [
@@ -389,8 +389,8 @@ function lintPlan(tree, intent, configOf) {
     manifests.set(item.id, manifest);
   }
   // The frontier's existence check, at plan time: a cited path exists or an open item it depends on creates it.
-  const editableOf = editableReader(tree, intent.id, editable);
-  for (const [id, manifest] of manifests) findings.push(...pathErrors(tree, { id, context: manifest.context, reads: manifest.reads }, intent.items, editableOf));
+  const pathErrors = pathCheck(tree, intent);
+  for (const [id, manifest] of manifests) findings.push(...pathErrors({ id, context: manifest.context, reads: manifest.reads }));
   // A completed item whose spec is gone delivers what the Item Map says it does.
   for (const [id, ids] of delivered) {
     if (ids === undefined) {
