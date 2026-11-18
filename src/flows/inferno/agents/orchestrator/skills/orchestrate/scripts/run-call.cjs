@@ -67,6 +67,9 @@ const gateStartCall = (tree) => runCall('gate', tree, null, ['--detach']);
 /** Start the gate after the tree's running lanes are proven stopped. */
 const gateSupersedeCall = (tree) => runCall('gate', tree, null, ['--detach', '--supersede']);
 
+/** Start the gate again on the code a finalize command was red on, with the red's cause and its signer. */
+const gateCauseCall = (tree) => runCall('gate', tree, null, ['--detach', '--cause', '"<why>"', '--by', '<who>']);
+
 /** Wait on the started gate and its lanes, by the runner's own path. */
 const gateWaitCall = (tree) => nodeCall('gate', tree, null, ['--wait']);
 
@@ -169,4 +172,5 @@ module.exports = {
   RUNNER, RUNNER_PATH, caller, blockIntentCall, chainDispatchCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateAgainCall, integrateCall, intentRecordCall,
   intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, laneIntermittentCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
   verifyItemCall,
+  gateCauseCall,
 };
