@@ -181,7 +181,7 @@ function mutant(hs, e, prefix) {
   let verdict = sent ? { caught: null, why: `the send of ${sent.rel} into the session failed (exit ${sent.code} -> ${sent.log})`, code: sent.code, log: sent.log } : null;
   if (!verdict) {
     const run = runIn(hs, e, prefix, `session-${e.k}`);
-    const read = verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks || [] });
+    const read = verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks || [], config: hs.config });
     verdict = { ...read, code: run.code, log: run.log, signal: run.signal };
   }
   verdicts.set(e.k, verdict);
