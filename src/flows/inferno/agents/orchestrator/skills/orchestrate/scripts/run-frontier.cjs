@@ -10,9 +10,6 @@
  * already named for it.
  */
 
-const fs = require('fs');
-const path = require('path');
-
 const lib = require('./run-lib.cjs');
 const scheduler = require('./team-scheduler.cjs');
 const ownership = require('./run-ownership.cjs');
@@ -27,9 +24,8 @@ const { LAST_MISS, actorLabel, hostActor, isBlocked, nextActor, nextLine, tierOf
 const { integrateCall, itemReviewCall } = require('./run-call.cjs');
 const { waitFloorRefusal } = require('./run-codex-wait.cjs');
 const { RunError } = require('./run-error.cjs');
-const { reviewPath } = require('./run-review-file.cjs');
 const { frontierFindings } = require('./run-plan-lint.cjs');
-const { editableReader, pathErrors } = require('./run-manifest-paths.cjs');
+const { pathCheck, startedItems } = require('./run-manifest-paths.cjs');
 
 /**
  * The hour the proof rule landed. Every ledger written before it carries completed items and
@@ -126,39 +122,19 @@ function completedManifests(tree, intent) {
 }
 
 /**
- * The items a builder already took: logged by dispatch-log, or reviewed, recorded or only
- * written. Their diagnosis probe measured the tree before their own fix, so it is stale by
- * design. A tree outside git keeps no dispatch log, so there only the review counts.
- */
-function startedItems(tree, intentId, items) {
-  let logged = [];
-  try {
-    const log = path.join(lib.cacheDir(tree), 'dispatch', `${intentId}.log`);
-    if (fs.existsSync(log)) {
-      logged = fs.readFileSync(log, 'utf8').split('\n').map((line) => line.split('\t'))
-        .filter((fields) => fields[1] === intentId).map((fields) => fields[2]);
-    }
-  } catch (error) {
-    if (error.code !== 'NO_REPO') throw error;
-  }
-  const started = (item) => Boolean(item.review) || logged.includes(item.id) ||
-    fs.existsSync(path.join(tree, reviewPath(intentId, item.id)));
-  return new Set(items.filter(started).map((item) => item.id));
-}
-
-/**
- * The contract check, plus the one team-scheduler cannot make: the paths have to exist, or be
- * owned by an item this one depends on that has not completed yet (run-manifest-paths.cjs).
+ * The contract check, plus the one team-scheduler cannot make: the paths of an item no builder
+ * took yet have to exist, or be owned by an item this one depends on that has not completed yet
+ * (run-manifest-paths.cjs).
  */
 function contractErrors(tree, intent, items) {
   const errors = [];
-  const editableOf = editableReader(tree, intent.id, items.map((item) => [item.id, [].concat(item.ownership.editable || [])]));
+  const pathErrors = pathCheck(tree, intent);
   for (const item of items) {
     errors.push(...scheduler.validateWorkItem(item).errors);
     errors.push(...probes.shapeErrors(item.id, item.probes));
     errors.push(...probes.diagnosisErrors(item));
     errors.push(...writes.writesErrors(item.id, item.writes));
-    errors.push(...pathErrors(tree, item, intent.items, editableOf));
+    errors.push(...pathErrors(item));
   }
   return errors;
 }
@@ -201,6 +177,7 @@ function frontier(intentId, options) {
   // plan asserted a pixel cause it had never seen (2026-09-09). Only an item nobody dispatched
   // or reviewed is about to be built on it. A stale probe holds its own item: on 2026-11-10 the
   // stale probes of three built items stopped the whole frontier and hid the two truly ready.
+  // The existence check of an item's paths asks the same startedItems (run-manifest-paths.cjs).
   const started = startedItems(tree, intent.id, open);
   const stale = [];
   const ready = open.filter((item) => {

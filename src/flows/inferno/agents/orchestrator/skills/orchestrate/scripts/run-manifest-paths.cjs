@@ -9,7 +9,15 @@
  * item starts. An item's own editable path is no exception: it reads what exists, and names the
  * nearest real directory and its pattern file for the rest.
  *
- * `run.cjs frontier` (run-frontier.cjs contractErrors) and plan-lint make the same check here.
+ * The check holds an item until a builder took it (startedItems). From its dispatch to its
+ * integrate the item is pending and its tree is the tree after its own build: an item that empties
+ * a file reads it first and owns it, so its plan names it, and once its commit deleted the file
+ * that plan is still right. Checked then, it stopped every other ready item of the intent
+ * (2026-11-18). Only the existence is lifted: the shape of the manifest is checked by its callers
+ * for every open item, started or not.
+ *
+ * `run.cjs frontier` (run-frontier.cjs contractErrors) and plan-lint make the same check here, and
+ * the frontier's probe replay asks the same startedItems.
  */
 
 const fs = require('fs');
@@ -17,6 +25,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const { isComplete, isDeferred } = require('./state-transition.cjs');
+const { reviewPath } = require('./run-review-file.cjs');
 
 /** Every ledger item `id` depends on through depends_on, directly or through others. */
 function dependencies(id, items, seen = new Set()) {
@@ -30,11 +39,11 @@ function dependencies(id, items, seen = new Set()) {
 }
 
 /**
- * An item's ownership.editable: `known` holds the open items' lists, and any other item's spec
- * is read once, as the tree holds it. A spec that is gone owns nothing.
+ * An item's ownership.editable, read once from its spec as the tree holds it, and only when a
+ * cited path is missing. A spec that is gone owns nothing.
  */
-function editableReader(tree, intentId, known) {
-  const read = new Map(known);
+function editableReader(tree, intentId) {
+  const read = new Map();
   return (id) => {
     if (!read.has(id)) {
       let editable = [];
@@ -76,4 +85,35 @@ function pathErrors(tree, item, ledgerItems, editableOf) {
   return errors;
 }
 
-module.exports = { dependencies, editableReader, pathErrors };
+/**
+ * The items a builder already took: a builder line in the intent's dispatch log, or a review,
+ * recorded or only written. An oracle ask is no dispatch, as for defer-item (state-defer-work.cjs):
+ * an oracle edits nothing. A tree outside git keeps no dispatch log, so there only the review counts.
+ */
+function startedItems(tree, intentId, items) {
+  let logged = [];
+  try {
+    const log = path.join(lib.cacheDir(tree), 'dispatch', `${intentId}.log`);
+    if (fs.existsSync(log)) {
+      logged = fs.readFileSync(log, 'utf8').split('\n').map((line) => line.split('\t'))
+        .filter((fields) => fields[3] !== 'oracle').map((fields) => fields[2]);
+    }
+  } catch (error) {
+    if (error.code !== 'NO_REPO') throw error;
+  }
+  const started = (item) => Boolean(item.review) || logged.includes(item.id) ||
+    fs.existsSync(path.join(tree, reviewPath(intentId, item.id)));
+  return new Set(items.filter(started).map((item) => item.id));
+}
+
+/**
+ * The existence check of one intent's open items, as plan-lint and the frontier make it: the
+ * returned function gives one item's errors, none for an item a builder already took.
+ */
+function pathCheck(tree, intent) {
+  const editableOf = editableReader(tree, intent.id);
+  const started = startedItems(tree, intent.id, intent.items);
+  return (item) => (started.has(item.id) ? [] : pathErrors(tree, item, intent.items, editableOf));
+}
+
+module.exports = { pathCheck, startedItems };
