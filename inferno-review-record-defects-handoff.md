@@ -1,5 +1,7 @@
 # Handoff: four defects met while orchestrating one intent's item reviews
 
+Defects 3 and 5 are built and gone from here: 3 in `1248629b`, as section 15 of `inferno-0.1.84-run-defects-handoff.md`, and 5 in `96c75c27`, as section 20, where a check criterion takes its check with `check: true`. Their text is in this branch's history at `1aa836a2`. Defects 1, 2 and 4 are open, as rows 0v, 0w and 0x of `inferno-build-next.md`.
+
 Found 2026-11-16 in Skoft_CRA, orchestrating `the-advisory-rules-move-down-and-the-feed-memory-moves-up` (four move items, every one of them deletes or renames files). Each was worked around in the run; none blocked it.
 
 ## 1. The review dispatch lists deleted paths, and the record refuses them
@@ -34,23 +36,6 @@ The record stamps `review_commit` with HEAD at record time, not with the commit 
 
 Record the commit the review read (the end of its range, which the dispatch knows) as `review_commit`, and keep HEAD only as the record's own commit. Pin it with a case where a commit on the item's paths lands between the dispatch and the record.
 
-## 3. verify-item's proof omits a committed rename's source, so it always reads stale
-
-### What is wrong
-
-`verify-item` builds the proof's paths from `changedPaths` (`run-gate.cjs:56-60`, `git diff --name-only <since>`), which detects renames, so a committed rename lists only its destination. `proofAtHead` (`run-item-proof.cjs:154`) lists changed paths with `--no-renames`, which names the deleted source too. Once the item's rename is committed, `changed.some((entry) => !paths.includes(entry))` is true on every verify, and the settle of a minor finding refuses forever: `settle owed ... but the item changed since its verify-item proof`.
-
-It only shows on a verify run after the rename is committed. The first verify of an item runs over uncommitted work, where the source is a plain deletion and the destination untracked, so it passes.
-
-### Evidence
-
-- `arf-the-exploitation-catalogue-moves-into-the-watch`, after its minor correction ee2311e98: `git diff --name-status 31df31092 HEAD` shows `R066 src/lib/wire/types/storage-sbom-catalogue-refresh.ts -> vuln-feed-memory-catalogue.ts`. A fresh verify-item at HEAD wrote 25 paths without the source; `proofAtHead` reported `stale`, the only path outside the proof being that source.
-- Worked around by running verify-item with `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=diff.renames GIT_CONFIG_VALUE_0=false`; the settle then went through.
-
-### How to fix
-
-Add `--no-renames` to the diff in `changedPaths` (or in `itemFiles`, `run-item-proof.cjs:308`), so both sides read the same path set. Pin it with a proof taken after a committed rename that `proofAtHead` reads as current.
-
 ## 4. The review record's mutant batch runs in the foreground and outlives the tool cap
 
 ### What is wrong
@@ -65,13 +50,3 @@ Add `--no-renames` to the diff in `changedPaths` (or in `itemFiles`, `run-item-p
 ### How to fix
 
 Give the record the gate's shape (`--detach` starts the batch as its own process, `--wait` blocks under the cap), or have `agent.md` say that the record runs in the background when it owes mutants.
-
-## 5. Reviewers do not know a check criterion can be proven by a node:test mutant
-
-### What is wrong
-
-Every item reviewer of this intent and its intent reviewer reported grep, `refs.py`, `cmp`/`diff -B` and firewall criteria as unreachable by any mutant, and left them for the orchestrator. The intent record then refused `clean` over 19 of them. The runner already accepts the way out: a mutant whose `test:` wraps the check in an inline `node --input-type=module -e 'import {test} from "node:test"; ...'`, which prints the `ℹ fail N` summary `run-mutate-verdict.cjs` reads. The intent `the-lower-layers-stop-calling-up` shipped that way the same morning (its `review.yaml:80-127`). Neither the reviewer definition nor `CHECK_HINT` (`run-mutate-verdict.cjs:61`, "end the criterion's line with (gate: <name>) instead, or have the host list the check ... under mutate.checks") names it, and a gate mark cannot name a grep at all (`gateHeld`, `run-criterion-marks.cjs:55-57`: only a finalize command or a lane).
-
-### How to fix
-
-Name the inline node:test wrapper in `CHECK_HINT` and in the reviewer definition's mutant section, with one example, so a check criterion gets its mutant at the item review instead of reaching the intent record unproven.

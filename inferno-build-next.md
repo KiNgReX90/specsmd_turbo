@@ -2,14 +2,15 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURED ON THE HOST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-Nothing on this branch waits for a builder today. Version 0.1.85 holds the six items of section 1b, the ten rows of section 1c and the three rows of section 1d, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
+What waits for a builder is in section 2. Version 0.1.85 holds the six items of section 1b, the ten rows of section 1c, the three rows of section 1d and the nine sections of section 1f, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
 Where the older text went, so that nothing built reads as open:
 
 - `inferno-future-improvements.md` is gone from this branch. Of its eight items six are built or struck (sections 1b and 3). The measurement of the first is section 4, its one standing rule is under section 2, and the one idea left unbuilt is in section 5. Its text is in this branch's history at `d5d82fa1`.
-- The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build, and none is open today. Its sections 1 to 11 are in history at the same commit, and 12 to 14 at `120be9b4`.
+- The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build: 24, 25 and 26, rows 0y, 0z and 0aa. Its sections 1 to 11 are in history at the same commit, 12 to 14 at `120be9b4`, and 15 to 23 at `1aa836a2`.
+- Every other handoff file leaves the branch once all it holds is built, and until then keeps only its open defects. `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o) and `inferno-rename-proof-stale-handoff.md` (section 1f) are gone, and so are defects 3 and 5 of `inferno-review-record-defects-handoff.md`. Their text is in history at `1aa836a2`.
 - `inferno-generalization-plan.md` and `todo.md` are older backlogs that came from main. They ask nothing of whoever builds here, and what they hold is no commitment.
 
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
@@ -87,11 +88,39 @@ Built on this branch on 2026-11-17. `CHANGELOG.md` says what it does.
 
 | Row | What | Handoff | Built in |
 | --- | --- | --- | --- |
-| 0o | A test the host's wrapper carries takes no seat on this machine's build wrapper | `inferno-remote-run-wrapped-in-local-seat-handoff.md` | `e659ab4a` |
+| 0o | A test the host's wrapper carries takes no seat on this machine's build wrapper | `inferno-remote-run-wrapped-in-local-seat-handoff.md`, gone, in history at `1aa836a2` | `e659ab4a` |
 
-## 2. BUILD NOW: five rows
+That handoff file named one case it leaves as it is: an integrate or gate command a host writes out with its wrapper, with no `verification.session` whose match reaches it, still takes a local seat, since no config key says such a command is carried.
 
-A host's next finding arrives here as a row, with its section in the handoff file.
+## 1f. DONE: nine sections of the handoff file, built into 0.1.85
+
+The first host met them on 2026-11-14 and 2026-11-15, and they had no row. Built on this branch on 2026-11-16. `CHANGELOG.md` says what each one does: `a6ef039d` wrote the entries of eight and the config wizard's texts, and `f4c9caec` the entry of section 18 and the planner's texts. The handoff column names the section as it stood at `1aa836a2`.
+
+| Handoff section | What | Built in |
+| --- | --- | --- |
+| 15 | An item that moves a file with `git mv` gets a current proof | `1248629b` |
+| 16 | A rule file under `.specs-inferno/standards/` is product, not ledger | `c1a015a7` |
+| 17 | A command that reads the merge base keeps its green only at that base (`verification.base_scoped`) | `b42cc6bb`, `4e8a9a73` |
+| 18 | A criterion an integrate command proves takes a gate mark | `74f220ad` |
+| 19 | A gate mark on a completed item is held to the config | `1b779637` |
+| 20 | A mutant whose test is a plain check reads a verdict (`check: true` in its entry) | `96c75c27`, `8a2d47df` |
+| 21 | The `Tester proves:` line names case ids only, and `gate --detach` checks the cases before it starts a lane | `13327fde`, `bc4154bf` |
+| 22 | A local base that lags its origin no longer makes synced files the intent's own | `4e6d1ab0` |
+| 23 | A refusal is read only from a run's last line, and on the host's refusal exit (`verification.refused_exit`) | `e4c9a93c` |
+
+A host may set two new keys: `verification.base_scoped` lists the commands whose verdict reads the merge base, and `verification.refused_exit` names the exit its wrapper refuses with, beside `verification.refused`. A host with `verification.refused` and no `verification.refused_exit` sees one change: a matching line that is not the last one of the run is a FAIL. The release steps (row 7) ran on `32ef7f9b`, the tree that holds all nine.
+
+Three defects of handoff files that had no row are the same as two of these sections, and the same commits built them. The triage of 2026-11-18 read each in the code:
+
+| Handoff | Defect | Built in |
+| --- | --- | --- |
+| `inferno-rename-proof-stale-handoff.md`, gone | A proof over an item that renames a file is stale the moment it is written: section 15 | `1248629b` |
+| `inferno-review-record-defects-handoff.md`, defect 3 | verify-item's proof omits a committed rename's source: section 15 | `1248629b` |
+| `inferno-review-record-defects-handoff.md`, defect 5 | A reviewer does not know a check criterion can take a mutant: section 20, whose `check: true` the reviewer's texts and the runner's hint name, in place of the inline test wrapper the handoff asked for | `96c75c27` |
+
+## 2. BUILD NOW: twelve rows
+
+A host's next finding arrives here as a row, with its section in the handoff file. Rows 0u to 0aa are the open defects of two handoff files and three sections that had no row; the triage of 2026-11-18 read each in the code and found it open.
 
 | Row | What | Handoff |
 | --- | --- | --- |
@@ -100,6 +129,13 @@ A host's next finding arrives here as a row, with its section in the handoff fil
 | 0r | A gate run again after a red command on unchanged code records its cause, and ship keeps the red log | `inferno-regate-cause-not-recorded-handoff.md` |
 | 0s | A mutant test whose command is missing reads that as its reason, and the batch runs it once | `inferno-mutant-command-not-found-handoff.md` |
 | 0t | The real cargo test runs without the host's rustc wrapper, so it never starts the machine's sccache server | `inferno-cargo-test-takes-sccache-server-handoff.md` |
+| 0u | A test file an item moves keeps the switch-off it already had, and verify-item reads it against the move's source | `inferno-moved-test-switch-off-handoff.md` |
+| 0v | A path the range deleted goes under `gone` and never under `paths`, in a first review and a delta, in both lenses | `inferno-review-record-defects-handoff.md`, defect 1 |
+| 0w | The record stamps the commit its review read, not HEAD, so a correction committed before the record still owes a review | `inferno-review-record-defects-handoff.md`, defect 2 |
+| 0x | A record that owes mutants runs detached, or the orchestrator's text says to run it in the background | `inferno-review-record-defects-handoff.md`, defect 4 |
+| 0y | A count probe that prints what `shows` says and exits 1 is no drift, or plan-lint names it | `inferno-0.1.84-run-defects-handoff.md`, section 24 |
+| 0z | A sibling's commit to a file two items own gives a fresh proof and an owed review, never `DISPATCH_PROOF` | `inferno-0.1.84-run-defects-handoff.md`, section 25 |
+| 0aa | A delta reviewer whose verdict holds writes its file again, or the record accepts an unchanged clean file | `inferno-0.1.84-run-defects-handoff.md`, section 26 |
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
