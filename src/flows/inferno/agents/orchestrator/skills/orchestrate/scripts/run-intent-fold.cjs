@@ -28,28 +28,39 @@ function baseRefs(tree, base) {
   return newer ? [newer] : refs;
 }
 
-/** The diffs that name a file as the intent's own at `at`: the dirty tree for HEAD, then against the base refs. */
-function ownReads(tree, base, at) {
-  const refs = baseRefs(tree, base);
+/** The diffs that name a file as the intent's own at `at`: against the base refs, then the dirty tree for HEAD. */
+function ownReads(refs, at) {
   const dirty = at === 'HEAD'
     ? [['diff', '--name-only', '--no-renames', '-z', 'HEAD'], ['ls-files', '--others', '--exclude-standard', '-z']]
     : [];
-  return [...dirty, ...refs.map((ref) => ['diff', '--name-only', '--no-renames', '-z', `${ref}...${at}`])];
+  return [refs.map((ref) => ['diff', '--name-only', '--no-renames', '-z', `${ref}...${at}`]), dirty];
 }
+
+const names = (tree, from, to) => lib.git(tree, ['diff', '--name-only', '--no-renames', '-z', from, to]).split('\0').filter(Boolean);
 
 /**
  * The files the intent changed at `at` (HEAD with its dirty files, or a commit), its ledger
  * files included, or null when a base cannot be diffed or is the tree's own branch: then no diff
- * tells the intent's edits from a sync.
+ * tells the intent's edits from a sync. A fold of a base rewritten since holds old copies of base
+ * commits no base ref holds (run-fold.cjs): a file they changed that `at` holds as they left it
+ * is the base's.
  */
 function ownFiles(tree, base, at = 'HEAD') {
   if (!base || base === lib.currentBranch(tree)) return null;
+  const refs = baseRefs(tree, base);
+  const [against, dirty] = ownReads(refs, at);
   const own = new Set();
-  for (const args of ownReads(tree, base, at)) {
+  const add = (reads) => reads.every((args) => {
     const out = lib.git(tree, args, { tolerate: true });
-    if (out === null) return null;
-    for (const file of out.split('\0').filter(Boolean)) own.add(file);
+    for (const file of (out || '').split('\0').filter(Boolean)) own.add(file);
+    return out !== null;
+  });
+  if (!add(against)) return null;
+  for (const { held, tip } of foldRanges(tree, refs[0], base, at).filter((range) => range.merge)) {
+    const since = new Set(names(tree, tip, at));
+    for (const file of names(tree, held, tip)) if (!since.has(file)) own.delete(file);
   }
+  add(dirty);
   return own;
 }
 
