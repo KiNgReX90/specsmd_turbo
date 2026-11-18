@@ -61,6 +61,7 @@ const { baseLines, foldRanges } = require('./run-fold.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { changedPaths, treeOf } = require('./run-gate.cjs');
 const { isSwitchOff, isTestFile, parseAddedLines } = require('./run-test-files.cjs');
+const { movedSwitchOffs } = require('./run-test-moves.cjs');
 const { owedProof, proveItem } = require('./run-real-app-prove.cjs');
 const { dispatchClaims } = require('./run-review-span.cjs');
 const { runItemChecks } = require('./run-item-check.cjs');
@@ -275,11 +276,13 @@ function diffHash(tree, from, files) {
 
 /**
  * The item's diff and the tests it changed, both from one scratch index. A line one of the fold
- * `ranges` added to a test file (run-fold.cjs) is the base's and switches nothing off for the item.
+ * `ranges` added to a test file (run-fold.cjs) is the base's and switches nothing off for the item,
+ * nor does a switch-off a moved test file's source already held on the same test (run-test-moves.cjs).
  */
 function readDiff(tree, from, files, ranges = []) {
   return withScratchIndex(tree, files, (git) => {
     const tests = files.filter((file) => isTestFile(file));
+    const moved = movedSwitchOffs(git, from, files, ranges);
     const status = new Map();
     if (tests.length > 0) {
       const fields = git([...DIFF, '--name-status', '-z', from, '--', ...tests.map(literal)]).split('\0').filter(Boolean);
@@ -293,7 +296,7 @@ function readDiff(tree, from, files, ranges = []) {
       if (!letter || letter === 'D') continue;
       const off = parseAddedLines(git([...DIFF, '-U0', from, '--', literal(file)])).filter((added) => isSwitchOff(added.text, file));
       const base = off.length > 0 && ranges.length > 0 ? baseLines(git, ranges, file) : new Set();
-      for (const added of off.filter((entry) => !base.has(entry.line))) {
+      for (const added of moved(file, off.filter((entry) => !base.has(entry.line)))) {
         changed.switched_off.push({ file, line: added.line, text: added.text.trim() });
       }
     }
