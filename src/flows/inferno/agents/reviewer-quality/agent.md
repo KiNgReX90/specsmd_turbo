@@ -59,7 +59,7 @@ Write `.specs-inferno/intents/<intent>/reviews/quality/<item>.yaml`, beside the 
 ```yaml
 item: <item id>
 verdict: clean | fix
-files: [<every file the item changed>]
+files: [<every file the item changed that the tree holds>]
 findings:
   - id: Q<n>
     check: correctness | errors | security | fit | readability | cost | leftovers | rule | lint
@@ -77,7 +77,7 @@ lint:
     taken: [<the ids of the findings it gave>]
 ```
 
-`verdict: clean` only with zero findings. Only these keys: a key the schema does not hold is refused, and so is `tree:`, `commit:` or `reviewer:`, which `run.cjs` adds when it records. An empty list may be left out. No prose outside the file's fields.
+`verdict: clean` only with zero findings. Only these keys, and `read:` when the dispatch asks for it: a key the schema does not hold is refused, and so is `tree:`, `commit:` or `reviewer:`, which `run.cjs` adds when it records. An empty list may be left out. No prose outside the file's fields.
 
 ## Return
 

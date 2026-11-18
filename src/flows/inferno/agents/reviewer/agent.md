@@ -43,7 +43,7 @@ Item mode writes `.specs-inferno/intents/<intent>/reviews/<item>.yaml`:
 ```yaml
 item: <item id>
 verdict: clean | fix
-files: [<every file the item changed>]
+files: [<every file the item changed that the tree holds>]
 findings:
   - criterion: <criterion id or text>
     file: <path>
@@ -111,7 +111,7 @@ withdrawn:
     reason: <why it was a mistake>
 ```
 
-`verdict: clean` only with zero findings. Only these keys; `run.cjs` adds `tree:` and `commit:` itself. An empty list may be left out. No prose outside the file's fields.
+`verdict: clean` only with zero findings. Only these keys, and `read:` when the dispatch asks for it; `run.cjs` adds `tree:` and `commit:` itself. An empty list may be left out. No prose outside the file's fields.
 
 ## Return
 
