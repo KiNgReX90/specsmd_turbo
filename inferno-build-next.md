@@ -136,9 +136,9 @@ Row 0s: an entry that says `check: true` still reads caught under exit 126 or 12
 
 The release steps (row 7) ran on `28f9e200`, the tree that holds all five.
 
-## 2. BUILD NOW: nine rows
+## 2. BUILD NOW: ten rows
 
-A host's next finding arrives here as a row, with its section in the handoff file. Rows 0u to 0aa are the open defects of two handoff files and three sections that had no row; the triage of 2026-11-18 read each in the code and found it open. Row 0ab is the first host's finding of 2026-11-18 on row 0r as built, read in the code at `35f12380` before its install. Row 0ac is a defect the first host met in a run on 2026-11-18, on the build at `f3be640a`, read in the code at `f0f06aaf` and found unchanged there.
+A host's next finding arrives here as a row, with its section in the handoff file. Rows 0u to 0aa are the open defects of two handoff files and three sections that had no row; the triage of 2026-11-18 read each in the code and found it open. Row 0ab is the first host's finding of 2026-11-18 on row 0r as built, read in the code at `35f12380` before its install. Rows 0ac and 0ad are two defects the first host met in runs on 2026-11-18, on the build at `f3be640a`, each read in the code at `f0f06aaf` and found unchanged there.
 
 | Row | What | Handoff |
 | --- | --- | --- |
@@ -151,6 +151,7 @@ A host's next finding arrives here as a row, with its section in the handoff fil
 | 0aa | A delta reviewer whose verdict holds writes its file again, or the record accepts an unchanged clean file | `inferno-0.1.84-run-defects-handoff.md`, section 26 |
 | 0ab | A rerun's cause is counted and written under its command's name, the rest after `verification.session.match`, never the wrapped command with a tree path in it | `inferno-rerun-cap-keyed-on-wrapped-command-handoff.md` |
 | 0ac | A fold is read from what HEAD merged, so a base rewritten after the fold no longer turns the files it brought in into changes outside the item's ownership | `inferno-fold-read-from-moved-base-handoff.md` |
+| 0ad | The existence check of `context.required` and `reads` holds an item only until a builder took it, so a built item that deleted a file it had to read no longer stops the frontier | `inferno-frontier-stops-on-built-items-deleted-read-handoff.md` |
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
