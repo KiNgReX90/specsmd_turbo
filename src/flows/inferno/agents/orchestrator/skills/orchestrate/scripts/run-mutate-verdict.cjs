@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { refusal } = require('./run-check-refused.cjs');
+
 /**
  * Whether a red run caught the mistake. A mistake is caught only when its test ran and noticed it.
  * A build that failed, a file that does not parse and a run something killed never got that far,
@@ -34,6 +36,16 @@ const path = require('path');
  * is caught (run-mutate-host.cjs). An entry that says `check: true` is read by its exit code, past
  * every guard above (run-mutate-check.cjs). For any other red run with no summary, of a command that
  * starts no runner read here, the reason names the ways a check reads a verdict.
+ *
+ * A shell exits 127 for a command it could not find and 126 for one it could not execute, never
+ * for a test that noticed a mistake: the tree the test ran in lacks what it calls. Past a kill, a
+ * failed build and a parse failure, such a run reads no verdict with a reason of its own: the exit,
+ * the last line of the log's tail that names why a command could not run (else its last line), and
+ * what the host does. A failing summary or a check's finding line still reads caught, since the test
+ * ran and noticed, and so does an entry that says `check: true`: its check was green on the tree as
+ * it is, so the command is there and a 126 or 127 on the mutant is the mutant's. A run whose last
+ * line is the host's `verification.refused` line was the wrapper refusing (run-check-refused.cjs):
+ * it ran nothing, so it reads as any other red run without a summary.
  */
 
 /** Exit codes of a run whose child a signal ended: SIGINT, SIGKILL, SIGTERM. */
@@ -61,6 +73,16 @@ const RUNNER = new RegExp([
 ].join('|'));
 const CHECK_HINT = 'a plain check reads a verdict only as a batch entry that says check: true; else end the criterion\'s line ' +
   'with (gate: <name>), or have the host list the check and its finding line under mutate.checks';
+
+/** What exit 126 and 127 say about the test's command, and about the tree it ran in. */
+const MISSING = {
+  126: { said: 'could not be executed', tree: 'holds that command but cannot run it' },
+  127: { said: 'was not found', tree: 'lacks that command' },
+};
+/** The last lines of a log read for one that names why a command could not run, and the length a named line is cut to. */
+const TAIL = 20;
+const LINE_MAX = 200;
+const NAMES_FAILURE = /not found|Permission denied|cannot execute|No such file or directory/;
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -136,13 +158,37 @@ function vitestParseFailed(lines, abs) {
   return false;
 }
 
+/** The line of `text` a missing command's reason names, cut to `LINE_MAX`, or undefined when it holds none. */
+function failureLine(text) {
+  const lines = text.replace(ANSI, '').split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean);
+  const line = lines.slice(-TAIL).reverse().find((one) => NAMES_FAILURE.test(one)) || lines[lines.length - 1];
+  return line && line.length > LINE_MAX ? `${line.slice(0, LINE_MAX)}...` : line;
+}
+
+/**
+ * No verdict for a run that exited 126 or 127, with the reason, `missing` set; null for any other
+ * exit and for a refusal of the host's wrapper that `config` names. `text` is the run's log.
+ */
+function commandMissing(run, text, config = {}) {
+  const missing = MISSING[run.code];
+  if (!missing || refusal(config, run.code, run.log, 0)) return null;
+  const line = failureLine(text);
+  return {
+    caught: null,
+    why: `the test's command ${missing.said} (exit ${run.code})${line ? `: ${line}` : ', and its log holds no line'}; the tree the test ran in ` +
+      `${missing.tree}, and the host prepares that tree in the command mutate.run names or in mutate.session.open`,
+    missing: true,
+  };
+}
+
 /**
  * The verdict of one run: `caught` true or false, or null with `why`. `abs` is the mutated file;
  * without it only a build failure and a kill are read. `files` are the mutated files a failed build
  * is held to (`abs` alone by default), `test` the command as the reviewer wrote it, and `checks`
- * the host's checks, each `{match, finding}` as regexes, and `check` true when the test is a plain check.
+ * the host's checks, each `{match, finding}` as regexes, `check` true when the test is a plain check,
+ * and `config` the host's config, whose `verification.refused` marks a run the wrapper refused.
  */
-function verdictOf(run, text, abs, { files = abs ? [abs] : [], test = null, checks = [], check: plain = false } = {}) {
+function verdictOf(run, text, abs, { files = abs ? [abs] : [], test = null, checks = [], check: plain = false, config = {} } = {}) {
   if (run.signal) return { caught: null, why: `ended on ${run.signal}` };
   if (run.code === 0) return { caught: false };
   if (KILLED.has(run.code)) return { caught: null, why: `killed (exit ${run.code})` };
@@ -161,9 +207,11 @@ function verdictOf(run, text, abs, { files = abs ? [abs] : [], test = null, chec
   const lines = clean.split('\n');
   if (abs && (nodeParseFailed(lines, abs) || vitestParseFailed(lines, abs))) return { caught: null, why: 'did not parse' };
   if (plain) return { caught: true };
+  const missing = commandMissing(run, clean, config);
   const check = test === null ? null : checks.find((entry) => entry.match.test(test));
   if (check && check.finding.test(clean)) return { caught: true };
   if (!FAILED_SUMMARY.some((summary) => summary.test(clean))) {
+    if (missing) return missing;
     const why = `no test summary reports a failure (exit ${run.code})`;
     return { caught: null, why: test === null || check || RUNNER.test(test) ? why : `${why}: ${CHECK_HINT}` };
   }
@@ -179,4 +227,4 @@ function readLog(file) {
   }
 }
 
-module.exports = { readLog, rustBuildFailed, verdictOf };
+module.exports = { LINE_MAX, TAIL, commandMissing, readLog, rustBuildFailed, verdictOf };

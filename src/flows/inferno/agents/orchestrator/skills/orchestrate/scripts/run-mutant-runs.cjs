@@ -218,7 +218,13 @@ async function runEntries(tree, toRun, { configFile, rel, signs = [rel], elsewhe
     throw new RunError(`the runner's mutants stopped: ${payload.stopped}. Every file is back and nothing is recorded: run the same command again`,
       'MUTATE_STOPPED', 2);
   }
-  runnable.forEach((entry, index) => Object.assign(entry, verdictOf(payload.entries[index]), { ran: true }));
+  // An entry the batch skipped, as an earlier run of its test found no command, never ran: it keeps no caught and stays owed.
+  runnable.forEach((entry, index) => {
+    const row = payload.entries[index];
+    if (!row.skipped) return Object.assign(entry, verdictOf(row), { ran: true });
+    clear(entry);
+    return Object.assign(entry, { skipped: row.why });
+  });
   return { ran: runnable.length, builds: payload.builds, warned: notices(payload) };
 }
 
@@ -237,6 +243,7 @@ function ranLines(result, entries, owes) {
   for (const entry of tried.filter((item) => item.caught === 'none')) {
     out.push(`MUTANT ${entry.criterion} no verdict: ${entry.why}; ${owes(entry)}`);
   }
+  for (const entry of tried.filter((item) => item.skipped)) out.push(`MUTANT ${entry.criterion} ${entry.skipped}, so it stays owed to the intent review`);
   return [...out, ...(result.warned || [])];
 }
 

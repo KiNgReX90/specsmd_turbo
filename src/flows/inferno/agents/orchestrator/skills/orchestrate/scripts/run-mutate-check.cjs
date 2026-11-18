@@ -22,6 +22,7 @@
 
 const lib = require('./run-lib.cjs');
 const { startsWrapped } = require('./run-mutate-host.cjs');
+const { commandMissing, readLog } = require('./run-mutate-verdict.cjs');
 
 const CHECK_HOW = 'write check: true for a test that is a plain check, or leave it out';
 /** Why a Rust check takes no switch: it runs as written, so it never reads one. */
@@ -41,6 +42,8 @@ function placed(host, e, commandOf) {
 function unmutated(run) {
   if (run.code === 0) return null;
   if (KILLED.has(run.code)) return `the unmutated run of the check was killed (exit ${run.code} -> ${run.log})`;
+  const missing = commandMissing(run, readLog(run.log));
+  if (missing) return missing.why;
   return `the check is red on the tree as it is (exit ${run.code} -> ${run.log}), so its red on the mutant would prove nothing`;
 }
 
