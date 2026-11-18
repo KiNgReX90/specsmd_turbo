@@ -2,7 +2,7 @@
 
 Written 2026-11-12. This is the one list of everything open on this branch. Every line has a verdict: BUILD NOW, DONE, MEASURED ON THE HOST or NOT NOW. A NOT NOW names its reason and what unlocks it. Nothing here is a plan for some later day: what says BUILD NOW can start today.
 
-What waits for a builder is in section 2. Version 0.1.85 holds the six items of section 1b, the rows of sections 1c, 1d, 1e, 1g and 1h and the nine sections of section 1f, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
+Nothing on this branch waits for a builder today. Version 0.1.85 holds the six items of section 1b, the rows of sections 1c, 1d, 1e, 1g and 1h and the nine sections of section 1f, and the release steps ran on the tree that holds them all. A host's next finding arrives as a new row in section 2. The thinner work items are measured on the first host and are no work for the builder (section 4).
 
 `S/` is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
 
@@ -10,7 +10,7 @@ Where the older text went, so that nothing built reads as open:
 
 - `inferno-future-improvements.md` is gone from this branch. Of its eight items six are built or struck (sections 1b and 3). The measurement of the first is section 4, its one standing rule is under section 2, and the one idea left unbuilt is in section 5. Its text is in this branch's history at `d5d82fa1`.
 - The handoff file `inferno-0.1.84-run-defects-handoff.md` holds only the sections still to build, and none is open today. Its sections 1 to 11 are in history at the same commit, 12 to 14 at `120be9b4`, 15 to 23 at `1aa836a2`, and 24 to 26 at `f0f06aaf`.
-- Every other handoff file keeps only its open defects. Once all it holds is built, it leaves the branch, and its row or section here names it with the commit that holds its text. Ten are gone this way, and two stand today, those of rows 0ac and 0ad: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f), the five files of rows 0p to 0t (section 1g) and the three files of rows 0u to 0x and 0ab (section 1h). Their text is in history at `f0f06aaf`, as it last stood, and the first seven each have a first line there that says they are built. Defects 3 and 5 of `inferno-review-record-defects-handoff.md` were cut from it before, and their text is in history at `1aa836a2`.
+- Every other handoff file keeps only its open defects. Once all it holds is built, it leaves the branch, and its row or section here names it with the commit that holds its text. Twelve are gone this way, and none stands today: `inferno-remote-run-wrapped-in-local-seat-handoff.md` (row 0o), `inferno-rename-proof-stale-handoff.md` (section 1f), the five files of rows 0p to 0t (section 1g) and the five files of rows 0u to 0x and 0ab to 0ad (section 1h). The text of the first ten is in history at `f0f06aaf` and that of the last two at `ba8a86c2`, as it last stood, and the first seven each have a first line there that says they are built. Defects 3 and 5 of `inferno-review-record-defects-handoff.md` were cut from it before, and their text is in history at `1aa836a2`.
 - `inferno-generalization-plan.md` and `todo.md` are older backlogs that came from main. They ask nothing of whoever builds here, and what they hold is no commitment.
 
 ## 1. DONE: the fourteen findings of the first host, built as 0.1.84
@@ -136,9 +136,9 @@ Row 0s: an entry that says `check: true` still reads caught under exit 126 or 12
 
 The release steps (row 7) ran on `28f9e200`, the tree that holds all five.
 
-## 1h. DONE: eight rows the first host met on 2026-11-16 and 2026-11-18
+## 1h. DONE: ten rows the first host met on 2026-11-16 and 2026-11-18
 
-Built on this branch on 2026-11-18. `CHANGELOG.md` says what each one does.
+Built on this branch on 2026-11-18, all ten: rows 0u to 0ab first, then rows 0ac and 0ad, two defects the first host met in runs that day on the build at `f3be640a`. `CHANGELOG.md` says what each one does.
 
 | Row | What | Handoff | Built in |
 | --- | --- | --- | --- |
@@ -150,21 +150,18 @@ Built on this branch on 2026-11-18. `CHANGELOG.md` says what each one does.
 | 0z | A sibling's commit to a file two items own, named in its `Item:` trailer, gives a fresh proof and an owed review, never `DISPATCH_PROOF` | `inferno-0.1.84-run-defects-handoff.md`, section 25, in history at `f0f06aaf` | `f5a2d440`, `a4f22d5d` |
 | 0aa | A delta whose earlier verdict holds writes the range it read into its file, so the record takes it | `inferno-0.1.84-run-defects-handoff.md`, section 26, in history at `f0f06aaf` | `b26b876e`, `1e5d06bb` |
 | 0ab | A rerun's cause is counted and written under its command's name: the rest after `verification.session.match`, else the command with the gate tree's path as `{tree}` | `inferno-rerun-cap-keyed-on-wrapped-command-handoff.md`, gone, in history at `f0f06aaf` | `771b05f0`, `a5e99826` |
+| 0ac | A fold is read from what the run branch merged, so a base rewritten after the fold no longer turns the files it brought in into changes outside the item's ownership | `inferno-fold-read-from-moved-base-handoff.md`, gone, in history at `ba8a86c2` | `013d7663` |
+| 0ad | The existence check of `context.required` and `reads` holds an item only until a builder took it, so a built item that deleted a file it had to read no longer stops the frontier | `inferno-frontier-stops-on-built-items-deleted-read-handoff.md`, gone, in history at `ba8a86c2` | `f05ba070`, `a4e5fa87` |
 
 One more was found and built beside rows 0w and 0aa, with no row: an intent review dispatch printed again before its record no longer moves what the record binds, and a delta intent review whose earlier verdict holds can be recorded with its `read: <range>` line (`67e00841`, `07678051`).
 
-A host sets no new key. What a host may now use: `run.cjs review --item <id> --reviewer <agent-id> --detach` starts a record as its own process and `run.cjs review --item <id> --wait` blocks on it, and the intent review's record takes the same flags (row 0x). A delta's dispatch asks each lens for a `read: <range>` line, which a review file may hold (row 0aa). A rerun is counted under its command's name, so a commit with `Fixes-intermittent: <name>` lifts the limit (row 0ab). An item's commit carries one `Item: <id>` line per item it lands in its last paragraph, which lets a sibling's commit to a shared file pass (row 0z). The orchestrator's texts say to write it.
+A host sets no new key. What a host may now use: `run.cjs review --item <id> --reviewer <agent-id> --detach` starts a record as its own process and `run.cjs review --item <id> --wait` blocks on it, and the intent review's record takes the same flags (row 0x). A delta's dispatch asks each lens for a `read: <range>` line, which a review file may hold (row 0aa). A rerun is counted under its command's name, so a commit with `Fixes-intermittent: <name>` lifts the limit (row 0ab). An item's commit carries one `Item: <id>` line per item it lands in its last paragraph, which lets a sibling's commit to a shared file pass (row 0z). The orchestrator's texts say to write it. What a host will see differently: an item a builder took is no longer held to the paths its `context.required` and `reads` name, while an item nobody took is checked as before, and an oracle ask in the dispatch log is no longer read as a builder having taken the item, as `defer-item` already reads it, so the diagnosis probe of an item that only had an oracle ask is replayed (row 0ad). A fold of a local base rebased or amended before its push keeps the files it brought in as the base's, as long as the base holds a commit of the same patch for each commit the run branch merged (row 0ac). Row 0ac leaves two cases as they are, each with its line in section 5.
 
-The release steps (row 7) ran on `1ddb0401`, the tree that holds all eight.
+The release steps (row 7) ran on `1ddb0401`, the tree that holds the first eight, rows 0u to 0ab.
 
-## 2. BUILD NOW: two rows
+## 2. BUILD NOW: nothing today
 
-A host's next finding arrives here as a row, with its section in the handoff file. Rows 0ac and 0ad are two defects the first host met in runs on 2026-11-18, on the build at `f3be640a`, each read in the code at `f0f06aaf` and found unchanged there.
-
-| Row | What | Handoff |
-| --- | --- | --- |
-| 0ac | A fold is read from what HEAD merged, so a base rewritten after the fold no longer turns the files it brought in into changes outside the item's ownership | `inferno-fold-read-from-moved-base-handoff.md` |
-| 0ad | The existence check of `context.required` and `reads` holds an item only until a builder took it, so a built item that deleted a file it had to read no longer stops the frontier | `inferno-frontier-stops-on-built-items-deleted-read-handoff.md` |
+A host's next finding arrives here as a row, with its section in the handoff file.
 
 One standing rule: a change to one host's planner text is measured on the other host before it is ported, with `evals/planner-ab`. "Read a subsystem per round" cut one host's planning by about a fifth and made the other about half again more expensive.
 
@@ -201,5 +198,9 @@ Verdict: not now. The count is under the threshold, and what it found is two ite
 **P8, the live test and the break test.** A live tester tries each intent on the running application, and a breaker attacks marked items from the outside. Reason: it adds wall time and tokens to every intent, and the first host has two test machines whose queue is its bottleneck this week. Unlocks: the owner's word, after the first host's release, and a host that names how its application starts and stops under `verification.live`.
 
 **The commands of one integrate run beside each other.** One slot for the whole integrate is built (`verification.session`), and it took the queue and the sync out of every command but the first. Running the commands beside each other helps only while a host has machines free. Unlocks: a host whose integrate is still slow with an empty queue.
+
+**A fold that was a fast-forward of a base rewritten later.** Row 0ac reads a fold of a rewritten base from the merge commit that brought it in, and a fast-forward leaves none, so the files it brought in still read as outside the item's ownership. The way on is the handoff's own: fold the base again (the next integrate or gate does) and run `verify-item` again. Reason: none of the folds in the handoff's evidence was a fast-forward, and that step clears it. Unlocks: a host that meets it in a run.
+
+**A switch-off the base added, counted twice after a second fold of a rewritten base.** After a base rewritten between two folds is folded again, an old commit and its copy sit in two fold ranges, two commits of one patch, so a switch-off the base added at the source of a test file the item moved can count twice there, and a second switch-off the item puts on that same test reads as the base's. Reason: it takes a base rewritten between two folds, a test file the item moved and a switch-off by both the base and the item on one test of it, all at once, and the handoff's evidence holds no such case. Unlocks: a host that rewrites its local base between folds while its items move test files, or an item review that finds a switch-off `verify-item` let pass.
 
 **The merge of this pull request.** The branch carries real work on the first host from this branch, by the owner's choice. The merge is the owner's word and nothing here waits on it.
