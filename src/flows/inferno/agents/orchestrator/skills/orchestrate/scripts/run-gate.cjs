@@ -23,6 +23,7 @@ const { withMarks } = require('./run-gate-marks.cjs');
 const { checkRounds, closeLeft } = require('./run-check-session.cjs');
 const { noVerdictLine } = require('./run-check-refused.cjs');
 const { NO_VERDICT } = require('./run-exit.cjs');
+const rerun = require('./run-gate-rerun.cjs');
 
 const { RunError } = lib;
 
@@ -176,6 +177,9 @@ function gateNow(options) {
   const definition = JSON.stringify(config.verification);
   const branch = lib.currentBranch(tree);
   const dir = path.join(lib.cacheDir(tree), branch, `gate-${lib.stamp()}`);
+  // A gate on the code the last verdict was red on runs that red again: with its cause, or the line that says it records none.
+  const again = rerun.rerunOf(tree, config, options, codeHash);
+  shown.push(...again.out);
 
   // A failed command is red on its first failure: no rerun mints a proof. With
   // verification.session the commands it reaches share one host session, closed there too. A
@@ -190,9 +194,12 @@ function gateNow(options) {
     }
     return { ran, failed: null };
   });
-  const { notes } = checked;
   const { ran: results, failed } = checked.value;
-  // The close's lines ride in the result too, so a detached gate's --wait prints them.
+  const moved = !failed && checked.refused.length === 0 &&
+    (proofs.scopeHash(tree) !== started || JSON.stringify(lib.readConfig(tree, options.config).verification) !== definition);
+  // The verdict on this code is the next gate's to read; its lines and the close's ride in the result, so a detached gate's --wait prints them.
+  const verdict = rerun.settle(tree, config, options.config, again, { hash: codeHash, dir, failed, green: !failed && checked.refused.length === 0 && !moved });
+  const notes = [...checked.notes, ...verdict.notes];
   const noted = notes.length > 0 ? { notes } : {};
   if (failed) {
     const out = [...shown, ...describe(results), ...notes];
@@ -204,15 +211,14 @@ function gateNow(options) {
     return { exit: NO_VERDICT, payload, out: [...shown, ...describe(results), ...notes, gateNoVerdict(tree, payload)] };
   }
 
-  if (proofs.scopeHash(tree) !== started ||
-      JSON.stringify(lib.readConfig(tree, options.config).verification) !== definition) {
+  if (moved) {
     const out = [...shown, ...describe(results), ...notes, 'the code changed while the gate ran. Re-run the gate.'];
     return { exit: 2, payload: { ok: false, tree, branch, folded: folded.length > 0, results, moved: true, ...noted }, out };
   }
 
   return {
     exit: 0,
-    payload: { ok: true, tree, branch, folded: folded.length > 0, results, hash: codeHash, ...noted },
+    payload: { ok: true, tree, branch, folded: folded.length > 0, results, hash: codeHash, ...noted, ...verdict.payload },
     out: [...shown, ...describe(results), ...notes, `green ${codeHash}`],
   };
 }
@@ -256,7 +262,10 @@ function gateDetach(options) {
   const intent = intentReview.intentFor(tree, options);
   if (mergeSlot(config)) {
     const turn = slot.take(tree, { intent });
-    if (!turn.head) return queued(tree, turn.ahead, [...restored, ...turn.out], `wait with: ${gateWaitCall(tree)}`);
+    if (!turn.head) {
+      rerun.pend(tree, options);
+      return queued(tree, turn.ahead, [...restored, ...turn.out], `wait with: ${gateWaitCall(tree)}`);
+    }
   }
   const before = lib.git(tree, ['rev-parse', 'HEAD']);
   const base = options.base || resolveBase(config, null, tree);
@@ -271,12 +280,16 @@ function gateDetach(options) {
   const unreviewed = intentReview.gateRefusal(tree, current, intent, before, folded);
   if (unreviewed) return unreviewed;
   folded.push(...asideLines(tree, intent, { withdrawn: true }));
+  // Refused here, past the fold, before a lane starts: a cause on no rerun, or one the base holds the limit for.
+  const again = rerun.detachRerun(tree, current, options);
+  folded.push(...again.out);
   const laneStart = lanes.startLanes(tree, options, current, changedPaths(tree, mergeBase(tree, base)));
   const args = ['gate', '--tree', tree, '--json'];
   if (options.base) args.push('--base', options.base);
   if (options.intent) args.push('--intent', options.intent);
   if (options.config) args.push('--config', options.config);
   if (options.force) args.push('--force');
+  if (again.cause) args.push('--cause', again.cause, '--by', again.by);
   // The gate is a process the run launched in its worktree, so teardown may stop it.
   const job = jobs.detach(tree, args, paths, {
     config: options.config || `${lib.SPECS_DIR}/config.yaml`, lanes: laneStart.started, head: lib.git(tree, ['rev-parse', 'HEAD']),

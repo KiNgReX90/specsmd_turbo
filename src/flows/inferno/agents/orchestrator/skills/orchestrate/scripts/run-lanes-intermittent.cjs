@@ -18,6 +18,12 @@
  * test accepted twice there is a race to fix on the host, so the next accept is refused until a
  * commit on the base carries `Fixes-intermittent: <test>`. A `Cases:` line is not that carrier: it
  * answers the tester case checks with ids split on spaces, so a test name would answer them.
+ *
+ * A finalize command a gate ran again on the code it was red on, with its cause, is one ledger with
+ * these (run-gate-rerun.cjs): ship writes `exception: <command> rerun <json>`, the JSON naming the
+ * command again, and its tests count toward the same limit, since one flake is one flake wherever
+ * it was seen. A command holds spaces and may hold ` rerun {` itself, so the record is the JSON whose
+ * command is the text before it; the released flow's lane reader parses no such line.
  */
 
 const fs = require('fs');
@@ -37,6 +43,8 @@ const RECORD = '.intermittent';
 const MAX_EARLIER = 2;
 const EXCEPTION = /^exception: (\S+) intermittent (\{.*\})\s*$/;
 const FIX = 'Fixes-intermittent:';
+const PREFIX = 'exception: ';
+const RERUN = ' rerun {';
 /** The verdicts file's shape, in the one line a lane without the key and a body without a red test print. */
 const SHAPE = '{"red": [{"name": "<test>", "base": "green", "again": "green"}]}';
 
@@ -121,18 +129,42 @@ function parsed(json) {
   }
 }
 
+/** A command as a rerun line shows it: one line, whatever line breaks it holds. */
+const oneLine = (command) => command.replace(/[\r\n]+/g, ' ');
+
+/** The ship commit's line for a red finalize command a gate ran again on unchanged code, with its cause. */
+function rerunLine(record) {
+  return `${PREFIX}${oneLine(record.command)} rerun ${JSON.stringify(record)}`;
+}
+
+/** The record a rerun line carries: the JSON after the one ` rerun ` whose command is the text before it, or null. */
+function rerunRecord(line) {
+  if (!line.startsWith(PREFIX)) return null;
+  for (let at = line.indexOf(RERUN); at !== -1; at = line.indexOf(RERUN, at + 1)) {
+    const record = parsed(line.slice(at + RERUN.length - 1));
+    if (record && typeof record.command === 'string' && oneLine(record.command) === line.slice(PREFIX.length, at)) return record;
+  }
+  return null;
+}
+
+/** A lane's accept or a rerun's cause from one line of a commit message, or null; no rerun line parses as a lane's. */
+function exceptionRecord(line) {
+  const match = EXCEPTION.exec(line);
+  return (match && parsed(match[2])) || rerunRecord(line);
+}
+
 /** Each commit on the base, newest first, whose message carries an exception or a fix line, with those lines read. */
 function baseLedger(tree, base) {
   const refs = [base, `origin/${base}`].filter((ref) => lib.git(tree, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { tolerate: true }));
   // A ledger that cannot be read refuses, so no earlier accept is ever skipped.
   if (refs.length === 0) throw new RunError(`no ${base} branch here to read the earlier intermittent accepts from`, 'NO_BASE');
-  const raw = lib.git(tree, ['log', '--format=%H%x1f%h%x1f%cs%x1f%B%x1e', '-E', `--grep=^(exception: [^ ]+ intermittent |${FIX})`, ...refs]);
+  const raw = lib.git(tree, ['log', '--format=%H%x1f%h%x1f%cs%x1f%B%x1e', '-E', `--grep=^(exception: [^ ]+ intermittent |exception: .+ rerun [{]|${FIX})`, ...refs]);
   return raw.split('\x1e').map((chunk) => chunk.replace(/^\n+/, '')).filter(Boolean).map((chunk) => {
     const [sha, short, date, body = ''] = chunk.split('\x1f');
     const lines = body.split('\n');
     return {
       sha, short, date,
-      exceptions: lines.map((line) => EXCEPTION.exec(line)).filter(Boolean).map((match) => parsed(match[2])).filter(Boolean),
+      exceptions: lines.map(exceptionRecord).filter(Boolean),
       fixes: lines.filter((line) => line.startsWith(FIX)).map((line) => line.slice(FIX.length).trim()),
     };
   });
@@ -148,9 +180,10 @@ function earlierAccepts(tree, ledger, test) {
 
 /**
  * The earlier accepts of `tests` on the base, as lines to print; refused when one of them reached
- * the limit, since two accepts of one test make its race a defect to fix on the host.
+ * the limit, since two accepts of one test make its race a defect to fix on the host. `again` is
+ * the step the refusal names once the fix landed.
  */
-function repeats(tree, base, tests) {
+function repeats(tree, base, tests, again = 'accept again') {
   const ledger = baseLedger(tree, base);
   const earlier = tests.map((test) => ({ test, accepts: earlierAccepts(tree, ledger, test) }));
   const over = earlier.filter((entry) => entry.accepts.length >= MAX_EARLIER);
@@ -158,10 +191,10 @@ function repeats(tree, base, tests) {
     throw new RunError(over.map(({ test, accepts }) =>
       `refused: ${test} was accepted as intermittent ${accepts.length} times on ${base} since a commit there last named its fix: ` +
       `${accepts.map((entry) => `${entry.short} ${entry.date} by ${entry.record.by}`).join(', ')}. Its race is a defect to fix on the host: ` +
-      `land the fix on ${base} with the line "${FIX} ${test}" in its message, then accept again.`).join('\n'), 'INTERMITTENT_LIMIT');
+      `land the fix on ${base} with the line "${FIX} ${test}" in its message, then ${again}.`).join('\n'), 'INTERMITTENT_LIMIT');
   }
   return earlier.flatMap(({ test, accepts }) =>
-    accepts.map((entry) => `earlier intermittent accept of ${test}: ${entry.short} ${entry.date} by ${entry.record.by}: ${entry.record.reason}`));
+    accepts.map((entry) => `earlier intermittent accept of ${test}: ${entry.short} ${entry.date} by ${entry.record.by}: ${entry.record.reason || entry.record.cause}`));
 }
 
 /** `run.cjs <lane> --accept-intermittent`: bound that lane's product red on this tree, once its verdicts file proves every red test intermittent. */
@@ -210,4 +243,9 @@ function shipExceptions(primary, base, held) {
   });
 }
 
-module.exports = { SHAPE, accept, intermittentTests, proven, readAccepted, repeats, shipExceptions, unproven, usage };
+module.exports = {
+  SHAPE, accept, intermittentTests, proven, readAccepted, repeats, shipExceptions, unproven, usage,
+  exceptionRecord,
+  rerunLine,
+  rerunRecord,
+};
