@@ -25,7 +25,11 @@
  * that reads the same green ships it twice.
  *
  * No reader of the flow takes a test name from a log, so the command stands in for the tests its
- * red log names, and `Fixes-intermittent: <command>` lifts its cap. Ship writes one line per cause
+ * red log names, under its name (run-lanes-intermittent.cjs `commandName`): the rest after the
+ * session's match, or the command with the tree's path as `{tree}`, so a wrapper that takes the tree
+ * as an argument spells one check once. The record keeps that name, which the cap counts at the gate
+ * and at ship and `Fixes-intermittent: <name>` lifts; its file stays beside the proof of the command
+ * as written. Ship writes one line per cause
  * and first copies the red log, that one file, to `<cache>/rerun-evidence/`, which no branch cleanup
  * owns; the line names the copy relative to the cache, so the base's history holds no machine path.
  */
@@ -39,7 +43,7 @@ const proofs = require('./run-proofs.cjs');
 const slot = require('./run-slot.cjs');
 const { atomicWrite } = require('./state-store.cjs');
 const { resolveBase } = require('./run-intents.cjs');
-const { repeats, rerunLine } = require('./run-lanes-intermittent.cjs');
+const { commandName, repeats, rerunLine } = require('./run-lanes-intermittent.cjs');
 const { gateCauseCall, gateStartCall } = require('./run-call.cjs');
 
 const { RunError } = lib;
@@ -50,7 +54,7 @@ const EVIDENCE = 'rerun-evidence';
 const NOT_KEPT = 'not kept: gone before ship';
 const GATE_USAGE = 'usage: node run.cjs gate [--detach] [--supersede] --cause "<why>" --by <who> [--tree <dir>] [--config <file>]: ' +
   'both filled, on a gate run again on the code a finalize command was red on; never with --wait, --lane, --lanes-only or --test, ' +
-  'since the cap counts the command';
+  'since the cap counts the command by its name';
 
 const filled = (text) => typeof text === 'string' && text.trim().length > 0;
 const branchFile = (tree, name) => path.join(lib.cacheDir(tree), lib.currentBranch(tree), name);
@@ -91,7 +95,8 @@ function rerunOf(tree, config, options, hash) {
   }
   const cause = options.cause.trim();
   const by = options.by.trim();
-  const earlier = repeats(tree, resolveBase(config, null, tree), commands, 'run the gate again with its cause');
+  const name = (command) => commandName(config, command, tree);
+  const earlier = repeats(tree, resolveBase(config, null, tree), commands.map(name), 'run the gate again with its cause', name);
   const said = commands.map((command) => `rerun of the red ${command} on unchanged code, cause by ${by}: ${JSON.stringify(cause)}`);
   return { reds: last.reds, cause, by, out: [...said, ...earlier] };
 }
@@ -143,7 +148,7 @@ function settle(tree, config, selected, again, { hash, dir, failed, green }) {
   const branch = lib.currentBranch(tree);
   for (const red of again.reds || []) {
     save(recordFile(tree, config, selected, red.command), {
-      hash, branch, command: red.command, tests: [red.command], cause: again.cause, by: again.by, run: path.basename(red.dir), dir: red.dir, log: red.log, stamp: new Date().toISOString(),
+      hash, branch, command: red.command, tests: [commandName(config, red.command, tree)], cause: again.cause, by: again.by, run: path.basename(red.dir), dir: red.dir, log: red.log, stamp: new Date().toISOString(),
     });
   }
   save(file, { hash });
@@ -178,10 +183,13 @@ function keep(primary, branch, record, out) {
 function shipReruns(primary, base, tree, selected, out) {
   const config = lib.readConfig(tree, selected);
   const held = heldReruns(tree, config, selected);
-  for (const record of held) repeats(primary, base, record.tests, 'ship again');
+  // Each under the name its gate recorded; a record from before names holds the command, named here.
+  const name = (test) => commandName(config, test, tree);
+  const names = held.map((record) => record.tests.map(name));
+  for (const tests of names) repeats(primary, base, tests, 'ship again', name);
   const branch = lib.currentBranch(tree);
-  const lines = held.map((record) => rerunLine({
-    command: record.command, tests: record.tests, cause: record.cause, by: record.by, run: record.run, log: keep(primary, branch, record, out),
+  const lines = held.map((record, at) => rerunLine({
+    command: names[at][0], tests: names[at], cause: record.cause, by: record.by, run: record.run, log: keep(primary, branch, record, out),
   }));
   const files = held.map((record) => recordFile(tree, config, selected, record.command));
   return { lines, spend: () => files.forEach((file) => fs.rmSync(file, { force: true })) };
