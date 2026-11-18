@@ -90,11 +90,11 @@ function single(options) {
     release();
   }
   if (failed.length > 0) return { exit: 2, payload: { restored: false, file: rel, line: n, failed }, out: [...out, ...failed] };
-  return settle(outcome(out, options, { rel, abs, n, checks: host.checks }, unsealed, run), leftBehind(tree, before));
+  return settle(outcome(out, options, { rel, abs, n, checks: host.checks, config }, unsealed, run), leftBehind(tree, before));
 }
 
 /** The verdict of a mutant whose files are all back: no verdict, or caught yes or no. */
-function outcome(out, options, { rel, abs, n, checks }, unsealed, run) {
+function outcome(out, options, { rel, abs, n, checks, config }, unsealed, run) {
   const at = `${rel}:${n}`;
   if (unsealed) {
     return {
@@ -108,7 +108,7 @@ function outcome(out, options, { rel, abs, n, checks }, unsealed, run) {
     const how = run ? `ended on ${run.signal}` : 'never ran';
     return { exit: 2, payload: { file: rel, line: n, signal: run && run.signal }, out: [...out, `the test ${how}, so there is no verdict; ${at} is restored`] };
   }
-  const verdict = verdictOf(run, readLog(run.log), abs, { test: options.test, checks });
+  const verdict = verdictOf(run, readLog(run.log), abs, { test: options.test, checks, config });
   const said = verdict.caught === null ? `no verdict: ${verdict.why}` : `caught ${verdict.caught ? 'yes' : 'no'}`;
   return {
     // A killed run is this machine's failure, not the mutant's; a build that failed is the mutant's.

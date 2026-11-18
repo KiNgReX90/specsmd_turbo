@@ -23,6 +23,12 @@
  * entry that says `check: true` runs as written, in place, after its check ran once on the tree as
  * it is, and its exit code is its verdict (run-mutate-check.cjs).
  *
+ * An entry on a run of its own whose run reads that its test's command was not found
+ * (run-mutate-verdict.cjs) has no control run to tell it from the rest, so every later entry of the
+ * batch with that test, the same command as the batch runs it, is not written and not run: it reads
+ * not run, marked `skipped`, and the record leaves it owed. A check's run on the tree as it is
+ * proved its command, so a check neither skips nor is skipped.
+ *
  * A clean tree only, every touched file restored in a finally, and signals held until then.
  * A held signal is read before every run, so the batch starts no run after it, and every entry
  * still to run reads not run. One journal covers every file (run-mutate-journal.cjs), so a run
@@ -111,7 +117,7 @@ async function control(hs, switched, round) {
     if (!run || (run.code === 0 && !run.signal)) continue;
     const { test } = e;
     const text = readLog(run.log);
-    const verdict = verdictOf(run, text, null, { files, test, checks });
+    const verdict = verdictOf(run, text, null, { files, test, checks, config: hs.config });
     if (verdict.why === 'did not build') return { text };
     if (/^(?:killed|ended on)\b/.test(verdict.why || '')) {
       return {
@@ -132,7 +138,7 @@ function execute(hs, e, prefix, label) {
   if (why) return { caught: null, why };
   const run = runOf(hs, e, prefix, label);
   if (!run) return { caught: null, ...noVerdict(hs) };
-  const verdict = verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks, check: e.check });
+  const verdict = verdictOf(run, readLog(run.log), e.abs, { test: e.test, checks: hs.checks, check: e.check, config: hs.config });
   return { ...verdict, code: run.code, log: run.log, signal: run.signal };
 }
 
@@ -187,14 +193,31 @@ async function runSwitched(hs, entries, plans, state) {
   return syncBack(hs, [...touched]);
 }
 
+/** The earlier entry whose run of `e`'s test found no command, or undefined; never one for a check. */
+const missedBy = (hs, e) => (e.check ? undefined : hs.missing.get(e.command));
+
+/** Whether `e` is not run, since an earlier run of its test found no command; it then reads not run. */
+function skipped(hs, e) {
+  const first = missedBy(hs, e);
+  if (first) hs.verdicts.set(e.k, { caught: null, why: `not run, as the test of criterion ${first.criterion} found no command`, skipped: first.k });
+  return Boolean(first);
+}
+
+/** Once `e`'s own run found no command, the entry every later one with its test is skipped for. */
+function remember(hs, e) {
+  if (hs.verdicts.get(e.k).missing && !e.check) hs.missing.set(e.command, e);
+}
+
 /** Every entry on a build or a run of its own: in place, or in the session when it serves the entry. */
 async function runOwn(hs, entries, plans, state) {
   const { session, sealed, verdicts, checks } = hs;
   for (const e of entries.filter((item) => plans.get(item.k).form === 'classic')) {
+    if (skipped(hs, e)) continue;
     if (hs.tests.has(e.k)) {
       const out = await inSession(hs, e, OFF);
       if (e.rust && out.ran) state.builds += 1;
       if (out.stopped) return out;
+      remember(hs, e);
       continue;
     }
     const signal = await signalled(session);
@@ -207,12 +230,15 @@ async function runOwn(hs, entries, plans, state) {
     session.putBack(e.rel);
     if (e.rust) state.builds += 1;
     verdicts.set(e.k, verdict);
+    remember(hs, e);
     const what = failed ? 'reseal' : 'test';
     if (verdict.signal) return { stopped: `the ${what} of entry ${e.k} ended on ${verdict.signal}, so the batch stopped` };
   }
   for (const e of entries.filter((item) => plans.get(item.k).form === 'session')) {
+    if (skipped(hs, e)) continue;
     const out = await inSession(hs, e);
     if (out.stopped) return out;
+    remember(hs, e);
   }
   return {};
 }
@@ -223,7 +249,10 @@ async function runOwn(hs, entries, plans, state) {
  */
 async function runAll(session, sealed, entries, plans, groups) {
   const verdicts = new Map();
-  const hs = hostSession({ session, sealed, hosted: groups.hosted, carried: Boolean(groups.host.run), tests: groups.tests, checks: groups.host.checks, verdicts, signalled });
+  const hs = hostSession({
+    session, sealed, hosted: groups.hosted, carried: Boolean(groups.host.run), tests: groups.tests, checks: groups.host.checks, verdicts, signalled,
+    config: groups.config, missing: new Map(),
+  });
   const state = { builds: 0 };
   let out = {};
   try {
@@ -248,7 +277,7 @@ function rowOf(e, plan, verdict) {
   const own = e.rust && plan.form === 'classic' ? plan.why : undefined;
   const base = { criterion: e.criterion, file: e.rel, line: e.n, test: e.test, form: plan.form, own };
   if (!verdict) return { ...base, caught: null, why: 'not run' };
-  return { ...base, caught: verdict.caught, why: verdict.why, code: verdict.code, log: verdict.log };
+  return { ...base, caught: verdict.caught, why: verdict.why, code: verdict.code, log: verdict.log, skipped: verdict.skipped };
 }
 
 function lineOf(row) {
@@ -280,11 +309,14 @@ function report(session, recovered, entries, plans, result) {
     (others > 0 ? `; ${plural(others, 'other entry', 'other entries')} ran a test once in place` : '') +
     (result.sessions > 0 && sharing ? `; ${sharing} shared ${plural(result.sessions, 'session', 'sessions')} of the host's wrapper` : '');
   const notes = result.notes || [];
+  // One line per test whose command was not found, with the entries that did not run for it.
+  const skips = [...new Set(rows.map((row) => row.skipped).filter(Boolean))].map((k) =>
+    `${plural(rows.filter((row) => row.skipped === k).length, 'entry', 'entries')} did not run, as the test of criterion ${rows[k - 1].criterion} found no command`);
   const paste = rows.filter((row) => row.caught !== null)
     .flatMap((row) => [`  - criterion: ${yamlText(row.criterion)}`, `    test: ${yamlText(row.test)}`, `    caught: ${row.caught ? 'yes' : 'no'}`]);
   const file = session.log('mutants').replace(/\.log$/, '.yaml');
   fs.writeFileSync(file, paste.length > 0 ? `${paste.join('\n')}\n` : '');
-  const out = [...recovered, ...rows.map(lineOf), counted, ...notes, ...(result.stopped ? [result.stopped] : [])];
+  const out = [...recovered, ...rows.map(lineOf), counted, ...notes, ...skips, ...(result.stopped ? [result.stopped] : [])];
   if (paste.length > 0 && out.length + paste.length + 1 <= 30) out.push('paste under mutants:', ...paste);
   else if (paste.length > 0) out.push(`paste under mutants: the lines in ${file}`);
   return {
@@ -315,7 +347,7 @@ async function batch(options) {
   const entries = readBatch(tree, file).map((e) => placed(host, e, (test) => commandOf(host, tree, test)));
   const hosted = sessionOf(config);
   const plans = planAll(tree, entries, hosted);
-  const groups = { hosted, host, tests: sessionTests(hosted, entries.filter((e) => !e.check), plans) };
+  const groups = { hosted, host, config, tests: sessionTests(hosted, entries.filter((e) => !e.check), plans) };
   // What git calls changed before the first write: the batch file and the review being recorded.
   const before = snapshot(tree);
   const session = openSession(tree);
