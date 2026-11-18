@@ -43,6 +43,7 @@ const { caller } = require('./run-call.cjs');
 const { exitAfter } = require('./run-exit.cjs');
 const { slotCommand } = require('./run-slot.cjs');
 const runConfig = require('./run-config-record.cjs');
+const { causeUsage } = require('./run-gate-rerun.cjs');
 
 const { RunError } = lib;
 
@@ -76,6 +77,7 @@ const USAGE = `INFERNO orchestrator runner
   node run.cjs gate --detach --lanes-only [--since <ref>] [--tree <dir>] start only the lanes the diff since <ref> touched (default the merge base, origin/<base> on the base branch): no fold, no finalize command, no ticket
   node run.cjs gate --detach --supersede [--tree <dir>] stop the tree's running lanes a fix touched, prove each stopped by its verification.<lane>.stop, then start the gate: 2 refused or not proven stopped
   node run.cjs gate --detach --lane <name> [--tree <dir>] walk that one lane again, also while the gate job runs, and make gate --wait wait on it: 2 while that lane still runs
+  node run.cjs gate --detach --cause "<why>" --by <who> [--tree <dir>] run the gate again on the code a finalize command was red on, with why that red is not the branch's work: ship writes it into the merge commit; refused on any other gate, and past two causes of the command on the base since a "Fixes-intermittent: <command>" commit
   node run.cjs gate --wait [--tree <dir>] [--minutes <n>] block on the gate and its lanes: 0 green, 2 red, 3 a lane red to accept, 4 still running or queued behind another intent's ticket, starting the gate at the head (default 9 min)
   node run.cjs green [--tree <dir>] [--config <file>]    check the proofs for every finalize command and the smoke lane
   node run.cjs smoke|windows --accept --harness-fix <sha> [--tree <dir>] [--config <file>] accept that lane's instrument red against a harness fix on the base
@@ -126,7 +128,8 @@ Options
   --harness-fix <sha> smoke|windows --accept: the harness fix on the base branch the instrument red is accepted against
   --test <name>     smoke|windows --accept-intermittent: a red test of the lane's verdicts file, once per test; mutate: the test command
   --reason <why>    smoke|windows --accept-intermittent: why the red is accepted, written into the ship commit
-  --by <who>        smoke|windows --accept-intermittent: the role that signs the accept
+  --by <who>        smoke|windows --accept-intermittent: the role that signs the accept; gate --cause: the role that signs the cause
+  --cause <why>     gate, on the code a finalize command was red on: why that red is not the branch's work
   --batch <file>    mutate: a JSON or YAML list of {criterion, file, line, find, replace, test}; find occurs once on that line
 
 Exit codes: 0 ok, 1 usage, 2 failure, 3 a step is owed first (the gate, an item or intent review, the scan, external evidence, a lane accept, the smoke lane, or an item completed with no integration proof or review), 4 gate or a lane still running, or slot --take queued behind another holder, 5 integrate or gate got no verdict, the host ran nothing twice: run the step again.`;
@@ -222,6 +225,7 @@ function parseArgs(argv) {
 
 function main(argv) {
   const { command, args, options } = parseArgs(argv);
+  causeUsage(command, options);
   // The --config this call names becomes its run branch's record; a call naming none reads it.
   const named = options.config;
   runConfig.recallInto(command, args, options);

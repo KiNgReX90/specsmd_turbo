@@ -21,6 +21,9 @@
  * A lane red accepted as intermittent goes into the ship commit as one `exception:` line per lane,
  * written here so nobody writes it by hand; those lines on the base are the ledger a later accept
  * reads (run-lanes-intermittent.cjs), and ship refuses an accept the base already holds twice.
+ * A finalize command a gate ran again on the code it was red on, with its cause, gets its own
+ * `exception:` line the same way, and its red log is copied out of the branch's cache folder before
+ * the merge and the cleanup (run-gate-rerun.cjs).
  *
  * A proof only the landing makes possible, an `after_ship` criterion of the intent review whose
  * evidence path is missing, never stops the merge: the ship prints one `owed after ship:` line per
@@ -36,6 +39,7 @@ const { intentOf, worktreeEntries } = require('./run-worktrees.cjs');
 const { green } = require('./run-gate.cjs');
 const { intermittentHeld } = require('./run-lanes.cjs');
 const { shipExceptions } = require('./run-lanes-intermittent.cjs');
+const { shipReruns } = require('./run-gate-rerun.cjs');
 const { linkedTree, loadOwnership, stopOwnedProcesses } = require('./run-processes.cjs');
 const gates = require('./run-config-gates.cjs');
 const { asideLines } = require('./run-review-aside.cjs');
@@ -121,10 +125,15 @@ function ship(intentId, options) {
 
   // The lane reds accepted as intermittent, refused before anything merges once the base holds two accepts of a test.
   const exceptions = shipExceptions(primary, base, intermittentHeld(tree, lib.readConfig(tree, options.config), options.config));
+  // A finalize command gated again on the code it was red on, with its cause: its line, its red log kept outside the folder the cleanup removes.
+  const reruns = shipReruns(primary, base, tree, options.config, out);
+  exceptions.push(...reruns.lines);
 
   // (3) Merge, from the primary checkout.
   const tip = lib.git(tree, ['rev-parse', 'HEAD']);
   lib.git(primary, ['merge', '--no-ff', '--autostash', '-m', `Merge branch '${branch}'`, ...exceptions.flatMap((line) => ['-m', line]), branch]);
+  // The merge commit carries each rerun's line now, so its record is spent: no later branch of the same name ships it twice.
+  reruns.spend();
   const sha = lib.git(primary, ['rev-parse', '--short', 'HEAD']);
   out.push(`merged ${branch} into ${base} as ${sha}`);
 

@@ -193,6 +193,7 @@ test("each call builder prints its exact line from its own flags, the site's dec
     gateStartCall: [[["/w"], `run.cjs gate --detach --tree /w${tail}`]],
     gateWaitCall: [[["/w"], `node ${calls.RUNNER_PATH} gate --wait --tree /w${tail}`]],
     gateSupersedeCall: [[["/w"], `run.cjs gate --detach --supersede --tree /w${tail}`]],
+    gateCauseCall: [[["/w"], `run.cjs gate --detach --cause "<why>" --by <who> --tree /w${tail}`]],
     slotCall: [
       [["/w", "take", "driver"], `node ${calls.RUNNER_PATH} slot --take --holder driver --tree /w${tail}`],
       [["/w", "release", "driver"], `node ${calls.RUNNER_PATH} slot --release --holder driver --tree /w${tail}`],
