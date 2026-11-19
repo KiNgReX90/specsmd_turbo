@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const proofs = require('./run-proofs.cjs');
 const gate = require('./run-gate.cjs');
 const { resolveBase, unmetPrerequisites } = require('./run-intents.cjs');
@@ -242,6 +243,9 @@ function unmergedBase(tree, intent) {
   return entry ? unmetPrerequisites(ledger, entry) : [];
 }
 
+/** The folder of the tree's scan briefs and results. */
+const scanRoot = (tree) => path.join(stateDir(tree), 'scan');
+
 function scan(options) {
   const tree = options.tree || lib.repoRoot(options.cwd);
   const config = lib.readConfig(tree, options.config);
@@ -261,7 +265,7 @@ function scan(options) {
       ],
     };
   }
-  const root = path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'scan');
+  const root = scanRoot(tree);
   const dir = options.item ? path.join(root, `item-${options.item}`) : options.plan ? path.join(root, `plan-${intent}`) : root;
   const { agent, model } = hostActor('scanner', config);
   const context = { intent, config, options, ids, dir, agent, model, maxLines: MAX_LINES };
@@ -272,4 +276,4 @@ function scan(options) {
   return options.collect ? collect(tree, context) : dispatch(tree, context);
 }
 
-module.exports = { scan };
+module.exports = { scan, scanRoot };

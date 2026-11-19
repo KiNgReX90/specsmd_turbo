@@ -19,6 +19,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const gate = require('./run-gate.cjs');
 const proofs = require('./run-proofs.cjs');
 const writer = require('./state-transition.cjs');
@@ -238,7 +239,7 @@ function checkAndLand(tree, options, initial) {
   const commands = (config.verification && config.verification.integrate) || [];
   const definition = JSON.stringify(config.verification);
   const branch = lib.currentBranch(tree);
-  const dir = path.join(lib.cacheDir(tree), branch, `integrate-${lib.stamp()}`);
+  const dir = path.join(stateDir(tree), `integrate-${lib.stamp()}`);
   const results = [];
   // A command with a `finalize_scopes` entry runs here only when the branch touched one of its
   // globs. Without it the cargo tree was left out of this list

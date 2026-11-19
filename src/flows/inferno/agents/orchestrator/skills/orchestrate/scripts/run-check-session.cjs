@@ -38,6 +38,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const { alive, owner } = require('./run-mutate-journal.cjs');
 const { call, ending, exported, reach, validateSessionKey } = require('./run-host-session.cjs');
 const { refusal } = require('./run-check-refused.cjs');
@@ -50,7 +51,7 @@ function validateChecks(verification, file) {
 }
 
 /** The folder of the records of the sessions open in this tree's branch. */
-const recordsOf = (tree) => path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'check-sessions');
+const recordsOf = (tree) => path.join(stateDir(tree), 'check-sessions');
 
 /**
  * The session of one step whose logs go to `dir`, or null when the config sets no key. `shell`
@@ -180,4 +181,4 @@ function closeLeft(tree) {
   return out;
 }
 
-module.exports = { checkRounds, checkSession, closeLeft, inSession, validateChecks };
+module.exports = { checkRounds, checkSession, closeLeft, inSession, recordsOf, validateChecks };

@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const { realAppPaths, realAppProve } = require('./run-real-app.cjs');
 
 /** The command and globs of `config`, or null without `real_app.prove`. */
@@ -54,7 +55,7 @@ function proveItem(tree, config, label, paths, name, summarize) {
   if (!host) return undefined;
   const journeys = journeysOf(tree, paths, host.globs);
   if (journeys.length === 0) return { record: null, out: [] };
-  const base = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `real-app-${name}-${lib.stamp()}`);
+  const base = path.join(stateDir(tree), `real-app-${name}-${lib.stamp()}`);
   const list = `${base}.txt`;
   fs.mkdirSync(path.dirname(list), { recursive: true });
   fs.writeFileSync(list, `${journeys.join('\n')}\n`);

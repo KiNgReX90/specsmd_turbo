@@ -21,6 +21,7 @@ const path = require('path');
 
 const lib = require('./run-lib.cjs');
 const jobs = require('./run-jobs.cjs');
+const { holderOf, stateDir } = require('./run-state-dir.cjs');
 const { worktreeEntries } = require('./run-worktrees.cjs');
 const { atomicWrite, withFileLock } = require('./state-store.cjs');
 const { mergeSlot } = require('./run-config-gates.cjs');
@@ -43,7 +44,7 @@ const slotPath = (tree) => path.join(commonDir(tree), 'inferno-merge-slot.json')
 const lockFile = (tree) => path.join(commonDir(tree), 'inferno-merge-slot.lock');
 
 /** The intent review dispatch of a tree's branch, as `run.cjs review` writes it. */
-const reviewDispatchPath = (tree) => path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'intent-review-dispatch.json');
+const reviewDispatchPath = (tree) => path.join(stateDir(tree), 'intent-review-dispatch.json');
 
 function readTickets(file) {
   try {
@@ -115,9 +116,9 @@ function shimHeads(tree, tickets) {
     .map((entry) => `running without a ticket: ${entry.branch}`);
 }
 
-/** Queue `holder` (the tree's branch by default), or renew the ticket it already holds. */
+/** Queue `holder` (the tree's branch by default, a detached tree's folder name), or renew the ticket it already holds. */
 function take(tree, { holder, intent } = {}, now = Date.now()) {
-  const who = holder || lib.currentBranch(tree);
+  const who = holder || holderOf(tree);
   const { tickets, out } = locked(tree, (stored) => {
     const { kept, out: evicted } = evict(stored, now);
     const mine = kept.find((ticket) => ticket.holder === who);
@@ -137,7 +138,7 @@ function aheadOf(tree, tickets, who) {
 
 /** Mark the holder's ticket active; a holder not queued is left alone. True when it held one. */
 function renew(tree, holder, now = Date.now()) {
-  const who = holder || lib.currentBranch(tree);
+  const who = holder || holderOf(tree);
   return locked(tree, (stored) => {
     const mine = stored.find((ticket) => ticket.holder === who);
     if (!mine) return { tickets: null };
@@ -148,7 +149,7 @@ function renew(tree, holder, now = Date.now()) {
 
 /** Drop the holder's ticket; a holder not queued is left alone. True when it held one. */
 function release(tree, holder) {
-  const who = holder || lib.currentBranch(tree);
+  const who = holder || holderOf(tree);
   return locked(tree, (stored) => {
     const kept = stored.filter((ticket) => ticket.holder !== who);
     return { tickets: kept.length === stored.length ? null : kept };
@@ -171,7 +172,7 @@ function queue(tree, now = Date.now()) {
 
 /** Evict, then where the holder's ticket stands: the ticket (null when it holds none) and what is ahead of it. */
 function standing(tree, holder, now = Date.now()) {
-  const who = holder || lib.currentBranch(tree);
+  const who = holder || holderOf(tree);
   const { kept, out } = evicted(tree, now);
   const ticket = kept.find((entry) => entry.holder === who) || null;
   return { ticket, ahead: ticket ? aheadOf(tree, kept, who) : [], out };
