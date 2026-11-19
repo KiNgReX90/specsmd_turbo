@@ -67,7 +67,7 @@ test('the same peer beside the attempt of the item that owns the file is refused
   for (const [idA, idB] of ORDERS) {
     const f = fixture(t, ITEMS);
     const b = f.start('--item', 'b', '--dispatch-id', idB);
-    const peer = f.start('--item', 'c');
+    const peer = f.startOverlapping('c');
     f.write('shared.cjs', 'b\n');
     f.write('b.cjs', 'module.exports = 2;\n');
     f.accepted(b, ['shared.cjs', 'b.cjs']);
@@ -94,7 +94,7 @@ test('a peer beside the batch\'s own attempt is refused at a file the batch clai
     f.write('a.cjs', 'module.exports = 2;\n');
     f.accepted(a, ['a.cjs']);
     const batch = f.start('--items', 'a,b');
-    const peer = f.start('--item', 'c');
+    const peer = f.startOverlapping('c');
     f.write('shared.cjs', 'c\n');
     f.write('c.cjs', 'module.exports = 2;\n');
     f.accepted(peer, ['shared.cjs', 'c.cjs']);
@@ -124,7 +124,7 @@ test('a peer beside the batch\'s own attempt is refused at a file only an item o
   f.accepted(b, ['b.cjs']);
   builtA(f);
   const batch = f.start('--items', 'a,b,e');
-  const peer = f.start('--item', 'c');
+  const peer = f.startOverlapping('c');
   f.write('late.cjs', 'c\n');
   f.accepted(peer, ['late.cjs']);
   f.write('a.cjs', 'module.exports = 3;\n');
@@ -141,7 +141,7 @@ test('a peer beside the batch\'s own attempt is refused at a file the batch clai
   f.accepted(b, ['b.cjs']);
   builtA(f);
   const batch = f.start('--items', 'a,b');
-  const peer = f.start('--item', 'c');
+  const peer = f.startOverlapping('c');
   f.write('other.cjs', 'c\n');
   f.accepted(peer, ['other.cjs']);
   f.write('other.cjs', 'c\nbatch\n');
@@ -155,10 +155,10 @@ test('a peer beside an item of the batch is refused at a file that item claimed 
   for (const carried of [false, true]) {
     const f = fixture(t, WIDE);
     const first = f.start('--item', 'b');
-    const peer = f.start('--item', 'c');
+    const peer = f.startOverlapping('c');
     f.write('other.cjs', 'b and c\n');
     // Carried: a correction of b reports the file its first attempt, never accepted, changed.
-    const b = carried ? f.start('--item', 'b') : first;
+    const b = carried ? f.startOverlapping('b') : first;
     f.write('b.cjs', 'module.exports = 2;\n');
     f.accepted(peer, ['other.cjs']);
     f.accepted(b, ['b.cjs', 'other.cjs']);
@@ -173,11 +173,11 @@ test('a peer beside an item of the batch is refused at a file that item claimed 
 test('of two peers across one change, the one beside the item that owns the file is named, in either order', (t) => {
   const f = fixture(t, WIDE);
   const b = f.start('--item', 'b');
-  const besideB = f.start('--item', 'd');
+  const besideB = f.startOverlapping('d');
   f.write('b.cjs', 'module.exports = 2;\n');
   f.accepted(b, ['b.cjs']);
   const a = f.start('--item', 'a');
-  const besideA = f.start('--item', 'c');
+  const besideA = f.startOverlapping('c');
   f.write('shared.cjs', 'c and d\n');
   f.accepted(besideB, ['shared.cjs']);
   f.write('a.cjs', 'module.exports = 2;\n');

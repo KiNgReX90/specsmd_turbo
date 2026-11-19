@@ -149,6 +149,19 @@ function effective(tree, record) {
   return { record, members, ids: new Set(members.map((entry) => entry.dispatchId)), before: root.beforeSnapshot, claimed: [...claimed].sort() };
 }
 
+/**
+ * What a new dispatch of `items` is signed with: the current records it supersedes, by id, and its
+ * frozen ownership, the spec's `editable` with every grant of those records.
+ */
+function planned(tree, intent, items, editable) {
+  const previous = new Map();
+  for (const item of items) {
+    const current = readJson(currentFile(tree, intent, item));
+    if (current) previous.set(validateSigned(tree, current).dispatchId, current);
+  }
+  return { previous, ownership: grants.withGrants({ editable }, grants.inherited([...previous.values()])) };
+}
+
 /** The orchestrator captures this immediately before it launches the builder of an item or a chain. */
 function recordDispatch(tree, options) {
   const id = options.dispatch_id;
@@ -164,17 +177,13 @@ function recordDispatch(tree, options) {
     }
     return prior;
   }
-  const previous = new Map();
-  for (const item of items) {
-    const current = readJson(currentFile(tree, options.intent, item));
-    if (current) previous.set(validateSigned(tree, current).dispatchId, current);
-  }
+  const { previous, ownership } = planned(tree, options.intent, items, options.editable);
   return saveDispatch(tree, {
     version: 2,
     tree: fs.realpathSync(tree),
     dispatchId: id,
     phase: 'started',
-    assignment: { intent: options.intent, items, ownership: grants.withGrants({ editable: options.editable }, grants.inherited([...previous.values()])) },
+    assignment: { intent: options.intent, items, ownership },
     previous: [...previous.keys()].sort(),
     beforeSnapshot: sequencedSnapshot(tree),
   });
@@ -182,15 +191,21 @@ function recordDispatch(tree, options) {
 
 /**
  * The items a dispatch-log for `items` covers: every item their current records cover, to a
- * fixpoint, so a correction of one item of a chain is logged for the whole chain.
+ * fixpoint, so a correction of one item of a chain is logged for the whole chain. `takenIn` holds
+ * each item the caller did not name, with the dispatch id of the current record that covers it.
  */
 function coveredItems(tree, intent, items) {
   const covered = [...items];
+  const takenIn = [];
   for (let index = 0; index < covered.length; index += 1) {
     const current = readJson(currentFile(tree, intent, covered[index]));
-    for (const item of current ? itemsOf(current) : []) if (!covered.includes(item)) covered.push(item);
+    for (const item of current ? itemsOf(current) : []) {
+      if (covered.includes(item)) continue;
+      covered.push(item);
+      takenIn.push({ item, dispatch_id: current.dispatchId });
+    }
   }
-  return covered;
+  return { items: covered, takenIn };
 }
 
 /**
@@ -258,6 +273,7 @@ module.exports = {
   itemsOf,
   lineage,
   loadDispatch,
+  planned,
   recordDispatch,
   recordFile,
   saveDispatch,

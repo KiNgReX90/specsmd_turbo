@@ -166,7 +166,7 @@ test('a sibling dispatched after a grant that changes the granted path overlaps 
   const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs', 'other.cjs'] });
   const one = f.start('--item', 'a');
   assert.equal(f.call('grant', one, '--path', 'other.cjs', '--tree', f.root).code, 0);
-  const two = f.start('--item', 'b');
+  const two = f.startOverlapping('b');
   f.write('other.cjs', 'both touched it\n');
   f.write('b.cjs', 'module.exports = 2;\n');
   f.accepted(one, ['other.cjs']);

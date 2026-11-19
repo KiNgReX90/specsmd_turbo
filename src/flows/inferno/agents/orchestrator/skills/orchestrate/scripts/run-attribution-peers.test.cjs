@@ -25,7 +25,7 @@ test('a batch dispatched item by item is reviewed as one, each item against its 
 test('two dispatches that both report a shared file are refused with the chain form named', (t) => {
   const f = fixture(t, { a: ['shared.cjs', 'a.cjs'], b: ['shared.cjs', 'b.cjs'] });
   const one = f.start('--item', 'a');
-  const two = f.start('--item', 'b');
+  const two = f.startOverlapping('b');
   for (const file of ['shared.cjs', 'a.cjs', 'b.cjs']) f.write(file, 'module.exports = 2;\n');
   f.accepted(one, ['shared.cjs', 'a.cjs']);
   f.accepted(two, ['shared.cjs', 'b.cjs']);

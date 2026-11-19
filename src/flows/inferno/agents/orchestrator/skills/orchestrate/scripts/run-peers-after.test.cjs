@@ -4,9 +4,10 @@
 // attempts ran after the item, not beside it, so its change to a file both own is its own.
 
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const test = require('node:test');
 
-const { fixture } = require('./run-attribution-fixture.cjs');
+const { fixture, printedCalls } = require('./run-attribution-fixture.cjs');
 
 const ITEMS = { a: ['shared.cjs', 'a.cjs'], b: ['shared.cjs', 'b.cjs'] };
 
@@ -51,7 +52,7 @@ test('the same correction while the sibling is still open waits for it, as befor
   const two = f.start('--item', 'b');
   f.write('shared.cjs', 'a\nb\n');
   f.write('b.cjs', 'module.exports = 2;\n');
-  const fix = f.start('--item', 'a');
+  const fix = f.startOverlapping('a');
   f.write('shared.cjs', 'a fixed\nb\n');
   f.accepted(fix, ['shared.cjs']);
   const result = f.verify('a');
@@ -66,7 +67,7 @@ test('a sibling that was open while one of the item\'s own attempts was open is 
   late.write('shared.cjs', 'a\n');
   late.accepted(first, ['shared.cjs']);
   const sibling = late.start('--item', 'b');
-  const fix = late.start('--item', 'a');
+  const fix = late.startOverlapping('a');
   late.write('shared.cjs', 'a\nb\n');
   late.accepted(sibling, ['shared.cjs']);
   late.write('shared.cjs', 'a fixed\nb\n');
@@ -78,7 +79,7 @@ test('a sibling that was open while one of the item\'s own attempts was open is 
   // The sibling starts while the first attempt runs and is accepted before the correction began.
   const early = fixture(t, ITEMS);
   const one = early.start('--item', 'a');
-  const two = early.start('--item', 'b');
+  const two = early.startOverlapping('b');
   early.write('shared.cjs', 'a\n');
   early.accepted(one, ['shared.cjs']);
   early.write('shared.cjs', 'a\nb\n');
@@ -124,10 +125,10 @@ test('a sibling that ran between two attempts still answers for a change outside
 test('a change two siblings claim is refused when one ran beside the item, though the other ran between its attempts', (t) => {
   const f = fixture(t, { ...ITEMS, c: ['shared.cjs', 'c.cjs'] });
   const one = f.start('--item', 'a');
-  const beside = f.start('--item', 'c');
+  const beside = f.startOverlapping('c');
   f.write('a.cjs', 'module.exports = 2;\n');
   f.accepted(one, ['a.cjs']);
-  const between = f.start('--item', 'b');
+  const between = f.startOverlapping('b');
   f.write('shared.cjs', 'b\n');
   f.accepted(between, ['shared.cjs']);
   f.accepted(beside, ['shared.cjs']);
@@ -141,4 +142,46 @@ test('a change two siblings claim is refused when one ran beside the item, thoug
     assert.equal(result.code, 2, `${peers}: ${result.out}`);
     assert.match(result.out, new RegExp(`overlaps at shared\\.cjs with dispatch ${beside}`));
   }
+});
+
+/** Two chains that own shared.cjs through one item each, built and landed one after the other. */
+const CHAINS = { r1: ['shared.cjs', 'r1.cjs'], r2: ['r2.cjs'], l1: ['shared.cjs', 'l1.cjs'], l2: ['l2.cjs'] };
+
+test('the overlap refusal prints the calls that join both chains, and run as printed they clear it with the grant still read', (t) => {
+  const f = fixture(t, CHAINS);
+  for (const chain of [['r1', 'r2'], ['l1', 'l2']]) {
+    const id = f.start('--items', chain.join(','));
+    const files = [...new Set(chain.flatMap((item) => CHAINS[item]))];
+    for (const file of files) f.write(file, `${file} by ${chain.join(',')}\n`);
+    f.accepted(id, files);
+    f.land(...files);
+  }
+  // The two corrections side by side: the one named for r2 alone, and the one of l1 written past the door.
+  const fix = f.start('--item', 'r2');
+  assert.equal(f.call('grant', fix, '--path', 'other.cjs', '--tree', f.root).code, 0);
+  const beside = f.startOverlapping('l1');
+  f.write('shared.cjs', 'fixed by l1\n');
+  f.accepted(beside, ['shared.cjs']);
+  f.write('other.cjs', 'granted change\n');
+  f.accepted(fix, ['other.cjs']);
+  f.land('shared.cjs');
+  const held = f.verify('r2');
+  assert.equal(held.code, 2, held.out);
+  assert.match(held.out, new RegExp(`overlaps at shared\\.cjs with dispatch ${beside}: [^\\n]*joins the two histories, so the items are one chain from then on`));
+  const [join, accept, again, ...more] = printedCalls(held.out);
+  assert.equal(join, `dispatch-log alpha --items r2,r1,l1,l2 --tier <tier> --agent <agent> --tree ${f.root}`);
+  assert.equal(accept, `accept-dispatch <dispatch_id> --changed-paths '[]' --tree ${f.root}`);
+  assert.equal(again, `verify-item --items r2,r1 --tree ${f.root}`);
+  assert.deepEqual(more, []);
+
+  const joined = f.asPrinted(join.replace('<tier>', 'strong').replace('<agent>', 'builder'));
+  assert.equal(joined.code, 0, joined.out);
+  assert.equal(joined.data.log, path.join(f.cache, 'specsmd-inferno', path.basename(f.root), 'dispatch', 'alpha.log'));
+  const closed = f.asPrinted(accept.replace('<dispatch_id>', joined.data.dispatch_id));
+  assert.equal(closed.code, 0, closed.out);
+  const cleared = f.asPrinted(again);
+  assert.equal(cleared.code, 0, cleared.out);
+  assert.deepEqual([cleared.data.outside, cleared.data.unreported], [[], []]);
+  assert.deepEqual(cleared.data.dispatches[0].granted, ['other.cjs']);
+  for (const item of ['r2', 'l1']) assert.equal(f.verify(item).code, 0, item);
 });
