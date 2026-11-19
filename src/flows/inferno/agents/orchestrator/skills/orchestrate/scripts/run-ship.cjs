@@ -34,6 +34,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { branchDir } = require('./run-state-dir.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const { intentOf, worktreeEntries } = require('./run-worktrees.cjs');
 const { green } = require('./run-gate.cjs');
@@ -186,7 +187,7 @@ function removeWorktree(primary, tree, branch, out, left, options, command) {
   lib.git(primary, ['branch', '-d', branch]);
   left.shift();
   if (!command) {
-    const folder = path.join(lib.cacheDir(primary), branch);
+    const folder = branchDir(primary, branch);
     if (fs.existsSync(folder)) out.push(`left ${folder}: set verification.ship_cleanup to remove it`);
     return null;
   }

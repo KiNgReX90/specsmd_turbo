@@ -14,6 +14,7 @@
  */
 
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
@@ -114,12 +115,14 @@ function stopJobs(cache, tree) {
 
 function fixture(t, source = config()) {
   const dir = tempDir('inferno-lanes-');
+  // The host and every worktree a test adds to it (detachedTree), each of whose jobs is stopped.
+  const trees = [path.join(dir, 'app')];
   t.after(() => {
     writeFile(path.join(dir, 'release'), '');
-    stopJobs(path.join(dir, 'cache'), path.join(dir, 'app'));
+    for (const at of trees) stopJobs(path.join(dir, 'cache'), at);
     fs.rmSync(dir, { recursive: true, force: true });
   });
-  const tree = path.join(dir, 'app');
+  const tree = trees[0];
   const release = path.join(dir, 'release');
   fs.mkdirSync(tree);
   git(tree, 'init', '-q', '-b', 'main');
@@ -163,7 +166,7 @@ process.exit(code);
   commit(tree, 'fixture');
   git(tree, 'checkout', '-qb', BRANCH);
   return {
-    tree, release, code, cache: path.join(dir, 'cache'), checkEnv: path.join(dir, 'check-env'), laneEnv: path.join(dir, 'lane-env'),
+    tree, trees, release, code, cache: path.join(dir, 'cache'), checkEnv: path.join(dir, 'check-env'), laneEnv: path.join(dir, 'lane-env'),
     next: path.join(dir, 'verdicts-next.json'), verdicts: path.join(dir, 'verdicts.json'),
   };
 }
@@ -222,12 +225,34 @@ function harnessFix(f, files = 'harness.txt', fold = true) {
 
 const acceptLine = (lane) => new RegExp(`^land the harness fix on main, then: node \\S+run\\.cjs ${lane} --accept --harness-fix <sha> --tree \\S+$`);
 
+/**
+ * A detached worktree `name` of the host beside it, at main, with one in-scope commit of its own unless
+ * `own` is false; its jobs are stopped with the fixture's. Returns its path.
+ */
+function detachedTree(f, name, own = true) {
+  const dir = path.join(path.dirname(f.tree), name);
+  git(f.tree, 'worktree', 'add', '-q', '--detach', dir, 'main');
+  f.trees.push(dir);
+  if (own) {
+    write(dir, `src/${name}.txt`, `${name}\n`);
+    commit(dir, name);
+  }
+  return dir;
+}
+
+/** The folder of a detached tree's records, spelled out: its folder name, then the first 8 hex of the sha256 of its real path. */
+function detachedFolder(f, dir) {
+  const real = fs.realpathSync(dir);
+  const hash = crypto.createHash('sha256').update(real).digest('hex').slice(0, 8);
+  return path.join(f.cache, 'specsmd-inferno', 'app', '.detached', `${path.basename(real)}-${hash}`);
+}
+
 /** The branch's cache dir, where the gate and lane job files live. */
 function cacheOf(f) {
   return path.join(f.cache, 'specsmd-inferno', 'app', BRANCH);
 }
 
 module.exports = {
-  BRANCH, acceptLine, cacheOf, commit, config, fixture, gated, git, harnessFix, laneRuns, nextVerdicts, passed, red, run, touch, whole,
-  withVerdicts, write,
+  BRANCH, acceptLine, cacheOf, commit, config, detachedFolder, detachedTree, fixture, gated, git, harnessFix, laneRuns, nextVerdicts, passed, red,
+  run, touch, whole, withVerdicts, write,
 };

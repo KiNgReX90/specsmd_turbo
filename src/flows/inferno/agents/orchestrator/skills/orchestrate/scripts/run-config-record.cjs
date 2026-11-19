@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { branchDir } = require('./run-state-dir.cjs');
 const { LANES } = require('./run-lane-config.cjs');
 const { intentOf, worktreeFor } = require('./run-worktrees.cjs');
 const { atomicWrite } = require('./state-store.cjs');
@@ -35,7 +36,7 @@ const WRITERS = new Set(['claim', 'worktree', 'integrate', 'gate']);
 const READERS = new Set(['worktree', 'integrate', 'gate', 'green', 'ship', ...LANES]);
 
 function recordFile(tree, branch) {
-  return path.join(lib.cacheDir(tree), branch, 'run-config.json');
+  return path.join(branchDir(tree, branch), 'run-config.json');
 }
 
 function remember(tree, branch, config, step) {

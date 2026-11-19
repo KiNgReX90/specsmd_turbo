@@ -38,6 +38,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const jobs = require('./run-jobs.cjs');
 const proofs = require('./run-proofs.cjs');
 const slot = require('./run-slot.cjs');
@@ -57,7 +58,7 @@ const GATE_USAGE = 'usage: node run.cjs gate [--detach] [--supersede] --cause "<
   'since the cap counts the command by its name';
 
 const filled = (text) => typeof text === 'string' && text.trim().length > 0;
-const branchFile = (tree, name) => path.join(lib.cacheDir(tree), lib.currentBranch(tree), name);
+const branchFile = (tree, name) => path.join(stateDir(tree), name);
 const save = (file, value) => atomicWrite(file, `${JSON.stringify(value)}\n`);
 
 /** Refuse a cause on any step but the gate, and a gate's cause without its signer or beside a call that runs no finalize command. */
@@ -123,12 +124,15 @@ function detachRerun(tree, config, options) {
 /** Where the rerun record of `command` sits: beside its proof as the tree stands. */
 const recordFile = (tree, config, selected, command) => `${proofs.commandProof(tree, config, selected, command).file}${RECORD}`;
 
-/** Each finalize command's rerun record beside its proof as it stands, from this branch: the causes the greens it reads hold. */
+/**
+ * Each finalize command's rerun record beside its proof as it stands, from this tree's folder, where the
+ * red it ran again sits: the causes the greens it reads hold. A branch name alone is HEAD in every detached tree.
+ */
 function heldReruns(tree, config, selected) {
-  const branch = lib.currentBranch(tree);
+  const folder = stateDir(tree);
   return config.verification.finalize
     .map((command) => jobs.readJson(recordFile(tree, config, selected, command)))
-    .filter((record) => record && record.branch === branch);
+    .filter((record) => record && path.dirname(record.dir) === folder);
 }
 
 /**
@@ -166,8 +170,9 @@ function keep(primary, branch, record, out) {
     return NOT_KEPT;
   }
   // A branch name holds slashes: encoded it names one folder, and no two branches the same one.
-  const kept = path.posix.join(EVIDENCE, `${encodeURIComponent(branch)}-${record.run}`, path.basename(record.log));
-  const to = path.join(lib.cacheDir(primary), kept);
+  const folder = path.posix.join(`${encodeURIComponent(branch)}-${record.run}`, path.basename(record.log));
+  const kept = path.posix.join(EVIDENCE, folder);
+  const to = path.join(lib.cacheDir(primary), EVIDENCE, folder);
   fs.mkdirSync(path.dirname(to), { recursive: true });
   fs.copyFileSync(record.log, to);
   out.push(`kept the red log of ${record.command} at ${to}`);

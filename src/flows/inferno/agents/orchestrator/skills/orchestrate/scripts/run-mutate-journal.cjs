@@ -24,6 +24,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const { committed, putBackSeal, sealPaths, unseal } = require('./run-mutate-seal.cjs');
 const { closeLeft } = require('./run-mutate-session.cjs');
 
@@ -33,7 +34,7 @@ const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 const sha = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 
 function journalPath(tree) {
-  return path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'mutate-journal.json');
+  return path.join(stateDir(tree), 'mutate-journal.json');
 }
 
 /** Fields 3 (state) and 22 (start time) of /proc/<pid>/stat, or null. The name in field 2 may hold spaces. */

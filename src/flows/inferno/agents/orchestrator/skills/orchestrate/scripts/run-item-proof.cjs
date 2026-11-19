@@ -378,8 +378,7 @@ function verifyItem(itemId, options) {
   const commands = [];
   // Each check runs where the host's verification.run sends it, or here without the key (run-item-check.cjs).
   const ran = runItemChecks(tree, config, items.filter((entry) => entry.spec.manifest.finalize_check)
-    .map((entry) => ({ item: entry.id, check: entry.spec.manifest.finalize_check })),
-  (id) => path.join(lib.cacheDir(tree), lib.currentBranch(tree), `verify-${id}-${lib.stamp()}.log`));
+    .map((entry) => ({ item: entry.id, check: entry.spec.manifest.finalize_check })));
   for (const entry of items) {
     const done = ran.runs.find((one) => one.item === entry.id);
     if (!done) {
