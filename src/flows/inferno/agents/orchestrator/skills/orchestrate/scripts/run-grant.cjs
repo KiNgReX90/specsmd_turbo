@@ -21,7 +21,6 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
-const { chainDispatchCall } = require('./run-call.cjs');
 
 const { RunError } = lib;
 
@@ -108,7 +107,7 @@ function grantable(dispatch, tree, id) {
 function checkBeside(dispatch, tree, record, file) {
   // Loaded here: run-attribute.cjs loads this file for the paths a dispatch was granted.
   const { openDispatches } = require('./run-attribute.cjs');
-  const { besideAt } = require('./run-peers.cjs');
+  const { besideAt, joinCall } = require('./run-peers.cjs');
   const own = dispatch.effective(tree, record);
   const peers = dispatch.currentRecords(tree).filter((entry) => entry.phase === 'accepted');
   const now = { ...dispatch.captureSnapshot(tree), seq: Infinity };
@@ -117,11 +116,9 @@ function checkBeside(dispatch, tree, record, file) {
   const other = found.record;
   const theirs = dispatch.itemsOf(other);
   const mine = dispatch.itemsOf(record);
-  const first = own.before.seq <= dispatch.effective(tree, other).before.seq;
-  const chain = [...new Set(first ? [...mine, ...theirs] : [...theirs, ...mine])];
   throw dispatch.refuse(`grant ${file}: dispatch ${other.dispatchId} for ${theirs.join(', ')} ` +
     `${found.open ? 'owns it and is still open' : 'changed it beside this item'}, so verify-item would refuse ${mine.join(', ')} ` +
-    `at it. Build both as one chain with ${chainDispatchCall(tree, record.assignment.intent, chain)}, or let the change wait ` +
+    `at it. Build both as one chain with ${joinCall(tree, record.assignment.intent, mine, own.before.seq, other)}, or let the change wait ` +
     `until ${theirs.join(', ')} is integrated and dispatch ${mine.join(', ')} again`);
 }
 

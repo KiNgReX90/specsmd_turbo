@@ -20,6 +20,7 @@
 
 const lib = require('./run-lib.cjs');
 const dispatch = require('./run-dispatch.cjs');
+const { acceptDispatchCall, chainDispatchCall, verifyItemCall } = require('./run-call.cjs');
 
 function seqOf(snapshot) {
   if (!snapshot || !Number.isInteger(snapshot.seq)) {
@@ -29,9 +30,29 @@ function seqOf(snapshot) {
   return snapshot.seq;
 }
 
+/** The first entry of `left` that can name a file an entry of `right` names, with that entry, as `[left's, right's]`; null when none can. */
+function firstShared(left, right, tree) {
+  for (const entry of left) {
+    const other = right.find((candidate) => lib.overlaps(entry, candidate, tree));
+    if (other) return [entry, other];
+  }
+  return null;
+}
+
 /** Whether any entry of one frozen ownership list can name a file an entry of the other names. */
 function ownershipOverlaps(left, right, tree) {
-  return (left || []).some((entry) => (right || []).some((other) => lib.overlaps(entry, other, tree)));
+  return firstShared(left, right, tree) !== null;
+}
+
+/**
+ * The one dispatch-log that builds the items `mine` of a dispatch, whose first baseline is `first`
+ * on the tree's sequence, and the items of `other` as one chain, the one whose first baseline came
+ * first leading. The refusals of grant, verify-item and dispatch-log all print it, so they never drift.
+ */
+function joinCall(tree, intent, mine, first, other) {
+  const theirs = dispatch.itemsOf(other);
+  const ahead = first <= dispatch.effective(tree, other).before.seq;
+  return chainDispatchCall(tree, intent, ahead ? [...mine, ...theirs] : [...theirs, ...mine]);
 }
 
 /** Each attempt of a lineage by the id of the attempt it superseded. */
@@ -162,17 +183,21 @@ function histories(tree, own, editable) {
 
 /**
  * A peer's change must lie inside its own ownership, and outside this item's when it ran beside the
- * item, but where `excused` reads it as a sibling's run after the item (run-attribute.cjs).
+ * item, but where `excused` reads it as a sibling's run after the item (run-attribute.cjs). `own` is
+ * the item's history: its record names the items the refusal's join call puts beside the peer's.
  */
-function checkPeerChange(tree, run, file, excused) {
+function checkPeerChange(tree, own, run, file, excused) {
   const { peer } = run;
   if (!lib.ownedBy(file, peer.assignment.ownership.editable, tree)) {
     throw dispatch.refuse(`dispatch ${peer.dispatchId} for ${dispatch.itemsOf(peer).join(', ')} claims ${file} outside its ` +
       'ownership: review that item first, its verify-item names the file');
   }
   if (run.overlaps(file) && !excused(run, file)) {
-    throw dispatch.refuse(`dispatch ownership overlaps at ${file} with dispatch ${peer.dispatchId}: ` +
-      'a serial chain one builder builds takes one dispatch-log for all its items, with --items a,b');
+    const mine = dispatch.itemsOf(own.record);
+    throw dispatch.refuse(`dispatch ownership overlaps at ${file} with dispatch ${peer.dispatchId}: one dispatch-log over the items ` +
+      'of both joins the two histories, so the items are one chain from then on. ' +
+      `Run ${joinCall(tree, own.record.assignment.intent, mine, own.before.seq, peer)}; then, with the dispatch_id it prints, ` +
+      `${acceptDispatchCall(tree, '<dispatch_id>', '[]')}; then ${verifyItemCall(tree, mine)}`);
   }
 }
 
@@ -242,7 +267,7 @@ function unexplainedChanges(tree, own, editable, peers, now, folded, open, excus
       const claimed = own.claimed.includes(file);
       if (folded.has(file) && !claimed) continue;
       const run = runAt(runs, before, after, file, claimed);
-      if (run) checkPeerChange(tree, run, file, excused);
+      if (run) checkPeerChange(tree, own, run, file, excused);
       if (run || claimed) {
         close(file);
         continue;
@@ -275,4 +300,4 @@ function besideAt(tree, own, file, peers, open, now) {
   return null;
 }
 
-module.exports = { besideAt, ownershipOverlaps, unexplainedChanges };
+module.exports = { besideAt, firstShared, joinCall, ownershipOverlaps, unexplainedChanges };

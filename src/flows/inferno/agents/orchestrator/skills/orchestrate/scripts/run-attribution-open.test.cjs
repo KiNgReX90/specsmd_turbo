@@ -6,7 +6,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { fixture, spec } = require('./run-attribution-fixture.cjs');
+const { fixture, printedCalls, spec } = require('./run-attribution-fixture.cjs');
 
 test('verify-item verifies beside an open dispatch with disjoint frozen ownership', (t) => {
   const f = fixture(t, { a: ['a.cjs'], b: ['b.cjs'] });
@@ -23,7 +23,7 @@ test('verify-item verifies beside an open dispatch with disjoint frozen ownershi
 test('verify-item still waits on an open dispatch whose frozen ownership overlaps', (t) => {
   const f = fixture(t, { a: ['shared.cjs', 'a.cjs'], b: ['shared.cjs', 'b.cjs'] });
   const one = f.start('--item', 'a');
-  const two = f.start('--item', 'b');
+  const two = f.startOverlapping('b');
   f.write('a.cjs', 'module.exports = 2;\n');
   f.write('b.cjs', 'module.exports = 2;\n');
   f.accepted(one, ['a.cjs']);
@@ -109,11 +109,32 @@ test('overlap is read on the record\'s frozen ownership and on the spec, so a na
     const f = fixture(t, { a: frozen, b: ['shared.cjs', 'b.cjs'] });
     const one = f.start('--item', 'a');
     f.write('.specs-inferno/intents/alpha/work-items/a.md', spec('a', now));
-    const two = f.start('--item', 'b');
+    const two = f.startOverlapping('b');
     f.write('a.cjs', 'module.exports = 2;\n');
     f.accepted(one, ['a.cjs']);
     const result = f.verify('a');
     assert.equal(result.code, 2, result.out);
     assert.match(result.out, new RegExp(`dispatch ${two} for b is still open`));
   }
+});
+
+test('dispatch-log refuses an item beside an open dispatch whose ownership overlaps, and logs it once that one is accepted', (t) => {
+  const f = fixture(t, { a: ['shared.cjs', 'a.cjs'], b: ['shared.cjs', 'b.cjs'], c: ['c.cjs'] });
+  const one = f.start('--item', 'a');
+  f.start('--item', 'c');
+  const refused = f.call('dispatch-log', 'alpha', '--item', 'b', '--tier', 'strong', '--agent', 'builder', '--tree', f.root);
+  assert.equal(refused.code, 2, refused.out);
+  assert.match(refused.out, new RegExp(`^ERROR \\[DISPATCH_PROOF\\] dispatch-log b: dispatch ${one} for a is still open and owns shared\\.cjs too, `, 'm'));
+  const [accept, chain, ...more] = printedCalls(refused.out);
+  assert.equal(accept, `accept-dispatch ${one} --changed-paths '<changed_files as JSON>' --tree ${f.root}`);
+  assert.equal(chain, `dispatch-log alpha --items a,b --tier <tier> --agent <agent> --tree ${f.root}`);
+  assert.deepEqual(more, []);
+  f.write('shared.cjs', 'a\n');
+  const accepted = f.asPrinted(accept.replace('<changed_files as JSON>', '["shared.cjs"]'));
+  assert.equal(accepted.code, 0, accepted.out);
+  const two = f.start('--item', 'b');
+  f.write('shared.cjs', 'a\nb\n');
+  f.accepted(two, ['shared.cjs']);
+  const result = f.verify('b');
+  assert.equal(result.code, 0, result.out);
 });

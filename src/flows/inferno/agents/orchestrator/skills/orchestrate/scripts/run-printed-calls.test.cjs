@@ -254,6 +254,10 @@ test("each call builder prints its exact line from its own flags, the site's dec
     chainDispatchCall: [
       [["/w", "beta", ["b-one", "b-two"]], `run.cjs dispatch-log beta --items b-one,b-two --tier <tier> --agent <agent> --tree /w --config ${CODEX}`],
     ],
+    acceptDispatchCall: [
+      [["/w", "d-1", "[]"], `run.cjs accept-dispatch d-1 --changed-paths '[]' --tree /w${tail}`],
+      [["/w", "d-1"], `run.cjs accept-dispatch d-1 --changed-paths '<changed_files as JSON>' --tree /w${tail}`],
+    ],
     teardownCall: [[["/w"], `run.cjs teardown --tree /w${tail}`]],
     realAppCall: [
       [["/w", "a1..b2"], `run.cjs real-app --range a1..b2 --tree /w${tail}`],
