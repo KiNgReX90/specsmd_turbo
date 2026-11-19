@@ -222,7 +222,7 @@ test('a dispatch-log of the item\'s own correction after a sibling\'s commit is 
 test('a sibling that ran beside the item, its dispatch open while the item\'s was, still overlaps', (t) => {
   const f = fixture(t, ITEMS);
   const one = f.start('--item', 'a');
-  const two = f.start('--item', 'b');
+  const two = f.startOverlapping('b');
   f.write(SHARED, 'guide\nby a\n');
   f.write('a.cjs', 'a\n');
   f.accepted(one, [SHARED, 'a.cjs']);

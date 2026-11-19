@@ -27,6 +27,7 @@ const { ownership } = require('./run-owner.cjs');
 const { resolveBudget } = require('./run-budget.cjs');
 const { dispatchOracle, isOracleDispatch } = require('./run-oracle-route.cjs');
 const { shippedOwed } = require('./run-after-ship.cjs');
+const { refuseOverlap, scope } = require('./run-dispatch-overlap.cjs');
 
 /** An in_progress intent counts as abandoned after this long with no process, edit or commit in its worktree. */
 const DEFAULT_IDLE_MINUTES = 60;
@@ -349,19 +350,16 @@ function dispatchLog(intentId, options) {
   const root = lib.primaryRoot(options.cwd);
   const tree = options.tree || lib.repoRoot(options.cwd);
   // A correction of one item of a chain is logged for the whole chain its current record covers.
-  const items = dispatch.coveredItems(tree, intentId, requested);
-  const editable = new Set();
-  for (const id of items) {
-    const spec = lib.readItemSpec(tree, intentId, id);
-    for (const entry of (spec.manifest.ownership && spec.manifest.ownership.editable) || []) editable.add(entry);
-  }
+  const { items, takenIn, editable } = scope(tree, intentId, requested);
+  // Read before anything is written: a refused dispatch leaves no record, no log line and no baseline.
+  refuseOverlap(tree, intentId, items, editable);
   // The project's rule files that apply to these paths, read before the record so a bad block refuses the dispatch.
-  const standards = standardsFor(tree, [...editable], { config: options.config }).map((file) => `standards ${file}`);
+  const standards = standardsFor(tree, editable, { config: options.config }).map((file) => `standards ${file}`);
   const record = dispatch.recordDispatch(tree, {
     intent: intentId,
     items,
     dispatch_id: options.dispatch_id || crypto.randomUUID(),
-    editable: [...editable],
+    editable,
   });
   const log = path.join(lib.cacheDir(root), 'dispatch', `${intentId}.log`);
   const batch = options.batch || (items.length > 1 ? items.join(',') : '');
@@ -369,10 +367,11 @@ function dispatchLog(intentId, options) {
   const lines = items.map((id) => [new Date().toISOString(), intentId, id, options.tier, options.agent, batch, record.dispatchId].join('\t'));
   fs.mkdirSync(path.dirname(log), { recursive: true });
   fs.appendFileSync(log, `${lines.join('\n')}\n`, 'utf8');
+  const taken = takenIn.map((entry) => `took in ${entry.item}: its current dispatch ${entry.dispatch_id} covers it, so this dispatch owns its files too`);
   return {
     exit: 0,
-    payload: { log, line: lines[0], dispatch_id: record.dispatchId, tree },
-    out: [`logged ${items.join(', ')} -> ${log}`, `dispatch ${record.dispatchId}`, ...standards],
+    payload: { log, line: lines[0], dispatch_id: record.dispatchId, tree, taken_in: takenIn },
+    out: [`logged ${items.join(', ')} -> ${log}`, ...taken, `dispatch ${record.dispatchId}`, ...standards],
   };
 }
 

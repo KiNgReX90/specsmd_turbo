@@ -159,6 +159,10 @@ const shellWord = (text) => `'${text.replace(/'/g, "'\\''")}'`;
 const laneIntermittentCall = (lane, tree, tests) => nodeCall(lane, tree, null,
   ['--accept-intermittent', ...tests.flatMap((test) => ['--test', shellWord(test)]), '--reason', '"<why>"', '--by', '<who>']);
 
+/** Accept dispatch `id` with the JSON list `changed`, or with the changed_files its builder returns, which only the host knows. */
+const acceptDispatchCall = (tree, id, changed = '<changed_files as JSON>') => runCall('accept-dispatch', tree, null,
+  [id, '--changed-paths', shellWord(changed)]);
+
 /**
  * A merge slot call for a holder by the runner's own path, for a driver that holds its own
  * ticket: `take`, `renew` or `release`, or the queue itself when `verb` is null.
@@ -182,6 +186,7 @@ module.exports = {
   RUNNER, RUNNER_PATH, caller, blockIntentCall, chainDispatchCall, closeIntentCall, deferItemCall, gateStartCall, gateSupersedeCall, gateWaitCall, integrateAgainCall, integrateCall, intentRecordCall,
   intentReviewCall, itemRecordCall, itemReviewCall, itemScanCall, laneAcceptCall, laneIntermittentCall, planOracleCall, realAppCall, scanCall, slotCall, teardownCall, unclaimIntentCall,
   verifyItemCall,
+  acceptDispatchCall,
   gateCauseCall,
   recordStartCall,
   recordWaitCall,

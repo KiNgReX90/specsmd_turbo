@@ -18,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const proofs = require('./run-proofs.cjs');
 const jobs = require('./run-jobs.cjs');
 const { configuredLanes } = require('./run-lane-config.cjs');
@@ -125,7 +126,7 @@ function laneNow(options) {
   const proof = laneProof(tree, options.config, lane, config);
   fs.rmSync(proof.file, { force: true });
   const runId = `${lib.stamp()}-${process.pid}`;
-  const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `lane-${lane.name}-${lib.stamp()}.log`);
+  const log = path.join(stateDir(tree), `lane-${lane.name}-${lib.stamp()}.log`);
   // The lane names its log while it walks, so a wait can read a red line before the result exists.
   // The result keeps the start too, so a verdicts file written before this run never speaks for it.
   const started = new Date().toISOString();
@@ -285,7 +286,7 @@ function acceptCheck(tree, lane, last, proof, sha) {
   Object.assign(process.env, {
     INFERNO_LANE: lane.name, INFERNO_LANE_LOG: String(last.log || ''), INFERNO_LANE_RUN: last.run, INFERNO_HARNESS_FIX: sha, INFERNO_GATE_CONFIG: proof.config,
   });
-  const log = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `lane-${lane.name}-accept-${lib.stamp()}.log`);
+  const log = path.join(stateDir(tree), `lane-${lane.name}-accept-${lib.stamp()}.log`);
   const run = lib.runShell(lane.accept_check, tree, log);
   if (run.code === 0) return;
   const said = fs.readFileSync(log, 'utf8').split('\n').map((line) => line.trim()).filter(Boolean).pop() || '(no output)';
