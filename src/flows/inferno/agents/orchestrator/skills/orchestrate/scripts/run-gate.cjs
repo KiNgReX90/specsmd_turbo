@@ -5,6 +5,7 @@
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const proofs = require('./run-proofs.cjs');
 const { resolveBase } = require('./run-intents.cjs');
 const jobs = require('./run-jobs.cjs');
@@ -176,7 +177,7 @@ function gateNow(options) {
   const started = proofs.scopeHash(tree);
   const definition = JSON.stringify(config.verification);
   const branch = lib.currentBranch(tree);
-  const dir = path.join(lib.cacheDir(tree), branch, `gate-${lib.stamp()}`);
+  const dir = path.join(stateDir(tree), `gate-${lib.stamp()}`);
   // A gate on the code the last verdict was red on runs that red again: with its cause, or the line that says it records none.
   const again = rerun.rerunOf(tree, config, options, codeHash);
   shown.push(...again.out);
@@ -349,6 +350,7 @@ function gateWait(options) {
   if (!job) {
     throw new RunError(`no gate has been started for this tree; start one with ${gateStartCall(tree)}`, 'NO_GATE_JOB');
   }
+  jobs.refuseOtherTree(job, tree);
   const selected = path.resolve(tree, options.config || `${lib.SPECS_DIR}/config.yaml`);
   const configured = path.resolve(tree, job.config || `${lib.SPECS_DIR}/config.yaml`);
   if (selected !== configured) {

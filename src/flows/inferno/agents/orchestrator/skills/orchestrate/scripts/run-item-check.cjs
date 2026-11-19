@@ -24,6 +24,7 @@ const fs = require('fs');
 const path = require('path');
 
 const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const { checkRounds, closeLeft } = require('./run-check-session.cjs');
 const { readRun } = require('./run-check-refused.cjs');
 const { commandOf, wrapperOf } = require('./run-mutate-host.cjs');
@@ -32,13 +33,16 @@ const { commandOf, wrapperOf } = require('./run-mutate-host.cjs');
 const readFrom = (log, from) => fs.readFileSync(log).subarray(from).toString('utf8');
 
 /**
- * Run each of `checks`, `[{ item, check }]`, in `tree`, its log at `logOf(item)`. Returns `runs`,
+ * Run each of `checks`, `[{ item, check }]`, in `tree`, its log `verify-<item>-<stamp>.log` in the
+ * tree's folder (run-state-dir.cjs). Returns `runs`,
  * one per check in order, `{ item, command, run, output, line }`: `command` the check as it ran,
  * `run` as the shell returned it, `output` what that run wrote to its log, and `line` the refusal
  * line of a check the wrapper refused twice, else null; `left`, the lines of closing the sessions
  * a killed run left, to print first; and `notes`, the lines a session's close left.
  */
-function runItemChecks(tree, config, checks, logOf) {
+function runItemChecks(tree, config, checks) {
+  const folder = stateDir(tree);
+  const logOf = (item) => path.join(folder, `verify-${item}-${lib.stamp()}.log`);
   const wrapper = wrapperOf(config.verification);
   if (!wrapper) {
     const runs = checks.map(({ item, check }) => {
@@ -48,7 +52,7 @@ function runItemChecks(tree, config, checks, logOf) {
     return { runs, left: [], notes: [] };
   }
   const left = closeLeft(tree);
-  const dir = path.join(lib.cacheDir(tree), lib.currentBranch(tree), `verify-${lib.stamp()}`);
+  const dir = path.join(folder, `verify-${lib.stamp()}`);
   const checked = checkRounds(tree, config, dir, (step) => checks.map(({ item, check }) => step(item, (shell) => {
     const command = commandOf({ run: wrapper }, tree, check);
     const log = logOf(item);
