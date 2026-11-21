@@ -1,7 +1,7 @@
 'use strict';
 
 const { TransitionError } = require('./state-ledger.cjs');
-const { caller } = require('./run-call.cjs');
+const { caller, intentReviewCall } = require('./run-call.cjs');
 const DEFAULT_STATE_PATH = '.specs-inferno/state.yaml';
 
 // ---------------------------------------------------------------------------
@@ -16,7 +16,9 @@ const USAGE = `INFERNO state.yaml single-writer
   node state-transition.cjs unblock-intent --intent <id>
   node state-transition.cjs complete-item --intent <id> --item <id> --proof <sha>
   node state-transition.cjs close-intent  --intent <id>
-  node state-transition.cjs review-item --intent <id> --item <id> --verdict clean|fix --files-hash <hex> --tier cheap|strong|escalate --commit <sha>
+  node state-transition.cjs review-item --intent <id> --item <id> --verdict clean|fix|settled --files-hash <hex> --tier cheap|strong|escalate --commit <sha>
+  node state-transition.cjs defer-item --intent <id> --item <id> --reason "<why>" [--rewire <item>=<new-dep>]...
+  node state-transition.cjs defer-finding --intent <id> --entry <n> --to <file> --reason "<why>"
   node state-transition.cjs archive-intent [--intent <id>] [--sweep]
   node state-transition.cjs check [--intent <id>]
 
@@ -25,6 +27,8 @@ Options
   --run <run-id>  the run taking the intent, recorded as claimed_by (claim-intent)
   --reason <why>  what the intent waits on, recorded as blocked_reason (block-intent)
   --proof <sha>   the integrated tree run.cjs integrate ran the checks on (complete-item)
+  --rewire <a>=<b> give dependent a an edge on b in place of its edge on the deferred item, or
+                  drop that edge with <a>=none; once per open dependent (defer-item)
   --tree <dir>    the worktree a complete-item refusal prints into the call it names
   --config <file> the host config that call carries, so it runs on the caller's host
   --now <iso>     override the timestamp (tests / backfill)
@@ -46,12 +50,29 @@ them from the remaining intents' depends_on_intents, and refuses anything not co
 --sweep adds every other completed intent except one another session is still shipping.
 complete-item refuses an item with no integration proof. run.cjs integrate --item <id> runs the
 checks on the committed tree and passes the sha they proved, so nothing is marked verified that
-nothing verified. It also refuses an item whose review is not clean. review-item records that
+nothing verified. It also refuses an item whose review is neither clean nor settled. review-item records that
 verdict, and run.cjs review --item is its one caller. close-intent refuses while any work item is still open; complete each item first.
 check exits 1 when the ledger drifts from its work items, when an intent waiting to be claimed
 does not open its INTENT. line with the triage criterion that makes it one, as in "INTENT. (c)
 <reason>" (a request or an order is no criterion, a batch is criterion (a)), when .specs-inferno/quick-fixes.md exists
-beside it (nothing builds from a parking file).`;
+beside it (nothing builds from a parking file).
+
+defer-item takes one item out of its intent for a later plan: status deferred plus deferred_at and
+deferred_reason, on the ledger and on the item's spec. close-intent and check read it as closed
+for this intent; nothing builds, reviews or integrates it, and archive-intent keeps it with its
+reason for the next plan. It refuses an item a builder was dispatched on, reviewed, or committed a
+file only it owns, a completed one, and the last item not deferred. Every open item that depends
+on it needs a --rewire, which changes the edge in the ledger and the spec front matter together;
+a Test Plan line that integrates with the deferred item is the planner's to repair, and plan-lint
+names it. The caller commits what it wrote.
+
+defer-finding moves one finding of the recorded intent review, numbered from 1 as its findings list
+them, into its deferred list with --to, a file in the intent folder that names the finding's file:line
+for the next plan, and the reason. Only the orchestrator defers, on a rule the user gave, and only what
+.specs-inferno/standards/defer-findings.yaml lets leave (severities: [...], survivors: true); without
+that file only minor, never a surviving mutant. A deferred survivor stops running. With no finding
+left open the review says clean, or stays fix while a criterion owes a proof, and the next review call
+dispatches its reviewer for those criteria. The caller commits the review file.`;
 
 function parseArgs(argv) {
   const options = { file: DEFAULT_STATE_PATH };
@@ -68,7 +89,9 @@ function parseArgs(argv) {
     if (value === undefined || value.startsWith('--')) {
       throw new TransitionError(`missing value for ${arg}`, 'BAD_ARGS');
     }
-    options[arg.slice(2).replace(/-/g, '_')] = value;
+    // A dependent each: --rewire repeats, and every one is kept.
+    if (arg === '--rewire') options.rewire = [...(options.rewire || []), value];
+    else options[arg.slice(2).replace(/-/g, '_')] = value;
     i += 1;
   }
   return { command, options };
@@ -77,7 +100,7 @@ function parseArgs(argv) {
 function main(argv, commands) {
   const {
     claimIntent, unclaimIntent, blockIntent, unblockIntent, completeItem, closeIntent,
-    archiveIntent, check, reviewItem,
+    archiveIntent, check, reviewItem, deferItem, deferFinding,
   } = commands;
   const { command, options } = parseArgs(argv);
   caller(options);
@@ -160,8 +183,44 @@ function main(argv, commands) {
     if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
     else {
       process.stdout.write(
-        `reviewed ${result.item} ${result.verdict} (${result.tier}, ${result.rejections} rejection(s)) at ${result.reviewed_at}\n`
+        `reviewed ${result.item} ${result.verdict} (${result.tier}, ${result.misses} miss${result.misses === 1 ? '' : 'es'}) at ${result.reviewed_at}\n`
       );
+    }
+    return 0;
+  }
+
+  if (command === 'defer-item') {
+    // Each flag is named on its own, so the usage error says which one the caller left out.
+    for (const flag of ['intent', 'item', 'reason']) {
+      if (!options[flag]) throw new TransitionError(`defer-item requires --${flag}`, 'BAD_ARGS');
+    }
+    const result = deferItem(options);
+    if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+    else if (result.changed) {
+      process.stdout.write(`deferred ${result.item} (was ${result.previous || 'unset'}) at ${result.deferred_at}: ${result.reason}\n`);
+      for (const edge of result.rewired) {
+        process.stdout.write(edge.to
+          ? `  rewired ${edge.item} from ${edge.from} to ${edge.to}\n`
+          : `  dropped ${edge.item}'s edge on ${edge.from}\n`);
+      }
+      process.stdout.write(`  wrote ${[options.file, ...result.markdown].join(', ')}: commit them\n`);
+    } else process.stdout.write(`${result.item} ${result.note}. no change\n`);
+    return 0;
+  }
+
+  if (command === 'defer-finding') {
+    for (const flag of ['intent', 'entry', 'to', 'reason']) {
+      if (!options[flag]) throw new TransitionError(`defer-finding requires --${flag}`, 'BAD_ARGS');
+    }
+    const result = deferFinding(options);
+    if (options.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+    else {
+      const closed = result.gaps.length > 0
+        ? `no finding stays open, and ${result.gaps.join('; ')}: the review stays fix; run ${intentReviewCall(result.tree)} to dispatch its reviewer for them`
+        : 'no finding stays open, so the review now says clean';
+      const open = result.open === 0 ? closed : `${result.open} finding${result.open === 1 ? ' stays' : 's stay'} open, numbered as the file lists them now`;
+      process.stdout.write(`deferred findings entry ${result.entry} of ${result.intent} (${result.severity} at ${result.at}) to ${result.to}: ${result.reason}\n` +
+        `  ${open}\n  wrote ${result.review}: commit it before the next review call\n`);
     }
     return 0;
   }
@@ -173,7 +232,8 @@ function main(argv, commands) {
     else if (result.changed) {
       process.stdout.write(
         `closed intent ${result.intent} (was ${result.previous || 'unset'}) at ${result.completed_at}; ` +
-          `${result.items} work items completed\n`
+          `${result.items - result.deferred.length} work items completed` +
+          `${result.deferred.length > 0 ? `, ${result.deferred.length} deferred` : ''}\n`
       );
     } else process.stdout.write(`intent ${result.intent} already completed. no change\n`);
     return 0;

@@ -1,16 +1,8 @@
-const fs = require('fs');
-const path = require('path');
-const yaml = require('js-yaml');
 const { spawnSync } = require('child_process');
+const { hostConfig } = require('./host-config');
 
 // The claim owns the lookup, so the installer and a run never look in different places.
 const { resolveBudget } = require('../../flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-budget.cjs');
-
-function hostConfig(root, flowKey) {
-    const abs = path.join(root, `.specs-${flowKey}`, 'config.yaml');
-    if (!fs.existsSync(abs)) return {};
-    return yaml.load(fs.readFileSync(abs, 'utf8')) || {};
-}
 
 /**
  * Runs the budget script on the host root. Returns null when the text is within budget or

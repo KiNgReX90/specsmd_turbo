@@ -23,10 +23,10 @@ const SCRIPTS = path.join(INFERNO, 'agents/orchestrator/skills/orchestrate/scrip
 const CODEX_SKILLS = path.join(INFERNO, 'codex/skills');
 const CODEX_CONFIG = '--config .specs-inferno/config.codex.yaml';
 
-const WRITER = ['claim-intent', 'unclaim-intent', 'block-intent', 'unblock-intent', 'complete-item', 'close-intent', 'review-item', 'archive-intent', 'check'];
+const WRITER = ['claim-intent', 'unclaim-intent', 'block-intent', 'unblock-intent', 'complete-item', 'close-intent', 'review-item', 'defer-item', 'archive-intent', 'check'];
 const STEPS = [
   'select', 'claim', 'unclaim', 'worktree', 'frontier', 'probes', 'verify-item', 'review', 'scan', 'mutate', 'integrate',
-  'doubles', 'real-app', 'gate', 'green', 'smoke', 'windows', 'slot', 'ship', 'teardown', 'register-process', 'dispatch-log', 'accept-dispatch', ...WRITER,
+  'doubles', 'real-app', 'gate', 'green', 'smoke', 'windows', 'slot', 'ship', 'teardown', 'register-process', 'dispatch-log', 'accept-dispatch', 'tools', ...WRITER,
 ];
 /** A script file name, or a constant run-call.cjs exports that holds one. */
 const SCRIPT = /\b(?:run|state-transition)\.cjs\b|\b(?:RUNNER|RUNNER_PATH|WRITER_SCRIPT)\b/;
@@ -167,6 +167,7 @@ describe('printed calls', () => {
     expect(flagged('const w = `node ${RUNNER_PATH} ${rest}`;')).not.toEqual([]);
     expect(flagged('throw new E(`Close it with: close-intent --intent ${id}`);')).not.toEqual([]);
     expect(flagged("throw new E('mark it with complete-item');")).not.toEqual([]);
+    expect(flagged('out.push(`then review --item ${id} --reviewer <agent-id> --quality-reviewer <quality-agent-id>`);')).not.toEqual([]);
     expect(flagged("const w = require('./state-transition.cjs');")).toEqual([]);
     expect(flagged("throw new E('complete-item requires --intent and --item');")).toEqual([]);
     expect(flagged("if (command === 'complete-item') run();")).toEqual([]);

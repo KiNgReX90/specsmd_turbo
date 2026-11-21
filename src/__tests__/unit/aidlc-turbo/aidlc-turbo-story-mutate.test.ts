@@ -5,7 +5,8 @@
  * and writes the result into the story's proof:
  * - a mutant breaks one line, its narrow test runs, the line goes back byte
  *   for byte (CRLF and a missing final newline included), also after a
- *   timeout or an exception; exit not 0 is killed, 0 survived;
+ *   timeout or an exception; a failed test is killed, 0 survived (the
+ *   verdict itself: aidlc-turbo-story-mutate-verdict.test.ts);
  * - invalid mutants never run: from equals to, a test file, a line the story
  *   did not add, a test that is no verification program or has shell
  *   operators, from not on its line (a moved line is found again), and a test
@@ -154,15 +155,6 @@ describe('aidlc-turbo story-mutate', () => {
     const r = run(p, [M('M1', { file: 'src/neg.js', line: 1, from: '-a', to: 'a', test: 'node check.js neg' })]);
     expect(r.stdout.trim().split('\n')).toEqual(['KILLED M1 src/neg.js:1', 'MUTANTS 001 1/1 killed, 0 survived, 0 invalid']);
     expect(r.status).toBe(0);
-  });
-
-  it('restores a mutant whose test times out (killed, exit 124)', () => {
-    const p = project();
-    buildAndVerify(p);
-    const r = run(p, [M('M1', { test: 'node check.js hang' })], '--timeout', '1');
-    expect(r.stdout.trim().split('\n')[0]).toBe('KILLED M1 src/calc.js:2');
-    expect(p.proof().mutants[0]).toMatchObject({ result: 'killed', exit: 124 });
-    expect(readFileSync(path.join(p.app, 'src/calc.js'), 'utf8')).toBe(CALC_STORY);
   });
 
   it('touches the story\'s test files so a build that compiles only changed tests still sees the mutant', async () => {

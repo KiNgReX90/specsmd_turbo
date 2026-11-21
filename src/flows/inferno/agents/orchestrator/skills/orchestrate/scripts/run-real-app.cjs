@@ -2,9 +2,10 @@
 
 /**
  * `run.cjs real-app`: the helpers and case texts that drive the real app binary, named by
- * `real_app.paths` in the host config, against a diff. No gate runs those journeys inside an
- * agent run, so the review is where a stale one is caught, and the reviewer dispatch carries
- * this call. It prints two kinds of line. A `stale` line is a helper line that still names a
+ * `real_app.paths` in the host config, against a diff. With `real_app.prove` set, verify-item
+ * runs the journeys an item changed (run-real-app-prove.cjs); a journey the item left as it was
+ * runs in no item, so the review is where a stale one is caught, and the reviewer dispatch
+ * carries this call. It prints two kinds of line. A `stale` line is a helper line that still names a
  * test id, label or route the diff took away, and each one is a finding. A `drives` line is a
  * helper file that names a test id, an id prefix or a catalogue key declared, at either end of
  * the range, in a source file the range changed, with the first five keys it shares. A shared
@@ -64,6 +65,24 @@ function realAppPaths(config, label) {
   const list = Array.isArray(section.paths) ? section.paths : [section.paths];
   if (!list.every((glob) => typeof glob === 'string' && glob.trim().length > 0)) throw bad;
   return list;
+}
+
+/**
+ * The command `real_app.prove` names, or null when it is unset or empty. It needs the globs of
+ * `real_app.paths`: they say which changed files are the journeys it runs.
+ */
+function realAppProve(config, label) {
+  const paths = realAppPaths(config, label);
+  const prove = config.real_app && config.real_app.prove;
+  if (prove === undefined || prove === null || prove === '') return null;
+  if (typeof prove !== 'string' || prove.trim().length === 0) {
+    throw new RunError(`real_app.prove in ${label} must be one shell command: "prove: \\"<command>\\"" under real_app:.`, 'BAD_CONFIG');
+  }
+  if (paths.length === 0) {
+    throw new RunError(`real_app.prove in ${label} needs real_app.paths, the globs of the journeys it runs: ` +
+      'add "paths: [\\"integration/**\\"]" under real_app:.', 'BAD_CONFIG');
+  }
+  return prove;
 }
 
 // --- git -----------------------------------------------------------------------
@@ -292,4 +311,4 @@ function realApp(options) {
   };
 }
 
-module.exports = { USAGE, blobs, declared, diffOf, goneKeys, linesOf, names, pageRoute, realApp, realAppPaths, screenSource };
+module.exports = { USAGE, blobs, declared, diffOf, goneKeys, linesOf, names, pageRoute, realApp, realAppPaths, realAppProve, screenSource };

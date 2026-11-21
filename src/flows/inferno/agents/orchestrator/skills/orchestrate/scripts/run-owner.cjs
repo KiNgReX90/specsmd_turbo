@@ -22,7 +22,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const lib = require('./run-lib.cjs');
+const { stateDir } = require('./run-state-dir.cjs');
 const { RUNNER } = require('./run-call.cjs');
 const { everyJob } = require('./run-jobs.cjs');
 
@@ -64,7 +64,7 @@ function sessionProcess(pid = process.pid) {
 }
 
 function ownerFile(tree) {
-  return path.join(lib.cacheDir(tree), lib.currentBranch(tree), 'owner.json');
+  return path.join(stateDir(tree), 'owner.json');
 }
 
 /** Stamp the session running this step as the tree's owner. Never throws: a step must not fail on bookkeeping. */

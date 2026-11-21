@@ -175,6 +175,49 @@ intents:
         complexity: low
         status: pending
         depends_on: []
+  - id: kappa
+    title: "Kappa"
+    status: pending
+    base_branch: main
+    depends_on_intents: []
+    work_items:
+      - id: k-built
+        title: "K built"
+        kind: ui
+        complexity: low
+        status: pending
+        depends_on: []
+      - id: k-reviewed
+        title: "K reviewed"
+        kind: ui
+        complexity: low
+        status: pending
+        depends_on: []
+        review: fix
+      - id: k-fresh
+        title: "K fresh"
+        kind: behavior
+        complexity: low
+        status: pending
+        depends_on: []
+  - id: lambda
+    title: "Lambda"
+    status: pending
+    base_branch: main
+    depends_on_intents: []
+    work_items:
+      - id: l-new
+        title: "L new"
+        kind: ui
+        complexity: low
+        status: pending
+        depends_on: []
+      - id: l-later
+        title: "L later"
+        kind: behavior
+        complexity: low
+        status: pending
+        depends_on: [l-new]
 `;
 
 /** A tree shaped like a host project: an owned module, its test, a script that checks it. */
@@ -241,10 +284,10 @@ ${rows(spec.tests || ["src/board/tile.test.ts"])}
 ownership:
   editable:
 ${spec.editable.map((entry) => `    - ${entry}`).join("\n")}
-${spec.probes ? probeRows(spec.probes) : ""}${diagnosis}
+${(spec.reads || []).length ? `reads:\n${spec.reads.map((entry) => `    - path: ${entry}\n      source: the row behind ${entry}\n      when: on every open\n      stale: the old balance stays on screen`).join("\n")}\n` : ""}${(spec.design || []).length ? `design_contract:\n${rows(spec.design)}\n` : ""}${spec.writes ? `writes:\n${spec.writes.map((entry) => `    - ${entry}`).join("\n")}\n` : ""}${spec.probes ? probeRows(spec.probes) : ""}${diagnosis}
 ## Technical Notes
 
-(none)
+${spec.notes || "(none)"}
 `;
 }
 
@@ -321,6 +364,33 @@ const ITEMS = {
     editable: ["src/board/tile.css"],
     diagnosis: { claim: "two radii carry the tile", probe: "grep -c radius src/board/tile.css", shows: "2" },
   }),
+  // An item built on its own fix: the probe measured the tree before that fix, so it is stale by design.
+  "kappa/k-built": item({
+    id: "k-built",
+    intent: "kappa",
+    kind: "ui",
+    description: "The board is broken at 960px because the shelf foot is too tall.",
+    editable: ["src/board/tile.css"],
+    diagnosis: { claim: "nine radii carry the tile", probe: "grep -c radius src/board/tile.css", shows: "9" },
+  }),
+  "kappa/k-reviewed": item({
+    id: "k-reviewed",
+    intent: "kappa",
+    kind: "ui",
+    description: "The tile is broken below 960px because the row wraps.",
+    editable: ["src/board/tile.ts"],
+    diagnosis: { claim: "the row wraps", probe: "cat src/board/nope.css", shows: "2" },
+  }),
+  "kappa/k-fresh": item({ id: "k-fresh", intent: "kappa", editable: ["src/panel/panel.ts"] }),
+  "lambda/l-new": item({
+    id: "l-new",
+    intent: "lambda",
+    kind: "ui",
+    description: "The board is broken at 960px because the shelf foot is too tall.",
+    editable: ["src/board/tile.css"],
+    diagnosis: { claim: "nine radii carry the tile", probe: "grep -c radius src/board/tile.css", shows: "9" },
+  }),
+  "lambda/l-later": item({ id: "l-later", intent: "lambda", editable: ["src/panel/panel.ts"] }),
   "theta/t-clean": item({
     id: "t-clean",
     intent: "theta",
@@ -339,14 +409,17 @@ function git(cwd, args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 }
 
-/** A throwaway project tree, committed so `git grep` can see it, or without git at all. */
+/**
+ * A throwaway project tree, committed so `git grep` can see it, or without git at all. A suite
+ * with a plan of its own passes `sources`, `state` and `items` in place of this file's.
+ */
 function fixture(options = {}) {
   const dir = tempDir("inferno-frontier-");
   const root = path.join(dir, "app");
   fs.mkdirSync(root, { recursive: true });
-  for (const [rel, body] of Object.entries(SOURCES)) write(root, rel, body);
-  write(root, ".specs-inferno/state.yaml", STATE);
-  for (const [key, body] of Object.entries(ITEMS)) {
+  for (const [rel, body] of Object.entries(options.sources || SOURCES)) write(root, rel, body);
+  write(root, ".specs-inferno/state.yaml", options.state || STATE);
+  for (const [key, body] of Object.entries(options.items || ITEMS)) {
     const [intent, id] = key.split("/");
     write(root, `.specs-inferno/intents/${intent}/work-items/${id}.md`, body);
   }
@@ -370,4 +443,4 @@ function run(fixtureTree, args) {
   return { code: result.status, out: result.stdout || "", err: result.stderr || "" };
 }
 
-module.exports = { fixture, run };
+module.exports = { fixture, item, run };

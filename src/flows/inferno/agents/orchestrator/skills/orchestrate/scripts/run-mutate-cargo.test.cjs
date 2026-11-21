@@ -87,6 +87,13 @@ test("a real cargo batch shares its build across the switches and gives honest v
   writeFile(path.join(root, "Cargo.toml"), '[package]\nname = "fixture"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n');
   writeFile(path.join(root, ".gitignore"), "/target\nCargo.lock\n");
   writeFile(path.join(root, "src/lib.rs"), LIB);
+  // The crate's own config names a rustc wrapper, as a host's config may name a shared compile cache. This one records
+  // each call and runs the compiler it was given. It is tracked, so the batch reads a clean tree and leaves it so.
+  const record = path.join(dir, "rustc-wrapper.log");
+  const wrapper = path.join(dir, "rustc-wrapper");
+  writeFile(wrapper, `#!/bin/sh\nprintf '%s\\n' "$*" >> ${JSON.stringify(record)}\nexec "$@"\n`, { mode: 0o755 });
+  fs.mkdirSync(path.join(root, ".cargo"));
+  writeFile(path.join(root, ".cargo/config.toml"), `[build]\nrustc-wrapper = ${JSON.stringify(wrapper)}\n`);
   git(root, "add", "-A");
   git(root, "commit", "-qm", "crate");
 
@@ -106,7 +113,10 @@ test("a real cargo batch shares its build across the switches and gives honest v
   writeFile(batch, JSON.stringify(entries));
   // CLAUDE_BUILD_WRAPPED is claude-build's nested-call marker. This crate is dependency-free in its own target dir,
   // so its builds run as is and never wait behind another session's build on the machine-wide lock.
-  const env = { ...process.env, CLAUDE_BUILD_WRAPPED: "1", XDG_CACHE_HOME: path.join(dir, "cache"), CARGO_TARGET_DIR: path.join(dir, "target") };
+  // An empty RUSTC_WRAPPER runs the toolchain's rustc, over a wrapper any config or CARGO_BUILD_RUSTC_WRAPPER names. A shared
+  // compile cache server the first build starts would keep this test's cache home as its own long after the test is gone.
+  const env = { ...process.env, CLAUDE_BUILD_WRAPPED: "1", XDG_CACHE_HOME: path.join(dir, "cache"), CARGO_TARGET_DIR: path.join(dir, "target"),
+    RUSTC_WRAPPER: "" };
   const result = spawnSync(process.execPath, [RUN, "mutate", "--tree", root, "--batch", batch, "--json"],
     { cwd: root, encoding: "utf8", env, timeout: 540_000 });
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -131,4 +141,6 @@ test("a real cargo batch shares its build across the switches and gives honest v
   }
   assert.equal(fs.readFileSync(path.join(root, "src/lib.rs"), "utf8"), LIB);
   assert.equal(git(root, "status", "--porcelain"), "");
+  const calls = fs.existsSync(record) ? fs.readFileSync(record, "utf8").trim().split("\n") : [];
+  assert.equal(calls.length, 0, `the rustc wrapper the crate's config names ran ${calls.length} times, first: ${calls[0]}`);
 });

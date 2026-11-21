@@ -243,7 +243,7 @@ test('--config keeps independent proofs and resolves relative to --tree', (t) =>
   verdict(outside, 'gate', 0, '--tree', fixture.root, '--config', OTHER);
   assert.deepEqual(counts(fixture), [2, 2, 2]);
   verdict(fixture, 'green', 0, '--config', OTHER);
-  verdict(fixture, 'green', 0);
+  verdict(fixture, 'green', 0, '--config', CONFIG);
   verdict(fixture, 'gate', 0, '--config', `./${OTHER}`);
   assert.deepEqual(counts(fixture), [2, 2, 2]);
   const changed = [...COMMANDS];
@@ -251,7 +251,7 @@ test('--config keeps independent proofs and resolves relative to --tree', (t) =>
   write(fixture.root, OTHER, config(changed));
   commit(fixture.root);
   assert.deepEqual(verdict(fixture, 'green', 3, '--config', OTHER).missing, [changed[0]]);
-  verdict(fixture, 'green', 0);
+  verdict(fixture, 'green', 0, '--config', CONFIG);
   verdict(fixture, 'gate', 0, '--config', OTHER);
   assert.deepEqual(counts(fixture), [3, 2, 2]);
   assert.ok(fs.existsSync(path.join(fixture.root, '.runs/new-command')));
@@ -312,7 +312,7 @@ test('detached gates preserve --config and --force through --wait', (t) => {
   }
   assert.deepEqual(counts(fixture), [2, 2, 2]);
   verdict(fixture, 'green', 0, '--config', OTHER);
-  verdict(fixture, 'green', 3);
+  verdict(fixture, 'green', 3, '--config', CONFIG);
 });
 
 test('scope hashes agree before and after committing content and path changes', (t) => {

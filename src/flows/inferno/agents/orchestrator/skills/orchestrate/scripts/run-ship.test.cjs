@@ -137,9 +137,27 @@ test("ship checks the proofs from its selected host config", () => {
   git(tree, ["commit", "-qm", "Codex gate configuration"]);
   const gated = run(fixture, ["gate", "--tree", tree, "--config", config]);
   assert.equal(gated.code, 0, gated.out + gated.err);
-  assert.equal(run(fixture, ["green", "--tree", tree]).code, 3);
+  assert.equal(run(fixture, ["green", "--tree", tree, "--config", ".specs-inferno/config.yaml"]).code, 3);
   const shipped = run(fixture, ["ship", "alpha", "--tree", tree, "--config", config]);
   assert.equal(shipped.code, 0, shipped.out + shipped.err);
   assert.match(shipped.out, /shipped/);
   assert.equal(fs.existsSync(tree), false);
+});
+
+test("ship sends a refused intent review back and names the record call that comes next", () => {
+  const fixture = repo();
+  const { tree } = closed(fixture);
+  assert.equal(run(fixture, ["gate", "--tree", tree]).code, 0);
+  const rel = ".specs-inferno/archive/intents/alpha/review.yaml";
+  write(tree, rel, `${fs.readFileSync(path.join(tree, rel), "utf8")}notes: kept for later\n`);
+  git(tree, ["commit", "-qam", "a note in the review"]);
+
+  const result = run(fixture, ["ship", "alpha", "--tree", tree]);
+
+  assert.equal(result.code, 3, result.out + result.err);
+  const { intentRecordCall } = require("./run-call.cjs");
+  const owed = result.out.split("\n").find((line) => line.startsWith("intent review owed: "));
+  assert.ok(owed, result.out);
+  assert.ok(owed.endsWith(`send this back to the reviewer that wrote the file, then run ${intentRecordCall(tree)} to record it.`), owed);
+  assert.doesNotMatch(result.out, /the same command/);
 });

@@ -14,12 +14,14 @@ for f in lib/add.js lib/mul.js lib/calc.js tests/add.test.js tests/mul.test.js t
 done
 # 2. Tests pass on the integrated tree
 npm test >/dev/null 2>&1 && ok "npm test passes" || fail "npm test fails"
-# 3. Intent closed: ship archives a completed intent out of the live ledger
-#    into .specs-inferno/archive/state.yaml, so the record lives there.
+# 3. Intent closed: archive-intent moves a completed intent out of the live ledger into
+#    .specs-inferno/archive/state.yaml and its folder under archive/intents/, and ship merges that.
 ARCHIVE=.specs-inferno/archive/state.yaml
 [ -f "$ARCHIVE" ] && ok "archive ledger exists" || fail "archive ledger missing"
 grep -A3 'id: toy-math' "$ARCHIVE" 2>/dev/null | grep -q 'status: completed' \
   && ok "intent completed in archive" || fail "intent not completed in archive ledger"
+[ -f .specs-inferno/archive/intents/toy-math/brief.md ] && [ ! -e .specs-inferno/intents/toy-math ] \
+  && ok "intent folder archived" || fail "intent folder not moved under archive/intents"
 grep -q 'id: toy-math' .specs-inferno/state.yaml && fail "intent still in live ledger" || ok "intent left the live ledger"
 grep -q 'claimed_by' .specs-inferno/state.yaml && fail "claimed_by not cleared" || ok "claim cleared"
 # 4. Worktree torn down, branch deleted

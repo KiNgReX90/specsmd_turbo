@@ -5,6 +5,8 @@ const path = require('path');
 const { createHash } = require('crypto');
 const { spawnSync } = require('child_process');
 const lib = require('./run-lib.cjs');
+const { readRun } = require('./run-check-refused.cjs');
+const { baseScoped } = require('./run-config-gates.cjs');
 
 const DEFAULT_CONFIG = `${lib.SPECS_DIR}/config.yaml`;
 const digest = (value) => createHash('sha256').update(value).digest('hex');
@@ -20,18 +22,19 @@ function gitFields(tree, args) {
  * of literal paths instead, which is how an item review binds exactly the files it read: a
  * glob without a slash would match the same name in every folder. A file `options.skip`
  * returns true for is left out, which is how the intent review leaves out a kb the base synced.
+ * With `options.ref` it hashes that commit as committed, with no working-tree file on top.
  */
 function scopeHash(tree, scope, options = {}) {
   const inScope = (file) => (options.exact ? scope.includes(file) : lib.matchesAny(file, scope));
-  const included = (file) => file !== lib.SPECS_DIR && !file.startsWith(`${lib.SPECS_DIR}/`) &&
+  const included = (file) => !lib.inLedger(file) &&
     (!scope || inScope(file)) && !(options.skip && options.skip(file));
   const entries = new Map();
-  for (const row of gitFields(tree, ['ls-tree', '-rz', 'HEAD'])) {
+  for (const row of gitFields(tree, ['ls-tree', '-rz', options.ref || 'HEAD'])) {
     const separator = row.indexOf('\t');
     const file = row.slice(separator + 1);
     if (included(file)) entries.set(file, row.slice(0, separator));
   }
-  const dirty = new Set([
+  const dirty = options.ref ? new Set() : new Set([
     ...gitFields(tree, ['diff', '--name-only', '--no-renames', '-z', 'HEAD']),
     ...gitFields(tree, ['ls-files', '--others', '--exclude-standard', '-z']),
   ]);
@@ -127,20 +130,37 @@ function revokeFlakeProofs(tree) {
   writeJson(ledger, done);
 }
 
-/** A command's proof, keyed by its `finalize_scopes` entry unless the caller names a scope, as a lane does. */
+/**
+ * The merge base a `verification.base_scoped` command reads: `git merge-base HEAD <base>` off the
+ * base, as integrate anchors a landing there (run-since.cjs). On the base itself, on a detached tree
+ * with no base to name, or with no such base branch, there is no merge base to bind: the proof binds
+ * HEAD, so green reads only what the last run minted there, and `rerun` makes every run spawn.
+ */
+function readsBase(tree, config) {
+  const base = require('./run-intents.cjs').resolveBase(config, null, tree);
+  const sha = base === lib.currentBranch(tree) ? null : lib.git(tree, ['merge-base', 'HEAD', base], { tolerate: true });
+  return sha ? { base: sha } : { base: lib.git(tree, ['rev-parse', 'HEAD']), rerun: true };
+}
+
+/**
+ * A command's proof, keyed by its `finalize_scopes` entry unless the caller names a scope, as a lane
+ * does, and by the merge base it reads when the config lists it in `base_scoped`. Any other command
+ * keeps the key it always had, so none of its proofs goes stale.
+ */
 function commandProof(tree, config, selected, command,
   scope = config.verification && config.verification.finalize_scopes && config.verification.finalize_scopes[command]) {
   revokeFlakeProofs(tree);
   const file = path.relative(tree, path.resolve(tree, selected || DEFAULT_CONFIG));
   const hash = scopeHash(tree, scope);
-  const key = digest(JSON.stringify([command, file, hash]));
-  return { command, config: file, hash, file: path.join(lib.cacheDir(tree), 'green-commands', key) };
+  const bound = baseScoped(config).includes(command) ? readsBase(tree, config) : null;
+  const key = digest(JSON.stringify(bound ? [command, file, hash, bound.base] : [command, file, hash]));
+  return { command, config: file, hash, ...bound, file: path.join(lib.cacheDir(tree), 'green-commands', key) };
 }
 
 function readProof(proof) {
   try {
     const record = JSON.parse(fs.readFileSync(proof.file, 'utf8'));
-    return record.command === proof.command && record.config === proof.config && record.hash === proof.hash &&
+    return record.command === proof.command && record.config === proof.config && record.hash === proof.hash && record.base === proof.base &&
       Number.isFinite(record.seconds) && record.seconds >= 0 && Number.isFinite(Date.parse(record.stamp)) &&
       typeof record.branch === 'string' ? record : null;
   } catch (error) {
@@ -151,20 +171,24 @@ function readProof(proof) {
 /**
  * Only a successful command on unchanged inputs can mint a proof. `force` reruns a command
  * whose proof still holds, and revokes that proof first so a run that never finishes cannot
- * leave the old success standing.
+ * leave the old success standing. `shell` runs the command as lib.runShell does, which a host
+ * session replaces (run-check-session.cjs); the proof is keyed the same either way. A run that
+ * exits non-zero with the host's `verification.refused` line in what it wrote is `refused`: the
+ * wrapper ran nothing, so it is no verdict and no failure (run-check-refused.cjs).
  */
-function runCommand(tree, config, selected, command, log, force = false) {
+function runCommand(tree, config, selected, command, log, force = false, shell = lib.runShell) {
   const proof = commandProof(tree, config, selected, command);
   const previous = readProof(proof);
-  if (previous && !force) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
+  if (previous && !force && !proof.rerun) return { command, result: 'green', seconds: previous.seconds, stamp: previous.stamp };
   fs.rmSync(proof.file, { force: true });
-  const run = lib.runShell(command, tree, log);
+  const { run, line } = readRun(config, shell, command, tree, log);
+  if (line) return { command, result: 'refused', seconds: run.seconds, log: run.log, line };
   const moved = run.code === 0 && commandProof(tree, lib.readConfig(tree, selected), selected, command).file !== proof.file;
   if (run.code !== 0 || moved) {
     if (moved) fs.appendFileSync(log, '\nverification inputs changed while the command ran. Run it again.\n');
     return { command, result: 'fail', seconds: run.seconds, log: run.log, ...(moved ? { moved: true } : {}) };
   }
-  const { file, ...identity } = proof;
+  const { file, rerun, ...identity } = proof;
   writeJson(file, { ...identity, stamp: new Date().toISOString(), seconds: run.seconds, branch: lib.currentBranch(tree) });
   return { command, result: 'pass', seconds: run.seconds };
 }

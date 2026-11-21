@@ -11,6 +11,18 @@ const { writeFile } = require('./test-write.cjs');
 
 const RUN = path.join(__dirname, 'run.cjs');
 
+/** The record functions dispatch-log calls for the item it is given, without its door, run with the tree and the item as arguments. */
+const PAST_THE_DOOR = `const { scope } = require(${JSON.stringify(path.join(__dirname, 'run-dispatch-overlap.cjs'))});
+const { recordDispatch } = require(${JSON.stringify(path.join(__dirname, 'run-dispatch.cjs'))});
+const [tree, item] = process.argv.slice(1);
+const { items, editable } = scope(tree, 'alpha', [item]);
+process.stdout.write(recordDispatch(tree, { intent: 'alpha', items, dispatch_id: require('node:crypto').randomUUID(), editable }).dispatchId);`;
+
+/** Each runner call a line prints, in order: the words after `run.cjs`, up to the clause after the call. */
+function printedCalls(text) {
+  return [...text.matchAll(/run\.cjs (.+?)(?=; |, or |$)/gm)].map((match) => match[1]);
+}
+
 function git(root, ...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
@@ -83,6 +95,23 @@ function fixture(t, items) {
     assert.equal(result.code, 0, result.out);
     return result.data.dispatch_id;
   }
+  /**
+   * The record dispatch-log signs for `item` and the chain its current record covers, written past
+   * the door that refuses it beside an open record its ownership overlaps: the two side by side
+   * that a case of what verify-item reads afterwards starts on purpose. Returns the dispatch id.
+   */
+  function startOverlapping(item) {
+    const result = spawnSync(process.execPath, ['-e', PAST_THE_DOOR, root, item], { encoding: 'utf8', env: { ...process.env, XDG_CACHE_HOME: cache } });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout;
+  }
+  /** One call a line printed, run as printed through a shell from the project root, the runner named by its path. */
+  function asPrinted(line) {
+    const result = spawnSync('sh', ['-c', `node '${RUN}' ${line} --json`], { cwd: root, encoding: 'utf8', env: { ...process.env, XDG_CACHE_HOME: cache } });
+    let data = null;
+    try { data = JSON.parse(result.stdout); } catch (error) { data = null; }
+    return { code: result.status, data, out: result.stdout + result.stderr };
+  }
   function accept(dispatch, paths) {
     return call('accept-dispatch', dispatch, '--changed-paths', JSON.stringify(paths), '--tree', root);
   }
@@ -104,7 +133,8 @@ function fixture(t, items) {
     git(base, 'add', file);
     git(base, 'commit', '-qm', 'the base moved');
   }
-  return { root, cache, call, human, start, accept, accepted, verify, verifyCounted, land, moveBase, write: (file, value) => write(root, file, value), git: (...args) => git(root, ...args) };
+  return { root, cache, call, human, start, accept, accepted, verify, verifyCounted, land, moveBase, write: (file, value) => write(root, file, value), git: (...args) => git(root, ...args),
+    startOverlapping, asPrinted };
 }
 
-module.exports = { fixture, git, spec, write };
+module.exports = { fixture, git, printedCalls, spec, write };

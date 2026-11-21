@@ -1,0 +1,11 @@
+{
+  "name": "acme-shop",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Acme Shop: digital gift cards, bought online and redeemed at checkout",
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

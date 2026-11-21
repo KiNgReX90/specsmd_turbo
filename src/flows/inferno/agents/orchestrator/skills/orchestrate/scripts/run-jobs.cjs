@@ -11,13 +11,14 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const lib = require('./run-lib.cjs');
+const { sameTree, stateDir } = require('./run-state-dir.cjs');
 const processes = require('./run-processes.cjs');
 const { LANES } = require('./run-lane-config.cjs');
-const { RUNNER, RUNNER_PATH } = require('./run-call.cjs');
+const { RUNNER, RUNNER_PATH, gateStartCall } = require('./run-call.cjs');
 
 /** The gate's files, or a lane's when `lane` names one; `run` is where a running lane names its own log. */
 function jobPaths(tree, lane) {
-  const dir = path.join(lib.cacheDir(tree), lib.currentBranch(tree));
+  const dir = stateDir(tree);
   const stem = lane ? `lane-${lane}-job` : 'gate-job';
   return {
     job: path.join(dir, `${stem}.json`),
@@ -59,6 +60,16 @@ function everyJob(tree) {
     .filter((job) => job && job.pid);
 }
 
+/**
+ * Refuse a gate job of another tree, by the real path of the tree it names: a wait answers for its
+ * own tree only, whatever folder the job was found in.
+ */
+function refuseOtherTree(job, tree) {
+  if (sameTree(job.tree, tree)) return;
+  throw new lib.RunError(`the gate job in this tree's folder was started for ${job.tree}, not for ${tree}: ` +
+    `start this tree's own gate with ${gateStartCall(tree)}`, 'GATE_OTHER_TREE');
+}
+
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
@@ -88,4 +99,4 @@ function detach(tree, args, paths, fields) {
   return job;
 }
 
-module.exports = { alive, detach, everyJob, jobPaths, readJson, sleepSync };
+module.exports = { alive, detach, everyJob, jobPaths, readJson, refuseOtherTree, sleepSync };

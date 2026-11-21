@@ -234,9 +234,9 @@ It is also the first place the user sees a merge request, and its last line tell
 - Everything of step 10 went through: the pages corrected or none to correct, the Jira sync done or not used, the merge requests on the overview, every description written, updated or unchanged. End with `**All done, you can merge.**`; with story branches add the order: `First the story merge requests from top to bottom, then the intent branch.` A description that kept its one line because there is no `GITLAB_TOKEN` is named above it, and does not hold the merge back.
 - Something of step 10 is still open: a page `not_fixed` or `not_synced`, a `pending_upload`, a Jira sync recorded as pending, a description that failed. End with `**Do not merge yet**: {what is open, in a few words}. {the rerun that sends it}, then merge.`
 - Sandbox mode with `push`: there is nothing to merge. End with `**All done.** The intent is on {base}.`, anything still open named above it.
+- Kept local: no such line. The branch section says it was not pushed.
 
 These closing lines are said in the session language; the ones above are the English ones.
-- Kept local: no such line. The branch section says it was not pushed.
 
 ---
 

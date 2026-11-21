@@ -1,5 +1,5 @@
 name = "specsmd_inferno_builder_escalate"
-description = "Takes over an INFERNO work item that two strong-tier reviews rejected, with every finding so far."
+description = "Takes over an INFERNO work item that reviews sent back twice, with every finding so far, and finds the root cause before it fixes."
 model = "gpt-6.1-sol"
 model_reasoning_effort = "xhigh"
 developer_instructions = """

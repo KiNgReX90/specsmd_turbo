@@ -20,7 +20,7 @@ For a batch, the assignment supplies those fields per item in dependency order p
 
 Read applicable `AGENTS.md` files before touching a scoped path. Do not edit `.specs-inferno/state.yaml`, commit, select more work, or spawn another agent.
 
-- **Batch:** every round carries every independent call you can already name; a round with a single shell call is the shape to avoid unless the next call needs that call's result.
+- **Batch:** plan the round before you issue it: every round carries every independent call you can already name; a round with a single shell call is the shape to avoid unless the next call needs that call's result.
 - Return once, when ready or blocked, with the result envelope. Send no progress message and answer no message that is not a correction, a granted path or an oracle decision.
 - Write nothing outside the worktree: no memo, checkpoint, failure map, run-state file or diagnostic log under `/tmp`.
 - Request elevated permissions only for the one command the sandbox has refused, with the refusal line as the evidence, never for the commands after it.
@@ -44,11 +44,17 @@ For behavior-bearing work:
 5. **Refactor:** improve structure only while the focused test remains green, then run the assignment's exact verification command.
 6. Repeat for the next distinct acceptance criterion without broad speculative changes.
 
+Build each Edge Cases row and each Test Plan line of the item as you build a criterion, test first.
+
 Each `reads:` entry is its own red. Move the source behind the surface from the test, assert the surface followed, and confirm the assertion fails first on the value the source moved past. That value is the `stale` sentence the entry carries. Name the test in the tests line of the result.
 
 For docs-only or config-only work where a behavioral test would be artificial, replace red with a deterministic failing parse, lint, schema, reference, or static invariant check. Record why that check is the correct gate. Never fabricate a test merely to claim test-first work.
 
 If the existing test suite has no viable seam and adding one would exceed ownership, return blocked with the exact missing path or contract needed.
+
+## Two misses
+
+Handed an item that reviews sent back twice, find the cause before the fix: a third fix on the same guess misses too. `git log -p` of its review file shows each round's findings and the commit that round read. Reproduce what still fails with the narrowest command, follow it to the first wrong line, and name that root cause with `file:line` and output you saw, and why both fixes missed it: the symptom patched, the wrong layer, the test instead of the code, a second caller. Then fix it through the gate above, and put both in `notes` as `cause:` and `missed:`.
 
 ## Design and ownership
 
@@ -69,7 +75,7 @@ The exec tool yields at 30 seconds by design; a cargo test or Playwright run que
 
 A check that has failed three times on a tree whose non-test files did not change between the runs is not run a fourth time: return `blocked` with the failing line.
 
-A browser test is for functionality a person drives in the browser: a journey whose outcome crosses the screen. Copy, labels, formatting, computed display values and anything asserted on one component's rendered output are unit tests that render the component; a text change is proved by that test, never by a browser run. Appearance, and anything only the built binary shows, is a case in the project's integration case list, proved by the harness that owns it and never by a person; report the cited design source with it. The supplied command names one spec or test file, never a full suite, and it is a floor for correctness rather than permission to widen scope.
+A browser test is for functionality a person drives in the browser: a journey whose outcome crosses the screen. Copy, labels, formatting, computed display values and anything asserted on one component's rendered output are unit tests that render the component; a text change is proved by that test, never by a browser run. Appearance, and anything only the built binary shows, is a case in the project's integration case list, proved by the harness that owns it and never by a person; report the cited design source with it. On a host with `real_app.prove`, `verify-item` runs the case's test when your diff changes it, and it must be green there. The supplied command names one spec or test file, never a full suite, and it is a floor for correctness rather than permission to widen scope.
 
 When the project enforces a per-file line cap, run its check before returning ready. A file you touched that is over the cap or at the ceiling is split along a responsibility boundary in this item; shaving lines to squeeze under the number is a defect. Name the new module paths in changed files and record `split: <file> -> <new files>` in notes.
 

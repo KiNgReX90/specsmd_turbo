@@ -1,0 +1,47 @@
+item: ri-integrate-on-the-base-diffs-from-since-or-origin
+verdict: fix
+files:
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-since.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-only.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/check-doubles.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run.cjs
+  - src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate-base.test.cjs
+findings:
+  - id: Q1
+    check: correctness
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-integrate.cjs
+    line: 234
+    evidence: |-
+      Read landingSince (run-since.cjs:29-39) and baseline/checkDoubles (check-doubles.cjs:113-154).
+      On the base with origin/<base> at HEAD and no --since, landingSince returns
+      { ref: <origin sha, which is HEAD>, all: true }. Integrate treats that as "no diff known" and
+      runs every scoped check, but passes since: landing.ref to checkDoubles, so baseline returns HEAD
+      and the ratchet counts HEAD against HEAD: it always prints `PASS doubles N (base N)`, a pass that
+      compared nothing, where the same call before this item refused with BAD_CONFIG and where the
+      same state with origin missing (ref null) still refuses. No test drives a bare integrate after a
+      push with doubles configured (run-integrate-base.test.cjs only runs the pushed case with
+      --since HEAD~1). The line follows the spec text, so the fix needs the orchestrator's word.
+    fix: |-
+      When landing.all is true, do not hand landing.ref to checkDoubles: either pass since undefined so
+      the existing BAD_CONFIG refusal (which already names --since) speaks, or skip the ratchet with an
+      explicit out line such as `SKIP doubles (on <base> with no unpushed commit and no --since: no
+      landing to count)`; add a test for a bare integrate after a push with doubles configured.
+    severity: minor
+  - id: Q2
+    check: readability
+    file: src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/run-lanes-only.cjs
+    line: 43
+    evidence: |-
+      lanesSince (run-lanes-only.cjs:43-53) and the new landingSince (run-since.cjs:29-39) each
+      resolve `origin/<base>^{commit}` with rev-parse --verify --quiet and compare it with HEAD, the
+      same base-branch rule written twice; they differ only in what the no-diff case does (refuse vs
+      run all). run-since.cjs is now the home of that rule.
+    fix: |-
+      Move the shared step into run-since.cjs as one helper (for example
+      `unpushedFrom(tree, base)` returning the origin sha when it resolves and differs from HEAD, else
+      null) and have both lanesSince and landingSince call it, each keeping its own no-diff answer.
+    severity: minor
+tree: 3e69a661ad4860790c33b495910072b3bf105e5ae242857a0799fc78b8600566
+commit: 28a25fdf9f6b2486380af1227676272d231b9992
+reviewer: a2fdb029d1c8255e8

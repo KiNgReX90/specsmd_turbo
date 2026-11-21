@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync, spawn } = require('node:child_process');
@@ -53,6 +54,32 @@ test('a holder defaults to the branch of the tree it takes from', (t) => {
   const { root } = repo(t);
   slot.take(root, { intent: 'x' });
   assert.deepEqual(slot.queue(root).tickets.map((ticket) => [ticket.holder, ticket.intent]), [['main', 'x']]);
+});
+
+/** A detached worktree of the repo, and the name its records and its ticket go by: its folder name, then the first 8 hex of the sha256 of its real path. */
+function detached(dir, root, name) {
+  const tree = path.join(dir, name);
+  execFileSync('git', ['worktree', 'add', '-q', '--detach', tree], { cwd: root });
+  return { tree, holder: `${name}-${crypto.createHash('sha256').update(fs.realpathSync(tree)).digest('hex').slice(0, 8)}` };
+}
+
+test('two detached trees hold two tickets under their own names, each renewed and released on its own', (t) => {
+  const { dir, root } = repo(t);
+  const a = detached(dir, root, 'A');
+  const b = detached(dir, root, 'B');
+  assert.equal(slot.take(a.tree, {}, T0).head, true);
+  assert.deepEqual(slot.take(b.tree, {}, T0).ahead, [a.holder]);
+  assert.deepEqual(slot.queue(root, T0).tickets.map((ticket) => [ticket.holder, ticket.tree]), [[a.holder, a.tree], [b.holder, b.tree]]);
+  assert.equal(slot.renew(b.tree, undefined, T0 + 20 * MINUTE), true);
+  assert.deepEqual(slot.standing(b.tree, undefined, T0 + 20 * MINUTE).ahead, [a.holder]);
+  assert.equal(slot.standing(a.tree, undefined, T0 + 20 * MINUTE).ticket.holder, a.holder);
+  assert.equal(slot.reviewDispatchPath(a.tree),
+    path.join(process.env.XDG_CACHE_HOME, 'specsmd-inferno', 'app', '.detached', a.holder, 'intent-review-dispatch.json'));
+  assert.equal(slot.release(a.tree), true);
+  assert.deepEqual(slot.queue(root, T0 + 20 * MINUTE).tickets.map((ticket) => ticket.holder), [b.holder]);
+  assert.deepEqual(slot.standing(b.tree, undefined, T0 + 20 * MINUTE).ahead, []);
+  // B's renew was its own: its ticket stays past A's idle limit.
+  assert.deepEqual(slot.queue(root, T0 + 45 * MINUTE).tickets.map((ticket) => ticket.holder), [b.holder]);
 });
 
 test('a ticket with no activity for 30 minutes is evicted with a line', (t) => {
