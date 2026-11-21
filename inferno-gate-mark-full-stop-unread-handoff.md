@@ -31,6 +31,8 @@ Counted on Alpha 2026-11-20 16:28Z over the first host's origin/main at `6561c36
 
 The script's output on Alpha, 2026-11-20 16:30:56Z, on `a8873ebb` and again on the tip `84c5eabd`: case 1, a criterion `... (gate: echo gate ran).`, the intent review is refused with `verdict clean while a-one owes a caught mutant or a checked pin for criteria 2 "the size cap holds on every file under `src/` (gate: echo gate ran)."` where the test wants it recorded; case 2, a mark with words after it, the plan lint prints `clean alpha: 2 open items, 1 criteria` where the test wants a finding; the two controls pass, the second of them the host's way through (below).
 
+- A second host intent, the Omega session `licence-forbids` (its outbox line 106), 2026-11-21, on `a8873ebb`, verbatim: "FLOW a gate mark ending in \"(gate: ...).\" is void: run-criterion-marks.cjs:48 MARK matches only a mark at line end, and the planner writes the period | evidence: intent review record refused mining 4,5,7,8 and wiki 5 with the marks present | workaround: spec-only commits faa933189 and 19be36018 drop the trailing period, record clean". Five criteria in two items, so the planner writes the full stop as a habit, and point 1 of the fix (read the mark before a closing full stop) is what removes it; the planner text needs no rule of its own.
+
 ## How to fix
 
 1. **The reader takes the full stop of the sentence.** In `MARK` (`S/run-criterion-marks.cjs:48`) allow one full stop after the closing parenthesis: `/(?:^|\s)\(gate:\s*(.*?)\s*\)\.?$/`. The criterion's text is unchanged, so the late rule (`planned`, `:129-135`) reads it as before, and every plan already written with the full stop reads as its planner meant it. The planner text needs no word more, and no host has to touch a plan.
