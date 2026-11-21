@@ -36,4 +36,4 @@ All of it is the flow's. Nothing here is for the builder of the row on the host'
 
 ## Until it is built
 
-On the host: before `accept-dispatch`, list what the builder changed in its own paths with `git status --short -- <its editable paths and grants>` and put every one in `--changed-paths`, deletions included. A sibling's verify-item that names such a path outside is repaired by a fresh `dispatch-log` of the item that owns it and `accept-dispatch` with that path, not by a grant to the sibling.
+On the host, for a change made inside the owning item's own dispatch window only (a change no dispatch made is row 0ah's, and this repair does not reach it): before `accept-dispatch`, list what the builder changed in its own paths with `git status --short -- <its editable paths and grants>` and put every one in `--changed-paths`, deletions included. A sibling's verify-item that names such a path outside is repaired by a fresh `dispatch-log` of the item that owns it and `accept-dispatch` with that path, not by a grant to the sibling.

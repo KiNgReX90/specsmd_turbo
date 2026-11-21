@@ -42,10 +42,24 @@ Item 2's correction (`22d851d5`, seq 43 to 46, first baseline seq 3) listed thos
 
 The script's output on Alpha, 2026-11-19 16:4xZ, the same on `a8873ebb` and `f3be640a`: case 1 `dispatch-log` exits 0 over a staged move no dispatch made, where the test wants 2; case 2 the late correction of `a` exits 2 with `"outside":["b-new.cjs","b-old.cjs"]`, after `accept-dispatch` of `b` refused the moved paths; case 3, the control, the same move made right after `b`'s `dispatch-log` and reported by it, passes.
 
+### A second host intent: an edit made before a dispatch-log and put back inside that item's window
+
+Read on the first host's Omega (Linux) on 2026-11-21 about 09:47Z, read only: intent `a-licence-slot-is-taken-only-by-real-use-and-the-maker-reads-the-rule-first`, tree `~/dev/Skoft_CRA-inferno-a-licence-slot-is-taken-only-by-real-use-and-the-maker-reads-the-rule-first`, on `a8873ebb`. The orchestrator edited `src/lib/dossier/generate.ts` for a temporary `svelte-check` measurement and put it back by hand. Bytes of that path by sha256, from the records:
+
+- Seq 24, `4ffa061a` accepted: `c3a6fada79`, the committed bytes of `2c3d66fbf`.
+- Seq 25, 04:26:47Z, `96254cb4` of `slt-over-the-count-the-checks-and-new-complete-documents-pause`, which does not own the path, before: `a2256fe20d`, the edit. `dispatch-log` took it into that item's first baseline.
+- Seq 26, 04:28:55Z, `4228e2a4` of `slt-a-previewed-product-offers-remove-and-the-shelf-names-the-rule-first`, which owns it, before: `c3a6fada79`, put back. That stretch lies inside the pause item's open window, and no run that claims the path spans it.
+- Seq 26 to 30: `4228e2a4` changed the path to `83eddc8f88` and reported it, committed as `cafb76750` under its `Item:` trailer.
+
+So the pause item's verify-item listed `outside [src/lib/dossier/generate.ts]`: its stretch from the first baseline found `a2256fe20d` and left `83eddc8f88`. The session then followed row 0av's repair, a fresh dispatch of the owner (`a21043c5`, seq 37 to 38, `carried: [src/lib/dossier/generate.ts]`). That carry claims the path for the owner's attempts from seq 26 on and not for the stretch 25 to 26, so the path stayed outside, and a grant to the pause item was refused as changed beside it by the owner. The session's FLOW line, verbatim: "FLOW a path the orchestrator edited and reverted by hand (a temporary svelte-check measurement on src/lib/dossier/generate.ts) while only one item's dispatch was open is charged to that item, and verify-item then refuses its proof as outside; following 0av (a fresh dispatch-log of the owning sibling, accept-dispatch with the path) charged it to the sibling too, so grant refuses and the item cannot pass until the sibling integrates | evidence: item-proofs/.../slt-over-the-count-the-checks-and-new-complete-documents-pause.json outside [src/lib/dossier/generate.ts], grant refusal naming dispatch a21043c5 | workaround: integrate the sibling slt-a-previewed-product-offers-remove-and-the-shelf-names-the-rule-first first, then verify the pause item again; no orchestrator edits a tracked file outside a dispatch from now on".
+
+Point 1 below refuses the `dispatch-log` at seq 25, so a new tree never takes such a baseline. The second script below, run on the tip `f0b7eb9c` on Alpha at 2026-11-21 09:49Z, passes all three tests. The put-back edit is the item's outside path, and three things leave it there: the owner's carried accept, the owner marked `completed`, and a grant to the item, which is refused. A chain of the item and the owner whose accept carries the path verifies the item with `outside` empty.
+
 ## How to fix
 
 1. **`dispatch-log` refuses a change no dispatch made.** Beside `refuseOverlap`, before anything is written (`S/run-intents.cjs:353-355`): take the tree's last snapshot, the highest `seq` among its records, and the tree now. A path whose bytes differ between them, outside the ledger, outside the fold ranges of the base since that snapshot, and under no open record's frozen ownership, is the stretch `unexplainedChanges` would later flag. Exit 2, before the record, naming the paths and the way: put them back, run `dispatch-log`, then make the change, and list its paths, both ends of a move, in that dispatch's `accept-dispatch`. A correction is no exception, and a tree with no record yet has nothing to compare.
 2. **A late correction no longer answers for a change made between its attempts.** In `unexplainedChanges`, a change between two neighbouring snapshots that no run claims, lying after one of the item's attempts was accepted and before its next attempt began, is not added to the item's stretch for a path the item neither owns nor claims. `verify-item` prints such paths on a line of their own (`changed between dispatches, no dispatch claims: <paths>`) and keeps them out of `outside`, so the proof passes on what the item's own attempts did. This is the reading `ranBeside` gives a peer's run (`S/run-peers.cjs:79-82`). A change during one of the item's attempts or after its last one is read as today, and a path the item owns stays under `unreported` as today. Point 1 keeps new trees free of such changes; point 2 lets a tree from before the build finish.
+3. **A change that no dispatch made and that sits in the item's first baseline names its repair.** When a path the item does not own leaves the item's timeline on other bytes than its first baseline held, and the first stretch that changed it lies in the item's own window with no run claiming it, verify-item names the case and the call that clears it: the chain of the item and the path's owner, whose accept carries the path. It never names the owner's carried accept alone, which cannot reach that stretch.
 
 Tests, beside `S/run-attribution.test.cjs`, with the fixture of `S/run-attribution-fixture.cjs`. The script's cases 1 and 2 are red on `a8873ebb`, and case 3 is green:
 
@@ -53,6 +67,7 @@ Tests, beside `S/run-attribution.test.cjs`, with the fixture of `S/run-attributi
 - Case 2: with `b`'s record written past the door, as the fixture's `startOverlapping` does, the late correction of `a` exits 0 with `outside: []` and prints both paths on the new line.
 - Case 3, the control: the move made after `b`'s `dispatch-log` and reported in its accept still verifies `a`'s correction.
 - A path `a` owns, changed between `a`'s attempts by no dispatch, is still under `unreported`, and a change after `a`'s last attempt with no attempt after it still reads as `outside`.
+- The second script's case: the edit made before `p`'s `dispatch-log` makes that `dispatch-log` exit 2 naming the path; and with `p`'s record written past the door, verify-item of `p` names the chain call of point 3.
 
 No agent text changes: the refusal carries the way on.
 
@@ -62,7 +77,7 @@ The trigger is the host's: its `dispatch.constraints` forbid a builder any git m
 
 ## Until it is built
 
-On the host: a move the builder may not stage is staged by the orchestrator after `dispatch-log` and before the builder starts, and both paths of the move go into that dispatch's `accept-dispatch`. Nothing else changes in the tree between an accept and the next `dispatch-log` but the ledger and the fold. A late correction whose `verify-item` lists as outside only paths that changed between two dispatches, at a stretch no record's window spans, is settled on its commit without a fresh proof: the intent review run again reads it in its delta.
+On the host: a move the builder may not stage is staged by the orchestrator after `dispatch-log` and before the builder starts, and both paths of the move go into that dispatch's `accept-dispatch`. Nothing else changes in the tree between an accept and the next `dispatch-log` but the ledger and the fold: no orchestrator edits a tracked file outside a dispatch, and a measurement runs in a scratch worktree. An item whose verify-item lists as outside a path that was edited by hand before its `dispatch-log` and put back is cleared by the chain of the item and the path's owner, `dispatch-log <intent> --items <item>,<owner>`, then `accept-dispatch` with that path, then verify-item. The owner's carried accept and the owner's integrate do not clear it. A late correction whose `verify-item` lists as outside only paths that changed between two dispatches, at a stretch no record's window spans, is settled on its commit without a fresh proof: the intent review run again reads it in its delta.
 
 ## The script
 
@@ -133,5 +148,83 @@ test('control: the same move made after b\'s dispatch-log lets the late correcti
   f.land('b.cjs', 'b-new.cjs');
   const result = lateCorrectionOfA(f);
   assert.equal(result.code, 0, result.out);
+});
+```
+
+## The second script
+
+Copy it to `S/` as `repro-hand-edit.test.cjs` and run `node --test repro-hand-edit.test.cjs` there. Today all three tests pass; once point 1 holds, `setUp` fails at `p`'s `dispatch-log`.
+
+```js
+'use strict';
+
+// Reproduction for row 0ah's addition: an orchestrator's edit made before an item's dispatch-log
+// and put back inside that item's window is charged to the item as outside, and neither the
+// owner's carried accept nor the owner's completion clears it; a chain of both items does.
+
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { fixture } = require('./run-attribution-fixture.cjs');
+
+function setUp(t) {
+  const f = fixture(t, { z: ['z.cjs'], p: ['p.cjs'], s: ['s.cjs', 'shared.cjs'] });
+  const zero = f.start('--item', 'z');
+  f.write('z.cjs', 'module.exports = 2;\n');
+  f.accepted(zero, ['z.cjs']);
+  f.git('add', 'z.cjs');
+  f.git('commit', '-qm', 'z lands\n\nItem: z');
+  f.write('shared.cjs', 'a temporary measurement\n');
+  const one = f.start('--item', 'p');
+  f.write('shared.cjs', 'module.exports = 1;\n');
+  const two = f.start('--item', 's');
+  f.write('shared.cjs', 'changed by s\n');
+  f.accepted(two, ['shared.cjs']);
+  f.git('add', 'shared.cjs');
+  f.git('commit', '-qm', 's lands\n\nItem: s');
+  f.write('p.cjs', 'module.exports = 2;\n');
+  f.accepted(one, ['p.cjs']);
+  f.git('add', 'p.cjs');
+  f.git('commit', '-qm', 'p lands\n\nItem: p');
+  return f;
+}
+
+test('the put-back edit is p\'s outside path, and the owner\'s carried accept and its completion leave it there', (t) => {
+  const f = setUp(t);
+  const first = f.verify('p');
+  console.log('verify p:', first.code, JSON.stringify(first.data && first.data.outside));
+  assert.notEqual(first.code, 0);
+  assert.deepEqual(first.data.outside, ['shared.cjs']);
+  const carry = f.start('--item', 's');
+  f.accepted(carry, ['shared.cjs']);
+  const second = f.verify('p');
+  console.log('after the owner carries it:', second.code, JSON.stringify(second.data && second.data.outside));
+  assert.deepEqual(second.data.outside, ['shared.cjs']);
+  f.write('.specs-inferno/state.yaml', f.git('show', 'HEAD:.specs-inferno/state.yaml').replace(/(- id: s\n\s+status: )pending/, '$1completed'));
+  f.git('commit', '-qam', 's completed');
+  const third = f.verify('p');
+  console.log('after s is completed:', third.code, JSON.stringify(third.data && third.data.outside));
+  assert.deepEqual(third.data.outside, ['shared.cjs']);
+});
+
+test('a grant of the path to a correction of p is refused as changed beside p by s', (t) => {
+  const f = setUp(t);
+  const fix = f.start('--item', 'p');
+  const granted = f.call('grant', fix, '--path', 'shared.cjs', '--tree', f.root);
+  console.log('grant to p:', granted.code, granted.out.trim().slice(0, 120));
+  assert.notEqual(granted.code, 0);
+  assert.match(granted.out, /changed it beside this item/);
+});
+
+test('a chain of p and s that carries the path verifies p', (t) => {
+  const f = setUp(t);
+  const chain = f.call('dispatch-log', 'alpha', '--items', 'p,s', '--tier', 'strong', '--agent', 'builder', '--tree', f.root);
+  assert.equal(chain.code, 0, chain.out);
+  const accepted = f.accept(chain.data.dispatch_id, ['shared.cjs']);
+  console.log('chain accept:', accepted.code, accepted.out.trim().slice(0, 160));
+  const result = f.verify('p');
+  console.log('verify p after the chain:', result.code, JSON.stringify(result.data && result.data.outside));
+  assert.equal(accepted.code, 0, accepted.out);
+  assert.equal(result.code, 0, result.out);
+  assert.deepEqual(result.data.outside, []);
 });
 ```
