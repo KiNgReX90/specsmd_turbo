@@ -1,0 +1,27 @@
+# Handoff: a dispatch record is signed with its machine's own proof-key and stays in that machine's cache, and verify-item's fallback `--since` counts the item's grants and the base's fold as outside, so an item reviewed on one machine cannot be proven on another
+
+Row 0bm. Met on the first host on 2026-11-24 on Delta, by a session that resumed an intent from the run branch Omega had paused, on the build installed there, `a8873ebb`. The tip holds the same `src/`.
+
+## What is wrong
+
+`S/` below is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
+
+1. **The record and its key stay on the machine that dispatched.** `key` (`S/run-dispatch.cjs:32-47`) writes 32 random bytes to `<cache>/proof-key` once per machine, and `signature` (`:49-51`) signs each dispatch record with HMAC-SHA256 under that key. The records live in that machine's cache, under the hash of the tree's real path. The run branch carries the ledger, the specs and the review files to another machine. It carries no record, and no step moves one or signs one again.
+2. **The refusal sends the session to `--since`.** "dispatch <id> for <item> was logged, but <tree> has no record of it: pass the --tree its dispatch-log used, or name a baseline with --since if the record left the cache" (`S/run-attribute.cjs:181-183`, `DISPATCH_PROOF`).
+3. **`--since` drops what the record answered for.** Under `--since`, verify-item skips attribution (`S/run-item-proof.cjs:366`), so `outside` is every path changed since the named baseline that the items do not own (`sinceOutside`, `:336-341`). The item's grants, which only its record holds (`grantedPaths(record)`, `S/run-attribute.cjs:228`), count as outside. So does every path a fold of the base brought in after the baseline, which attribution excuses (`foldedSince`, `S/run-attribute.cjs:46-58`). An item with a grant, or one whose branch folded the base after its baseline, cannot pass the fallback the refusal names.
+
+## Evidence
+
+- **The FLOW line**, Delta outbox line 352, 2026-11-24, session `vuln-policy`, intent `the-vulnerability-policy-prints-each-commitment-on-its-own-answer`, verbatim: "a reviewed item resumed on another machine has no dispatch record (records are HMAC-signed with the machine's own proof-key, so Omega's cannot move), and verify-item --since is barred for an item that holds grants, so the item cannot be proven | evidence: verify-item vhp-third-party-components-are-checked-with-recorded-criteria exit 2 DISPATCH_PROOF, then --since 8234f6319 lists main's fold as outside | workaround: fresh dispatch-log a4bf4116 at HEAD b63861ed1, its 11 earlier grants re-granted (paths from 8234f6319..e3af2a041 outside the spec), accept-dispatch [], verify-item exit 0; the delta review over the fold follows".
+- **The item's work.** From `8234f6319` (2026-11-21 12:41:21Z, the previous item's completion, its baseline) to `e3af2a041` (13:35:41Z, one commit, 34 files, 871 lines in and 327 out), built and reviewed on Omega, on the run branch `inferno-intent/the-vulnerability-policy-prints-each-commitment-on-its-own-answer-2026112...` on origin.
+- **Known before, met now.** The first host's recipe of 2026-11-19 for moving a running intent from Delta to Alpha read this limit in the code and worked around it: an item built but not integrated could not move, since verify-item needs its record. This is the first session that met it.
+
+## How to fix
+
+1. **Carry the records with the intent.** `run.cjs carry <intent> --out <file>` on the machine that dispatched writes the intent's dispatch log and records, each checked with that machine's key first. `run.cjs carry <intent> --in <file>` on the new machine checks each record against git: its baseline `head_sha` is an object here, and each tracked path's snapshot hash equals the blob at that sha. It then signs the record with this machine's key into this tree's dispatch directory, and refuses a record that fails a check by name. The `DISPATCH_PROOF` refusal at `S/run-attribute.cjs:181-183` names this step before `--since`. The key keeps guarding what it guards today, a record file a builder edits by hand, and the import checks against git what the old key vouched for.
+2. **`--since` keeps the fold and the grants.** Under `--since`, a path the base's fold brought in after the named baseline is excused as attribution excuses it (`foldedSince`). `--granted <path>`, which may repeat, states a grant whose record is gone, and the proof prints each as a `GRANTED` line, so the review reads it. The refusal's own fallback then works when the old machine is gone.
+3. **The tests.** In `S/run-dispatch.test.cjs`: an item dispatched and granted under one cache, carried to a second tree with another key, verifies with exit 0 and its grants intact, and a carried record whose snapshot hash disagrees with the blob at its baseline is refused by name. In `S/run-item-proof-granted.test.cjs`: under `--since`, a fold of the base after the baseline is not outside, and a path `--granted` names is not outside and prints `GRANTED`.
+
+## Until it is built
+
+Before a paused machine's intent moves, its session integrates every reviewed item there when the machine still runs. An item that moved reviewed and unintegrated gets a fresh `dispatch-log` at HEAD, every earlier grant granted again (the paths of the item's commits outside its spec), `accept-dispatch []`, then `verify-item`, and a delta review over any fold since its baseline.
