@@ -48,6 +48,42 @@ One test decides an edge: an item of the later intent reads a file, symbol, fiel
    The text pins go beside those of rows 0bi and 0bj in `src/flows/inferno/agents/planner/scripts/team-work-item-contract.test.cjs`: every planner text holds `builds_on:` and "never edges", for `agent.md` and `codexSkillFile("specsmd-inferno-planner", "references/procedure.md")`.
 6. **The measurement.** The planner text change is measured on both hosts with `evals/planner-ab` before it is ported, as the standing rule under section 2 of the index asks.
 
+## Two more gaps in the first host's open plan
+
+Met on the first host on 2026-11-25 by its lead's oracle (03:42Z), in the open plan on its `main` at `6eb7cef7a`. Flow lines are at the tip, whose `src/` is that of `a8873ebb`.
+
+### A real cross-intent edit stands with no edge, and nothing finds the edge missing
+
+The row's lint checks each edge a plan writes. It finds no edge a plan leaves out.
+
+- The item `fsa-the-introduction-has-two-steps-and-welcome-names-the-four-tasks` of the intent `the-first-start-wears-signal-arc` holds `src/lib/walkthrough/step-slide.test.ts` in `ownership.editable` (its spec, line 121).
+- `main` lacks that file (`git cat-file -t origin/main:src/lib/walkthrough/step-slide.test.ts` fails).
+- The item `mte-the-walkthrough-step-slides-when-motion-is-earned` of the pending intent `every-machine-starts-on-the-cut-and-earns-its-motion` creates it (its spec, line 33, "(new, injected clock and `earnedNow`)", and its ownership, line 105).
+- The first item rewrites what the second creates: "Breaks: `src/lib/walkthrough/step-slide.test.ts` :: the motion intent's cases that slide to How it works and Watch, rewritten to Welcome and Appearance" (its spec, line 64).
+- Its notes still say the file was "landed before this intent by its edge" (line 152).
+- The host's audit `2cc90cb24` (2026-11-24 12:30:04 UTC), made by hand as this row's "Until it is built" asks, cut that edge as "shared files only".
+- `state.yaml` on `main` holds no edge from the first intent to the second (`depends_on_intents`, lines 2185-2188).
+- Of the 14 items of the first intent, this is the only one that owns a path `main` lacks and an item of the motion intent owns, measured with a parse of both intents' `ownership.editable` on `main`. The seven other paths both intents own stand on `main` and are folds.
+- `pathErrors` checks only `context.required` and `reads` (`S/run-manifest-paths.cjs:82`, `:84`), and `lintPlan` hands it only those two (`S/run-plan-lint.cjs:393`).
+- `overlaps` compares the items of one intent (`S/run-plan-lint.cjs:342-355`).
+- So an owned path the base lacks reads as a file the item creates, also when an item of another open intent creates it.
+- The row's `builds_on` check and its `pathErrors` change read `context.required`, `reads` and the edges that exist, so this item, which cites the file only in its ownership, passes them.
+
+Fix: `edgeFindings` also reads each open item's `ownership.editable`, and a path the base lacks that an item of another live intent, not completed, owns is a finding unless the item names that intent in `builds_on` and the linted intent's `depends_on_intents` holds it, as `FINDING <item>: owns <path>, which the base lacks and <intent>/<item> creates; name it in builds_on with an edge to <intent>, or take it out of ownership`. Its cases go in `S/run-plan-lint.test.cjs` on the row's `card-ledger` fixture: a later item that owns the new path `ledger-store` owns, with no `builds_on` and no edge, gives that one finding; with both it passes; with the path on the base it passes.
+
+### An edge holds every item of the later intent for one item's read
+
+- With the edge restored as the host's oracle asks (`every-machine-starts-on-the-cut-and-earns-its-motion: src/lib/walkthrough/step-slide.test.ts`, in the row's own form), one item of 14 reads what the motion intent creates.
+- `claim` still refuses the whole intent with `DEPENDS_UNMET` until the motion intent is completed (`S/state-transition.cjs:277-283`), and `select` prints it `blocked` (`S/run-intents.cjs:172`).
+- An item's `depends_on` names only items of its own intent: the frontier readies an item when each of them is in that intent's completed ids (`S/run-frontier.cjs:169`). A host has no way to hold one item on another intent.
+- The motion intent has 15 items and walks its cases on machines that still need weston, per the same oracle. Its run, gate and ship are the hold.
+- The 14 items form one linear compile chain, and the reading item is its root (`depends_on: []`, every other item reaches it through `depends_on`). So an item-level hold pays here only when the planner places the reading item last in its chain.
+- The first intent also waits on three other open intents (`state.yaml` lines 2186-2188), so on this plan the edge costs time only when the motion intent ships after all three.
+
+Fix: with `builds_on` in place, the hold moves to the item. `claim` refuses `DEPENDS_UNMET` only when every open item names an unmet intent in `builds_on` or reaches such an item through `depends_on`. The frontier prints such an item `waiting <item> on intent <id>` until that intent is completed and the tree holds each `builds_on` path, which a fold of the base brings. The planner places an item with `builds_on` on an unmet intent last in its compile chain. The case `claim-intent refuses while a prerequisite intent is still open` (`S/state-transition-claim.test.cjs:57`) keeps its refusal for an intent all of whose items are held and gains a case that claims an intent with one held item. `S/run-frontier.test.cjs` gains a case where that item waits on the intent while its siblings are ready, and is ready once the prerequisite is completed and its path stands in the tree.
+
+**Until it is built.** An owned path the base lacks that an item of another open intent creates keeps its edge; the first host restores `every-machine-starts-on-the-cut-and-earns-its-motion` for `src/lib/walkthrough/step-slide.test.ts`, which its audit `2cc90cb24` had cut. The planner places the item that reads such a path last in its compile chain.
+
 ## Until it is built
 
 The host's planner briefs carry: "An intent edge stands only where an item of the later intent reads a file, symbol, field or migration that an item of the earlier intent creates and `main` lacks. Name it in the brief's order paragraph as `<intent>: <path>:<symbol>`. A shared file, a reseal of the pack, a shared list or pin, a look one restyle extends and a sweep are folds the second to land resolves, never edges, and a sweep goes after the surfaces it rewrites." The lead checks each new edge of a plan against that before the plan lands.
