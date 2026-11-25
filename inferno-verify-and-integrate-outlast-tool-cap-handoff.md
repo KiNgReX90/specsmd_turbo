@@ -26,6 +26,14 @@ All on Delta, read from the sessions' transcripts in `~/.claude/projects/-home-r
 2. **The procedure names the pair.** Wherever the orchestrator text runs `verify-item` or `integrate`, it runs `--detach` and then `--wait` until the exit is not 4.
 3. **The tests.** Beside the tests of `verify-item` and `integrate`: give the host a check that sleeps past a `--wait` of a fraction of a minute. Then `--detach` returns at once, `--wait` exits 4 while the check runs and afterwards exits with the step's own code and prints its lines, and a second `--detach` while one runs exits 2.
 
+## The orchestrator's wait for a subagent
+
+Added 2026-11-25 from the first host's stall oracle (its cause 6), on the same build. The orchestrator text names no wait for a subagent started in the background or resumed with a message. Neither `orchestrator/agent.md` nor `orchestrator/skills/orchestrate/SKILL.md` mentions `run_in_background`, a resumed agent or `SubagentHandback`. A subagent that hands back writes a `SubagentHandback` tool call and never an `end_turn`, so an orchestrator that waits for the turn to end reads the result late. The oracle measured the hand-backs of one session (techdoc) read 9 to 80 minutes after they were written.
+
+Fix, with point 2 above: the orchestrate procedure dispatches builders and reviewers in the foreground where the tool allows it. After a background start or a message resume, it waits for the agent's hand-back, its `SubagentHandback` result, and never for an `end_turn`. That is one line in the orchestrator text, held by the role-text tests.
+
+Meanwhile, sessions dispatch builders and reviewers with `run_in_background: false`. After a resume they wait for a new `"name":"SubagentHandback"` line in the agent's transcript (the first host's `~/.claude/scripts/agent-wait.py`).
+
 ## Until it is built
 
 A `verify-item` or `integrate` that the tool moves to the background is waited on by its log's closing line and never stopped. No session wraps either in a `timeout` shorter than the step. How long the prove takes on the first host (machine lock waits and yields, the walks of earlier items' mutants) is the host's concern, not this row's builder's.
