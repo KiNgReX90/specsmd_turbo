@@ -55,11 +55,26 @@ So the pause item's verify-item listed `outside [src/lib/dossier/generate.ts]`: 
 
 Point 1 below refuses the `dispatch-log` at seq 25, so a new tree never takes such a baseline. The second script below, run on the tip `f0b7eb9c` on Alpha at 2026-11-21 09:49Z, passes all three tests. The put-back edit is the item's outside path, and three things leave it there: the owner's carried accept, the owner marked `completed`, and a grant to the item, which is refused. A chain of the item and the owner whose accept carries the path verifies the item with `outside` empty.
 
+### A third host intent: the owner's replay moves the flag onto a later item
+
+Read on the first host's Beta (WSL) on 2026-11-25 about 03:30Z, read only: the same intent as the second, its tree now on Beta, on `a8873ebb`. The orchestrator edited the four wiki pages of `slt-the-wiki-pricing-page-records-the-new-place-rule` by hand and committed them as `066c65e20` before that item's next `dispatch-log`. The bytes of `wiki/claims.md`, `wiki/log.md`, `wiki/pricing.md` and `wiki/selling.md`, by sha256, from the records:
+
+- Seq 19 to 20, `9b17cace` of the wiki item: `log.md` and `pricing.md` change inside its window.
+- Seq 20 to 21, no window: all four change to the committed edit, X (`6c59e1f`, `d0afddf`, `b7b0f6d`, `21352a7`).
+- Seq 21 to 22, `77b33d0f` of the wiki item, logged as `orchestrator-in-place-copy`: nothing changes, and its accept carries all four.
+- Seq 23 to 25, `b031b693`, a correction of the strip item (`slt-the-strip-and-the-limit-offer-cover-what-the-maker-has-open`, root seq 1), and seq 24 to 26, `d6cb3ba8`, the first attempt of `slt-one-time-purchases-add-up-and-a-closed-product-frees-at-the-renewal`: the four stay X.
+- Seq 26 to 27, no window: the orchestrator puts the four back to their seq 20 bytes by hand.
+- Seq 27 to 28, `cf71c63f`, a fresh dispatch of the wiki item: the four change to X again, reported and not carried. The tree ends on X, clean against HEAD.
+
+Before the put-back, the strip item's verify-item listed the four outside: its stretch found the seq 20 bytes and left X, and the carry of `77b33d0f` claims them only for the wiki item's attempts from seq 18 to 20, none of which spans 20 to 21. After the replay the strip item verifies: its stretch runs from the seq 20 bytes to X and back, so `found` equals `left` when `cf71c63f`'s run takes the paths over at seq 27. The one-time item, rooted at seq 24, now lists the four outside: its stretch found X at 26 and left the seq 20 bytes at 27, and it is judged there, though `cf71c63f` writes X back at 28 and the item's tree never leaves X. So no order of dispatches clears both items (the session's FLOW line, Beta outbox line 51, 2026-11-25). Point 1 below refuses the `dispatch-log` of `77b33d0f`, so a new tree never needs the replay, and point 2 clears the strip item; neither reaches the flag the replay left on the one-time item, which point 4 does.
+
 ## How to fix
 
 1. **`dispatch-log` refuses a change no dispatch made.** Beside `refuseOverlap`, before anything is written (`S/run-intents.cjs:353-355`): take the tree's last snapshot, the highest `seq` among its records, and the tree now. A path whose bytes differ between them, outside the ledger, outside the fold ranges of the base since that snapshot, and under no open record's frozen ownership, is the stretch `unexplainedChanges` would later flag. Exit 2, before the record, naming the paths and the way: put them back, run `dispatch-log`, then make the change, and list its paths, both ends of a move, in that dispatch's `accept-dispatch`. A correction is no exception, and a tree with no record yet has nothing to compare.
 2. **A late correction no longer answers for a change made between its attempts.** In `unexplainedChanges`, a change between two neighbouring snapshots that no run claims, lying after one of the item's attempts was accepted and before its next attempt began, is not added to the item's stretch for a path the item neither owns nor claims. `verify-item` prints such paths on a line of their own (`changed between dispatches, no dispatch claims: <paths>`) and keeps them out of `outside`, so the proof passes on what the item's own attempts did. This is the reading `ranBeside` gives a peer's run (`S/run-peers.cjs:79-82`). A change during one of the item's attempts or after its last one is read as today, and a path the item owns stays under `unreported` as today. Point 1 keeps new trees free of such changes; point 2 lets a tree from before the build finish.
 3. **A change that no dispatch made and that sits in the item's first baseline names its repair.** When a path the item does not own leaves the item's timeline on other bytes than its first baseline held, and the first stretch that changed it lies in the item's own window with no run claiming it, verify-item names the case and the call that clears it: the chain of the item and the path's owner, whose accept carries the path. It never names the owner's carried accept alone, which cannot reach that stretch.
+
+4. **A stretch that a peer's run writes back is no change.** `close` in `unexplainedChanges` (`S/run-peers.cjs:259-263`, in `:255-282`) judges a stretch of nobody's changes when a run that claims the path takes it over, and flags it when `found !== left`, before that run's change. A stretch that the closing run writes back to the bytes the stretch found leaves nothing of nobody's in the item's tree: it is flagged only when `found !== left` and the bytes the run leaves differ from `found`. A stretch still open at the end of the timeline is read as today.
 
 Tests, beside `S/run-attribution.test.cjs`, with the fixture of `S/run-attribution-fixture.cjs`. The script's cases 1 and 2 are red on `a8873ebb`, and case 3 is green:
 
@@ -68,6 +83,7 @@ Tests, beside `S/run-attribution.test.cjs`, with the fixture of `S/run-attributi
 - Case 3, the control: the move made after `b`'s `dispatch-log` and reported in its accept still verifies `a`'s correction.
 - A path `a` owns, changed between `a`'s attempts by no dispatch, is still under `unreported`, and a change after `a`'s last attempt with no attempt after it still reads as `outside`.
 - The second script's case: the edit made before `p`'s `dispatch-log` makes that `dispatch-log` exit 2 naming the path; and with `p`'s record written past the door, verify-item of `p` names the chain call of point 3.
+- The third case, from the third host intent: `w` edits a path by hand between two of its dispatches and carries it, `b` takes its first dispatch after that, then the path is put back by hand and a fresh dispatch of `w` writes the edit back. Verify-item of `b` exits 0 with `outside: []`, and an item rooted before the edit verifies as today. Met red on the host on `a8873ebb`; no script was run for it.
 
 No agent text changes: the refusal carries the way on.
 
@@ -78,6 +94,8 @@ The trigger is the host's: its `dispatch.constraints` forbid a builder any git m
 ## Until it is built
 
 On the host: a move the builder may not stage is staged by the orchestrator after `dispatch-log` and before the builder starts, and both paths of the move go into that dispatch's `accept-dispatch`. Nothing else changes in the tree between an accept and the next `dispatch-log` but the ledger and the fold: no orchestrator edits a tracked file outside a dispatch, and a measurement runs in a scratch worktree. An item whose verify-item lists as outside a path that was edited by hand before its `dispatch-log` and put back is cleared by the chain of the item and the path's owner, `dispatch-log <intent> --items <item>,<owner>`, then `accept-dispatch` with that path, then verify-item. The owner's carried accept and the owner's integrate do not clear it. A late correction whose `verify-item` lists as outside only paths that changed between two dispatches, at a stretch no record's window spans, is settled on its commit without a fresh proof: the intent review run again reads it in its delta.
+
+An item flagged after such a replay (a hand put-back between dispatches, then the owner's fresh dispatch writing the same bytes back), whose last attempt was accepted before the put-back: `verify-item <item> --peers '<every current accepted record but the replay's, as a JSON array of full ids>'`. A peer left out adds none of its snapshots to the item's timeline, so the item reads the path across the replay by its bytes at both ends. An item rooted before the edit keeps the default peers. Relayed to the third host intent on 2026-11-25, with `cf71c63f` left out.
 
 ## The script
 
