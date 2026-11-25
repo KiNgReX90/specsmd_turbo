@@ -1,0 +1,36 @@
+# Handoff: an item's delta review cannot give a survivor another test, so a correction that renames the case the survivor's test selects is rerun on the stale command and recorded `fix` on code the corrected case catches
+
+Row 0bt. Met on the first host on 2026-11-25 on Delta, on the build installed there, `a8873ebb`. The tip holds the same `src/`.
+
+## What is wrong
+
+`S/` below is `src/flows/inferno/agents/orchestrator/skills/orchestrate/scripts/`.
+
+1. **The retest route exists for the intent review alone.** A survivor written again with only `test` changed takes that test and keeps its first one as `was` (`retest`, `S/run-review-mutants.cjs:222-229`). Only `intentMutants` calls it (`:275`). The header places the route in its intent review paragraph (`:32-35`), and the changelog entry of `9b9f3a9b` says "At the intent review".
+2. **An item's delta review refuses that entry as new.** `itemMutants` runs `refuseNew` before anything else (`S/run-review-mutants.cjs:116-117`). `refuseNew` (`S/run-review-file.cjs:396-402`) accepts an entry only when `sameMutant` holds, and `sameMutant` needs a test the two entries share (`:318-320`). Its message tells the reviewer to leave mutants out, and the reviewer text says the same (`agents/reviewer/agent.md:33`).
+3. **So a survivor's `test` is fixed for the whole item loop.** Every delta record reruns the survivor with the command the first review wrote (`S/run-review-mutants.cjs:118`, `:141`). When a correction renames or moves the case that command selects, the rerun no longer reaches it. A `-g` alternation that still selects other cases stays green and reads `caught: no` on code the corrected case catches. The verdict stays `fix`, and the item cannot go clean while the case name and the recorded command disagree.
+4. **The item's own review can ask for that rename.** Here one first review held both: the mutant's test selected the fold case by its name at the time, and a minor finding on the same criterion asked the builder to rename that case so the criterion's own command selects it. The builder did what the review asked, and the next record reran the survivor on the name the rename removed.
+
+## Evidence
+
+Intent `the-checklist-wears-chapter-arcs`, item `cca-the-checklist-stands-in-products-frame` (item 2), on Delta. Times are UTC, read from the commits and from the session's transcript `~/dev/intent-mail/sessions/checklist-arcs/run-20261124T063820-subscription.jsonl` (line numbers below).
+
+- The FLOW line, Delta outbox line 367, 2026-11-25T13:49:36Z, verbatim: "run-review-mutants.cjs itemMutants: an item's delta review cannot retest a survivor (refuseNew refuses an entry with only test changed; retest() runs for the intent review alone), so cca item 2's mutant 5 keeps re-running a -g filter its review fix renamed away and records fix on code that catches it (reviewer ran it red with the criterion's filter)."
+- Criterion 5 of the item spec (line 34) is the command `npx playwright test e2e/gap-list.spec.ts -g "brings a duty into view and lights it|reveals duty links|names the classifying answers still owed"`.
+- The first review, recorded `fix` in `20429828b` at 09:22:50Z, held mutant 5 on `src/lib/wizard/checklist-chapters.css:28` (`:is(:hover, :focus-within)` to `:is(:focus-within)`) with the test `npx playwright test e2e/gap-list.spec.ts -g "brings a duty into view and lights it|keeps duty links folded|names the classifying answers still owed"` and `caught: no`. The same review held a minor finding on criterion 5 at `e2e/gap-list.spec.ts:1776`: "The criterion selects the rewritten fold case by the words "reveals duty links"", with the fix "Keep the words the criterion greps in the case name".
+- The correction `5d009bad5` at 10:36:36Z made the fold case catch a lost hover. It renamed the case from `keeps duty links folded at a 1400 and a 1500 point board until their section is hovered at dial ${dial}` to `reveals duty links only once their section is hovered, at a 1400 and a 1500 point board, at dial ${dial}` (`e2e/gap-list.spec.ts:1796`).
+- The delta record `21a635032` at 13:45:48Z reran mutant 5 on its first test. That alternation still selects the two other cases, which never hover, so the run stayed green: `caught: no`, verdict `fix`, and the finding `mutant: 5` again.
+- The contract reviewer broke line 28 itself (line 6826, 13:46:28Z) and ran the criterion's own command (line 6829, 13:46:31Z). The fold case failed at both dials, 2 passed, exit 1 (13:47:21Z). It restored the line (line 6837).
+- It wrote mutant 5 again with only `test` changed, to the criterion's command (line 6845, 13:47:39Z). `review --item` refused the record (line 6894, 13:48:20.618Z): "ERROR [BAD_REVIEW] .specs-inferno/intents/the-checklist-wears-chapter-arcs/reviews/cca-the-checklist-stands-in-products-frame.yaml: mutants entry 5 is new: a delta review proposes no mutant. Leave mutants out: the runner carries the last review's over and reruns its survivors, and a criterion still without a caught mutant or a checked pin is the intent review's".
+- The session's workaround `0f411f062` at 13:51:13Z renamed the case to `keeps duty links folded until their section is hovered and then reveals duty links, at a 1400 and a 1500 point board, at dial ${dial}`, so both the stale filter and the criterion's command select it. It costs one more `verify-item` before the integrate, about 3 h of the lane on Delta.
+- The installed `run-review-mutants.cjs` equals the tip's (`diff` empty, 2026-11-25).
+
+## How to fix
+
+1. **An item's delta review takes the retest route.** In `itemMutants`, call `retest(rel, doc, previous)` before `refuseNew` (`S/run-review-mutants.cjs:116-117`). The survivor then holds the new test with its first as `was`, so `sameMutant` holds through `was` and `refuseNew` passes. The survivor reads `caught: no`, so it is due and runs with the new test (`:118`, `:141`). An entry that changes its criterion, file, line, find or replace stays refused, and so does a caught entry given another test, as in the intent review.
+2. **The texts name the route.** `refuseNew`'s message names it for a survivor, as `refuseSecond` does (`S/run-review-mutants.cjs:181-193`). The header paragraph (`:32-35`) says the route holds in an item's delta review too. `agents/reviewer/agent.md:33` gains one sentence: a survivor whose `test` no longer selects the case that should catch it is written again with only `test` changed. The survivor finding's fix (`S/run-mutant-runs.cjs:258`) may say the same for a renamed or moved case.
+3. **The test.** Beside `S/run-review-mutants-retest.test.cjs`, on its fixture: an item's first review records a survivor, a correction adds the case that catches it under another name, and the delta reviewer writes the entry again with only `test` changed. The record runs it with the new test, reads `caught: yes`, keeps the first test as `was` and writes `clean`. The same entry with `line` changed, and a caught entry with another test, are still refused as new.
+
+## Until it is built
+
+A correction keeps the case a surviving mutant's `test` selects reachable by that command. A renamed case keeps the old name's words beside the new ones, and a moved case stays in the file the command names. When a finding asks for a rename, the new name carries both phrases.
