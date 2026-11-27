@@ -195,8 +195,8 @@ test('gate and green read the selected host list and keep equal commands separat
   passed(run(f, 'gate', '--config', CODEX));
   assert.deepEqual(ran(f), ['scoped']);
   passed(run(f, 'green', '--config', CODEX));
-  assert.equal(run(f, 'green').code, 3);
-  passed(run(f, 'gate'));
+  assert.equal(run(f, 'green', '--config', DEFAULT).code, 3);
+  passed(run(f, 'gate', '--config', DEFAULT));
   assert.deepEqual(ran(f), ['scoped', 'scoped', 'whole']);
   passed(run(f, 'gate', '--config', path.join(f.tree, CODEX)));
   assert.deepEqual(ran(f), ['scoped', 'scoped', 'whole']);
@@ -231,7 +231,7 @@ test('detached gates preserve their selected host configuration', (t) => {
   passed(result);
   assert.deepEqual(ran(f), ['scoped']);
   passed(run(f, 'green', '--config', CODEX));
-  assert.equal(run(f, 'green').code, 3);
+  assert.equal(run(f, 'green', '--config', DEFAULT).code, 3);
 });
 
 test('gate refuses a command that edits its inputs without committing and mints no proof', (t) => {
@@ -282,7 +282,7 @@ test('waiting with a different host config cannot return another host gate resul
   write(f.tree, CODEX, config([scoped]));
   commit(f.tree);
   passed(run(f, 'gate', '--detach', '--config', CODEX));
-  const other = run(f, 'gate', '--wait', '--minutes', '0.5');
+  const other = run(f, 'gate', '--wait', '--minutes', '0.5', '--config', DEFAULT);
   const own = run(f, 'gate', '--wait', '--minutes', '0.5', '--config', CODEX);
   passed(own);
   assert.equal(other.code, 2, other.out + other.err);

@@ -3,12 +3,19 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-const {
-  validateWorkItem,
-} = require("../../orchestrator/skills/orchestrate/scripts/team-scheduler.cjs");
+const SCRIPTS = "../../orchestrator/skills/orchestrate/scripts";
+const { validateWorkItem } = require(`${SCRIPTS}/team-scheduler.cjs`);
+const { readItemSpec } = require(`${SCRIPTS}/run-lib.cjs`);
+const { acceptanceCriteria } = require(`${SCRIPTS}/run-mutant-coverage.cjs`);
+const { tempDir } = require(`${SCRIPTS}/test-temp.cjs`);
+const { writeFile } = require(`${SCRIPTS}/test-write.cjs`);
+const { codexSkillFile } = require(`${SCRIPTS}/test-codex-text.cjs`);
 
 const templatePath = path.resolve(__dirname, "../templates/work-item.md.hbs");
+const briefPath = path.resolve(__dirname, "../templates/brief.md.hbs");
 const agentPath = path.resolve(__dirname, "../agent.md");
+const AGENTS = path.resolve(__dirname, "../..");
+const headings = (text) => text.split("\n").filter((line) => /^## /.test(line));
 
 test("planner body tells the planner to list the tests the change reaches", () => {
   const agent = fs.readFileSync(agentPath, "utf8");
@@ -104,6 +111,19 @@ test("work item template and planner body carry the wiring blocks", () => {
   }
 });
 
+// frontier prints the callers of what an item writes through, so every planner text and the
+// template carry the same optional `writes:` line, and the template renders one name per dash.
+test("work item template and every planner text carry the optional writes list", () => {
+  const texts = [agentPath, codexSkillFile("specsmd-inferno-planner", "references/procedure.md")];
+  const lines = texts.map((file) => fs.readFileSync(file, "utf8").split("\n").find((line) => line.startsWith("writes:")));
+  for (const [index, line] of lines.entries()) {
+    assert.ok(line, `${path.basename(texts[index])} carries a writes: line`);
+    assert.equal(line.replace(/\s+/g, " "), "writes: [save_item] # optional, functions written through");
+  }
+  const template = fs.readFileSync(templatePath, "utf8");
+  assert.match(template, /\{\{#if writes\}\}\nwrites:\n\{\{#each writes\}\}\n {4}- \{\{this\}\}\n\{\{\/each\}\}\n\{\{\/if\}\}/);
+});
+
 function wired(wiring) {
   return {
     id: "item-4",
@@ -152,4 +172,198 @@ test("work item contract rejects a wiring entry with an unknown kind or no name"
     "item-4: provides[1].name must be a non-empty string",
     "item-4: consumes must list at least one entry when the item declares it",
   ]);
+});
+
+// The spec says more before the build starts: four sections a script can read without guessing.
+test("work item template carries the four sections in fixed headings and a fixed shape", () => {
+  const template = fs.readFileSync(templatePath, "utf8");
+
+  assert.deepEqual(headings(template), [
+    "## Description",
+    "## Acceptance Criteria",
+    "## Edge Cases",
+    "## Out of Scope",
+    "## Test Plan",
+    "## Reuse",
+    "## Execution Manifest",
+    "## Technical Notes",
+    "## Dependencies",
+  ]);
+  assert.match(template, /^delivers: \[\{\{#each delivers\}\}/m, "the item names the brief's success criteria it delivers");
+  for (const line of [
+    "| Case | Expected behaviour | Test |",
+    "| {{this.case}} | {{this.expected}} | {{this.test}} |",
+    "- Adds: {{this}}",
+    "- Integration with {{this.item}}: {{this.test}}",
+    "- Integration: none",
+    "- Breaks: {{this}}",
+    "- Breaks: none",
+    "| Structure | Decision | Evidence |",
+    "| {{this.structure}} | {{this.decision}} | {{this.evidence}} |",
+    "None.",
+  ]) {
+    assert.ok(template.split("\n").includes(line), `template line: ${line}`);
+  }
+});
+
+test("brief template numbers its success criteria and carries the item map", () => {
+  const brief = fs.readFileSync(briefPath, "utf8");
+
+  assert.deepEqual(headings(brief), [
+    "## Goal",
+    "## Users",
+    "## Problem",
+    "## Success Criteria",
+    "## Item Map",
+    "## Constraints",
+    "## Notes",
+  ]);
+  assert.ok(brief.split("\n").includes("- {{this.id}}: {{this.text}}{{#if this.after_ship}} (after ship){{/if}}"), "a success criterion line carries its SC-<n> id, and its after-ship mark");
+  assert.match(brief, /\{\{!-- after_ship: a criterion whose instrument runs only once the intent landed on the base branch/, "the template says when a criterion is marked after ship");
+  assert.ok(brief.split("\n").includes("| Criterion | Items |"), "the item map is a table of criterion and items");
+});
+
+test("every planner text tells the planner to fill the four sections and number the criteria", () => {
+  const texts = [agentPath, codexSkillFile("specsmd-inferno-planner", "references/procedure.md")];
+
+  for (const file of texts) {
+    const text = fs.readFileSync(file, "utf8");
+    for (const token of ["`delivers:`", "Edge Cases", "Out of Scope", "Test Plan", "Reuse", "`SC-<n>`", "Item Map", "`None.`"]) {
+      assert.ok(text.includes(token), `${path.basename(file)} names ${token}`);
+    }
+    assert.match(text, /a breaking test belongs to the item that breaks it/, path.basename(file));
+    assert.match(text, /Technical Notes the settled decisions, one line each, and neither what the code does/, path.basename(file));
+  }
+});
+
+// A builder opens every manifest path before it edits, so an item that also explains that code
+// is read twice: the template says what the two prose sections hold, and a note is one line.
+test("work item template keeps the description and the technical notes to what a builder cannot read in the code", () => {
+  const template = fs.readFileSync(templatePath, "utf8");
+  const slot = (heading) => template.split(`## ${heading}\n\n`)[1].split("\n## ")[0];
+
+  assert.match(slot("Description"), /^\{\{!-- description: what changes and why, .*Never what the code does: the builder opens every manifest path before it edits/);
+  assert.match(slot("Technical Notes"), /^\{\{!-- technical_notes: one line per settled decision \(the decision, the choice, the reason\).*a high item always carries its decisions\. Never what the code does --\}\}\n/);
+  assert.match(slot("Technical Notes"), /\{\{#each technical_notes\}\}\n- \{\{this\}\}\n\{\{\/each\}\}/, "one dash line per note");
+});
+
+test("the contract reviewer checks each edge-case row and every builder builds the rows and the test plan", () => {
+  const reviewer = fs.readFileSync(path.join(AGENTS, "reviewer/agent.md"), "utf8");
+  const check = reviewer.split("\n").find((line) => line.startsWith("1. **Every criterion is proven.**"));
+
+  assert.match(check, /each row of its Edge Cases/);
+  const builders = [
+    path.join(AGENTS, "builder/agent.md"),
+    codexSkillFile("specsmd-inferno-builder", "references/procedure.md"),
+  ];
+  for (const file of builders) {
+    assert.match(fs.readFileSync(file, "utf8"), /each Edge Cases row and each Test Plan line/, path.relative(AGENTS, file));
+  }
+});
+
+const MANIFEST = `## Execution Manifest
+
+context:
+  required:
+    - path: src/cards.ts
+      reason: primary implementation target
+  patterns:
+    - path: src/orders.ts
+      reason: pattern to follow
+  tests:
+    - path: test/cards.test.ts
+      reason: verification target
+ownership:
+  editable:
+    - src/cards.ts
+    - test/cards.test.ts
+    - test/balance.test.ts
+`;
+
+const CRITERIA = `## Acceptance Criteria
+
+- [ ] A gift card of 25 shows a balance of 25 (\`test/cards.test.ts\` :: shows the balance)
+- [ ] A spent card shows 0 (\`test/cards.test.ts\` :: shows a spent card)
+`;
+
+// What an item written before the four sections looks like, and one written after.
+const OLD_ITEM = `---
+id: show-balance
+intent: gift-cards
+kind: behavior
+depends_on: []
+---
+
+# Work Item: Show the balance
+
+## Description
+
+The card page shows the balance.
+
+${CRITERIA}
+${MANIFEST}
+## Technical Notes
+
+(none)
+`;
+
+const NEW_ITEM = `---
+id: show-balance
+intent: gift-cards
+kind: behavior
+depends_on: [card-store]
+delivers: [SC-1, SC-2]
+---
+
+# Work Item: Show the balance
+
+## Description
+
+The card page shows the balance.
+
+${CRITERIA}
+## Edge Cases
+
+| Case | Expected behaviour | Test |
+| --- | --- | --- |
+| A card number with spaces | The balance of the card without them | \`test/cards.test.ts\` :: strips spaces |
+
+## Out of Scope
+
+- Topping a card up
+
+## Test Plan
+
+- Adds: \`test/cards.test.ts\` :: the balance and a spent card
+- Integration with card-store: \`test/cards.test.ts\` :: reads the balance the real store saved
+- Breaks: \`test/balance.test.ts\` :: the balance line reads 25 where it read 25.00
+
+## Reuse
+
+| Structure | Decision | Evidence |
+| --- | --- | --- |
+| module balance formatter | reuse | \`src/money.ts:12\` formats every amount on the site |
+
+${MANIFEST}
+## Technical Notes
+
+(none)
+`;
+
+test("every reader of an item reads one with the four sections and one without them alike", () => {
+  const root = tempDir("inferno-contract-");
+  const dir = (name) => path.join(root, name, ".specs-inferno/intents/gift-cards/work-items");
+  for (const [name, body] of [["old", OLD_ITEM], ["new", NEW_ITEM]]) {
+    fs.mkdirSync(dir(name), { recursive: true });
+    writeFile(path.join(dir(name), "show-balance.md"), body);
+  }
+  const old = readItemSpec(path.join(root, "old"), "gift-cards", "show-balance");
+  const now = readItemSpec(path.join(root, "new"), "gift-cards", "show-balance");
+
+  assert.deepEqual(now.manifest, old.manifest);
+  assert.equal(now.description, old.description);
+  assert.deepEqual(now.frontmatter.delivers, ["SC-1", "SC-2"]);
+  assert.equal(validateWorkItem({ id: "show-balance", kind: "behavior", ...now.manifest }).valid, true);
+  assert.deepEqual(acceptanceCriteria(NEW_ITEM), acceptanceCriteria(OLD_ITEM));
+  assert.equal(acceptanceCriteria(NEW_ITEM).length, 2, "an out-of-scope or test-plan line is never read as a criterion");
 });

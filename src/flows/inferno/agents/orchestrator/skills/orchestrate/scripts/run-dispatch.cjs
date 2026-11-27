@@ -25,6 +25,7 @@ const crypto = require('crypto');
 
 const lib = require('./run-lib.cjs');
 const snapshots = require('./run-snapshot.cjs');
+const grants = require('./run-grant.cjs');
 
 const { dispatchDirectory, hash, readJson, refuse, sequencedSnapshot, snapshotDelta, stable } = snapshots;
 
@@ -125,15 +126,40 @@ function lineage(tree, record) {
   return [...seen.values()];
 }
 
+/**
+ * The first attempt of a lineage. A dispatch over several completed items joins their histories,
+ * each with a first attempt of its own: the earliest of them is the baseline, so the reading of
+ * the joined history never depends on the order of the ids it was joined from.
+ */
+function firstAttempt(members) {
+  const roots = members.filter((entry) => !(entry.previous || []).length);
+  const sequenced = roots.length > 1 && roots.every((entry) => Number.isInteger((entry.beforeSnapshot || {}).seq));
+  if (sequenced) return roots.reduce((first, entry) => (entry.beforeSnapshot.seq < first.beforeSnapshot.seq ? entry : first));
+  return roots[roots.length - 1] || members[members.length - 1];
+}
+
 /** A record as verification reads it: the first attempt's baseline and every accepted or carried file. */
 function effective(tree, record) {
   const members = lineage(tree, record);
-  const root = [...members].reverse().find((entry) => !(entry.previous || []).length) || members[members.length - 1];
+  const root = firstAttempt(members);
   const claimed = new Set();
   for (const entry of members.filter((member) => member.phase === 'accepted')) {
     for (const file of [...claimedPaths(entry), ...exactPaths(entry.completion.carried || [])]) claimed.add(file);
   }
   return { record, members, ids: new Set(members.map((entry) => entry.dispatchId)), before: root.beforeSnapshot, claimed: [...claimed].sort() };
+}
+
+/**
+ * What a new dispatch of `items` is signed with: the current records it supersedes, by id, and its
+ * frozen ownership, the spec's `editable` with every grant of those records.
+ */
+function planned(tree, intent, items, editable) {
+  const previous = new Map();
+  for (const item of items) {
+    const current = readJson(currentFile(tree, intent, item));
+    if (current) previous.set(validateSigned(tree, current).dispatchId, current);
+  }
+  return { previous, ownership: grants.withGrants({ editable }, grants.inherited([...previous.values()])) };
 }
 
 /** The orchestrator captures this immediately before it launches the builder of an item or a chain. */
@@ -146,38 +172,40 @@ function recordDispatch(tree, options) {
   const prior = readJson(recordFile(tree, id));
   if (prior) {
     validateDispatch(tree, prior, { intent: options.intent }, false);
-    if (hash([itemsOf(prior), prior.assignment.ownership.editable]) !== hash([items, options.editable])) {
+    if (hash([itemsOf(prior), grants.startedWith(prior)]) !== hash([items, options.editable])) {
       throw refuse('dispatch ownership is immutable');
     }
     return prior;
   }
-  const previous = new Set();
-  for (const item of items) {
-    const current = readJson(currentFile(tree, options.intent, item));
-    if (current) previous.add(validateSigned(tree, current).dispatchId);
-  }
+  const { previous, ownership } = planned(tree, options.intent, items, options.editable);
   return saveDispatch(tree, {
     version: 2,
     tree: fs.realpathSync(tree),
     dispatchId: id,
     phase: 'started',
-    assignment: { intent: options.intent, items, ownership: { editable: options.editable } },
-    previous: [...previous].sort(),
+    assignment: { intent: options.intent, items, ownership },
+    previous: [...previous.keys()].sort(),
     beforeSnapshot: sequencedSnapshot(tree),
   });
 }
 
 /**
  * The items a dispatch-log for `items` covers: every item their current records cover, to a
- * fixpoint, so a correction of one item of a chain is logged for the whole chain.
+ * fixpoint, so a correction of one item of a chain is logged for the whole chain. `takenIn` holds
+ * each item the caller did not name, with the dispatch id of the current record that covers it.
  */
 function coveredItems(tree, intent, items) {
   const covered = [...items];
+  const takenIn = [];
   for (let index = 0; index < covered.length; index += 1) {
     const current = readJson(currentFile(tree, intent, covered[index]));
-    for (const item of current ? itemsOf(current) : []) if (!covered.includes(item)) covered.push(item);
+    for (const item of current ? itemsOf(current) : []) {
+      if (covered.includes(item)) continue;
+      covered.push(item);
+      takenIn.push({ item, dispatch_id: current.dispatchId });
+    }
   }
-  return covered;
+  return { items: covered, takenIn };
 }
 
 /**
@@ -245,7 +273,9 @@ module.exports = {
   itemsOf,
   lineage,
   loadDispatch,
+  planned,
   recordDispatch,
   recordFile,
+  saveDispatch,
   validateDispatch,
 };

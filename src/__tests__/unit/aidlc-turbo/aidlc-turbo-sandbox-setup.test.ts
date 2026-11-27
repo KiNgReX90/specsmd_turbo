@@ -197,7 +197,7 @@ describe('the config template and the config command', () => {
     expect(config).toContain('Drop a `live_test` block from an older file');
     // The tag at the end of each setting's own bullet, never the next one's.
     const tag = (label: string) => config.match(new RegExp(`\\*\\*${label}\\*\\*(?:(?! - \\*\\*).)*?\\*\\(([^)]*)\\)\\*`))?.[1];
-    expect(tag('Mutants per story')).toBe('default: 3');
+    expect(tag('Mutants per story')).toBe('default: all, no cap');
     expect(tag('Branch prefix')).toBe('both modes, default: empty');
     expect(tag('Base branch')).toBe('both modes, default: `main`');
     expect(tag('A branch per story')).toBe('production only, default: yes');

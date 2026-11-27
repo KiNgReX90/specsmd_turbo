@@ -19,6 +19,11 @@
  * the classic in-place build. A switch the compiler still refuses (a pattern, a type, a const fn,
  * a crate that denies the warning on its parentheses) is blamed from the compiler's file:line
  * and takes the classic build too.
+ *
+ * Only compiled code reads a switch: a test that reads the source (a script, a lint, a grep)
+ * still finds the original in the other branch. So an entry is switched only when its test starts
+ * a cargo run (`runsCompiled`), by itself or through the host's wrapper; every other one takes
+ * the classic build, which costs a build only when its test compiles anything.
  */
 
 const PUNCT = ['>>=', '<<=', '...', '..=', '::', '->', '=>', '==', '!=', '<=', '>=', '&&', '||', '+=', '-=', '*=', '/=', '%=',
@@ -437,4 +442,20 @@ function blame(text, switched) {
   return (inFile.length > 0 ? inFile : switched).map((e) => e.k);
 }
 
-module.exports = { applySwitches, blame, planRust, switchText };
+/**
+ * `cargo` as a command word: at the start or after `;`, `&`, `|` or `(`, behind any `NAME=value`
+ * assignments, by name or by a path that ends in it, quoted or not.
+ */
+const CARGO = /(?:^|[;&|(])\s*(?:[A-Za-z_]\w*=\S*\s+)*["']?(?:[^\s"';&|()]*\/)?cargo["']?(?=\s|$|[;&|)])/;
+
+/**
+ * Whether `test` starts a cargo run, so the code it reads is compiled. `wrapper` is the host's
+ * `mutate.session.match`: a command it matches at its start goes through the wrapper, and the
+ * rest of the command is what runs.
+ */
+function runsCompiled(test, wrapper) {
+  const reached = wrapper ? wrapper.exec(test) : null;
+  return CARGO.test(reached && reached.index === 0 ? test.slice(reached[0].length) : test);
+}
+
+module.exports = { applySwitches, blame, planRust, runsCompiled, switchText };

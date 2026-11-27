@@ -1,0 +1,8 @@
+project:
+  name: acme-shop
+  description: Digital gift cards, bought online and redeemed at checkout
+  created: 2026-01-05T09:00:00Z
+workspace:
+  type: brownfield
+  structure: monolith
+intents:

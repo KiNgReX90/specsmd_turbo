@@ -34,7 +34,10 @@
  *    The counts are parsed for vitest, jest, mocha, pytest, go test, dotnet
  *    test, phpunit and maven when the output shows them, else null. The tail is
  *    the last 40 lines. Full output is never printed or kept. story-mutate.cjs
- *    later adds `mutants` to the same file and leaves the rest alone.
+ *    later adds `mutants` and `criteria` to the same file and leaves the rest
+ *    alone; a later proof of the same story keeps those two, so a fix round
+ *    reruns only the mutants still open and the proof still holds a result per
+ *    criterion.
  * 6. On stdout the line `PASS|FAIL {story} {n}/{m} commands[ ({counts})]`,
  *    then one line per switch-off: `switched off: {file}:{line}: {text}`.
  *
@@ -335,9 +338,24 @@ function verifyStory({ root = DEFAULT_ROOT, intentSlug, storyId, codeRoot, timeo
     if (!commands.length) proof.note = 'the brief has no ## Verification commands';
     fs.mkdirSync(intent.proof, { recursive: true });
     const file = path.join(intent.proof, `${story.id}.json`);
+    Object.assign(proof, mutantsOf(file, story.id));
     fs.writeFileSync(file, `${JSON.stringify(proof, null, 2)}\n`, 'utf8');
     const line = summaryLine(proof);
     return { proof, file, line, lines: [line, ...switchedOffLines(proof)], notes };
+}
+
+/** What story-mutate.cjs found for this story in its earlier proof: `mutants` and `criteria`, when there. */
+function mutantsOf(file, storyId) {
+    if (storyId === INTENT_RUN || !fs.existsSync(file)) return {};
+    try {
+        const earlier = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const kept = {};
+        if (Array.isArray(earlier.mutants)) kept.mutants = earlier.mutants;
+        if (Array.isArray(earlier.criteria)) kept.criteria = earlier.criteria;
+        return kept;
+    } catch {
+        return {};
+    }
 }
 
 module.exports = {

@@ -282,7 +282,7 @@ describe('tooling.cjs facts', () => {
 
   it('prints its facts as JSON from the command line', () => {
     const dir = tree({ 'a.go': 'package a\n' });
-    const out = JSON.parse(execFileSync('node', [SCRIPT, 'facts'], { cwd: dir, env: env(claudeHome(false), programs()) }).toString());
+    const out = JSON.parse(execFileSync(process.execPath, [SCRIPT, 'facts'], { cwd: dir, env: env(claudeHome(false), programs()) }).toString());
     expect(out.language_servers.map((s: { plugin: string }) => s.plugin)).toEqual(['gopls-lsp@official']);
     expect(out.language_servers[0].plugin_state).toBe('not installed');
   });

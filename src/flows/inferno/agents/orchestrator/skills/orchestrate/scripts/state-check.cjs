@@ -20,7 +20,7 @@
 const fs = require('fs');
 const path = require('path');
 const {
-  loadState, locateIntents, locateWorkItems, getIntent, statusOf, isComplete, isOpen,
+  loadState, locateIntents, locateWorkItems, getIntent, statusOf, isComplete, isOpen, isDeferred,
 } = require('./state-ledger.cjs');
 const { archivePaths, archivedIds } = require('./state-archive.cjs');
 const { closeIntentCall } = require('./run-call.cjs');
@@ -153,10 +153,13 @@ function check(options) {
     // A parked intent (superseded, on_hold, awaiting-manual) is a deliberate resting
     // place, not a missed close. only genuinely open intents can drift this way.
     if (isOpen(intentStatus) && open.length === 0) {
+      // A deferred item is closed for its intent (state-defer.cjs), so it is owed the close too.
+      const deferred = items.filter((item) => isDeferred(item.status)).length;
       drift.push({
         intent: intent.id,
         kind: 'all-items-completed-intent-open',
-        detail: `all ${items.length} work items are completed but the intent is ${intentStatus || 'unset'}. ` +
+        detail: `all ${items.length} work items are completed${deferred > 0 ? ` or deferred (${deferred} deferred)` : ''} ` +
+          `but the intent is ${intentStatus || 'unset'}. ` +
           `Close it with: ${closeIntentCall(intent.id)}`,
       });
     }

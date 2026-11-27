@@ -124,7 +124,7 @@ describe('aidlc-turbo sandbox construction', () => {
     const review = flat('skills/construction/review.md');
     expect(review).toContain('the code root (the story\'s worktree, or the project root at finish), the story path, the proof `{intent_dir}/proof/{SSS}.json`.');
     expect(review).toContain('and the diff command, which leaves out `.specs-aidlc-turbo/`. `coverage_only: true` for a quick-lane intent');
-    expect(review).toContain('Never a test file. Return `mutants: []` when nothing is worth breaking. Never run a mutant yourself');
+    expect(review).toContain('Return `mutants: []` when no criterion has a test. Never run a mutant yourself');
     expect(review).not.toMatch(/sandbox/i);
   });
 

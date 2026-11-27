@@ -125,4 +125,4 @@ function unblockIntent(options) {
   return { changed: true, intent: options.intent, status: 'pending', previous };
 }
 
-module.exports = { blockIntent, unblockIntent };
+module.exports = { blockIntent, quotedScalar, unblockIntent };

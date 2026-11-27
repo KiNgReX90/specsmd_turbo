@@ -1,0 +1,13 @@
+# The e2e smoke's INFERNO config: the cheapest models every role takes, and npm test as the gate.
+models:
+  strong: sonnet
+  cheap: haiku
+  escalate: sonnet
+  oracle: sonnet
+review:
+  model: sonnet
+scan:
+  model: sonnet
+verification:
+  finalize:
+    - npm test

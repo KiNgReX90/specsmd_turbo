@@ -23,6 +23,7 @@ Present that output as the list of intents, grouped the way it is printed:
 - `running`, with the step it is on, never offered
 - `recover` candidates, with the reason each is a candidate
 - `leftover`, with the worktree a finished run left standing
+- `owed`, with the proof a shipped intent still owes after its ship and the path that will hold it
 
 Keep every intent id verbatim. Name an empty group instead of dropping it, for example when the output opens with `no claimable intent`.
 

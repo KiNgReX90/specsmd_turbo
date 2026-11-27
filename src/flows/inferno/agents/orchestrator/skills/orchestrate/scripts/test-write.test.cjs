@@ -106,7 +106,11 @@ test('a same-length rewrite inside the recorded second reaches the next commit',
 test('a rewrite never keeps a second the file had before, and a first write keeps its own', () => {
   const dir = tempDir('inferno-write-');
   const file = path.join(dir, 'a.txt');
-  const before = second(Date.now());
+  // A file is stamped from the kernel's coarse clock, up to a timer tick behind Date.now(), so the lower bound
+  // is the stamp of a plain write made just before, from that same clock.
+  const mark = path.join(dir, 'before.txt');
+  fs[PLAIN](mark, '');
+  const before = second(fs.statSync(mark).mtimeMs);
   writeFile(file, 'one\n');
   const seen = [second(fs.statSync(file).mtimeMs)];
   assert.ok(seen[0] >= before && seen[0] <= second(Date.now()), 'the first write keeps the time it was made');

@@ -36,8 +36,8 @@ function dispatched(fixture, tree, args = []) {
 }
 
 const LINE = '  - file: src/a.ts\n    line: 1\n    claim: a reads no producer\n    proof: "rg -n producer src"\n';
-/** A plan-time line also carries its kind; a MAKER line blocks the plan. */
-const PLAN_LINE = LINE.replace("    claim:", "    kind: MAKER\n    claim:");
+/** A plan-time line also carries its kind, one of the cross-check's five. */
+const PLAN_LINE = LINE.replace("    claim:", "    kind: gap\n    claim:");
 function answer(entry, lines = "") {
   write(path.dirname(entry.result), path.basename(entry.result), `question: ${entry.id}\nlines:${lines ? `\n${lines}` : " []\n"}`);
 }
@@ -148,23 +148,23 @@ test("a commit landing between the scan dispatch and the collect is not recorded
   assert.equal(fs.existsSync(path.join(tree, SCAN)), false);
 });
 
-test("the plan-time scan asks the wiring question of the plan alone and hands every gap back to the planner", () => {
+test("the plan-time cross-check reads the plan alone and hands every finding back to the planner", () => {
   const { fixture } = started();
-  const plan = ["--only", "wiring", "--plan", "alpha"];
+  const plan = ["--plan", "alpha"];
   const result = scan(fixture, fixture.root, plan);
   assert.equal(result.code, 3, result.out + result.err);
   assert.match(result.out, /spawn this one/);
-  const line = /dispatch specsmd-inferno-scanner scan wiring brief (\S+)/.exec(result.out);
+  const line = /dispatch specsmd-inferno-scanner scan cross-check brief (\S+)/.exec(result.out);
   assert.ok(line, result.out);
-  assert.doesNotMatch(result.out, /scan contract/);
+  assert.doesNotMatch(result.out, /scan (wiring|contract) /);
   const brief = fs.readFileSync(line[1], "utf8");
   assert.match(brief, /plan \.specs-inferno\/intents\/alpha/);
   assert.doesNotMatch(brief, /range /);
-  const entry = { id: "wiring", result: line[1].replace(/\.md$/, ".yaml") };
+  const entry = { id: "cross-check", result: line[1].replace(/\.md$/, ".yaml") };
   answer(entry, PLAN_LINE);
   const gaps = scan(fixture, fixture.root, ["--collect", ...plan]);
   assert.equal(gaps.code, 2, gaps.out + gaps.err);
-  assert.match(gaps.out, /GAP wiring-1 MAKER src\/a\.ts:1: a reads no producer/);
+  assert.match(gaps.out, /GAP r1-1 gap src\/a\.ts:1: a reads no producer/);
   assert.match(gaps.out, /planner/);
   assert.equal(fs.existsSync(path.join(fixture.root, SCAN)), false);
   answer(entry);
@@ -172,29 +172,17 @@ test("the plan-time scan asks the wiring question of the plan alone and hands ev
   assert.equal(clear.code, 0, clear.out + clear.err);
 });
 
-test("the plan-time scan asks wiring alone, and its printed collect reads exactly what it sent", () => {
+test("the plan-time cross-check's printed collect reads exactly what it sent", () => {
   const { fixture } = started();
   const result = scan(fixture, fixture.root, ["--plan", "alpha"]);
   assert.equal(result.code, 3, result.out + result.err);
   const sent = [...result.out.matchAll(/ scan (\S+) brief (\S+)/g)];
-  assert.deepEqual(sent.map((line) => line[1]), ["wiring"]);
+  assert.deepEqual(sent.map((line) => line[1]), ["cross-check"]);
   const collect = /then (run\.cjs scan --collect .*) collects them/.exec(result.out)[1].split(" ").slice(1);
-  answer({ id: "wiring", result: sent[0][2].replace(/\.md$/, ".yaml") }, PLAN_LINE);
+  answer({ id: "cross-check", result: sent[0][2].replace(/\.md$/, ".yaml") }, PLAN_LINE);
   const gaps = run(fixture, collect);
   assert.equal(gaps.code, 2, gaps.out + gaps.err);
-  assert.match(gaps.out, /GAP wiring-1/);
-});
-
-test("--only goes with --plan and names wiring alone, and the refusal prints the call that works", () => {
-  const { fixture, tree } = started();
-  const alone = scan(fixture, tree, ["--only", "wiring"]);
-  assert.equal(alone.code, 1, alone.out + alone.err);
-  assert.match(alone.err, /--plan/);
-  for (const id of ["contract", "wires"]) {
-    const refused = scan(fixture, fixture.root, ["--only", id, "--plan", "alpha"]);
-    assert.equal(refused.code, 1, refused.out + refused.err);
-    assert.match(refused.err, new RegExp(`the plan-time scan asks wiring alone: run run\\.cjs scan --only wiring --plan alpha --tree ${fixture.root}$`, "m"));
-  }
+  assert.match(gaps.out, /GAP r1-1/);
 });
 
 test("collect refuses results of a dispatch that asked other questions than the call collects", () => {
@@ -203,13 +191,13 @@ test("collect refuses results of a dispatch that asked other questions than the 
   const [entry] = JSON.parse(result.out).groups.flat();
   const record = path.join(path.dirname(entry.result), "dispatch.json");
   const sent = JSON.parse(fs.readFileSync(record, "utf8"));
-  assert.deepEqual(sent.ids, ["wiring"]);
-  writeFile(record, JSON.stringify({ ...sent, ids: ["wiring", "contract"] }));
+  assert.deepEqual(sent.ids, ["cross-check"]);
+  writeFile(record, JSON.stringify({ ...sent, ids: ["wiring"] }));
   answer(entry);
   const refused = scan(fixture, fixture.root, ["--collect", "--plan", "alpha"]);
   assert.equal(refused.code, 3, refused.out + refused.err);
-  assert.match(refused.out, /asked wiring, contract/);
-  assert.match(refused.out, /run\.cjs scan --only wiring --plan alpha --tree \S+ for a fresh dispatch/);
+  assert.match(refused.out, /asked wiring/);
+  assert.match(refused.out, /run\.cjs scan --plan alpha --tree \S+ for a fresh dispatch/);
 });
 
 test("a role installed in the primary checkout alone lets a worktree cut before it scan", () => {

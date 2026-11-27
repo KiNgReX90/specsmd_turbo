@@ -100,14 +100,59 @@ test("teardown runs ship_cleanup after removing a merged worktree", () => {
   assert.equal(saw.tree_exists, "no");
 });
 
-test("without ship_cleanup nothing runs", () => {
+/** The branch's own cache folder, where the gate, lane, verify and mutate logs of the run sit. */
+const branchCache = (fixture, branch) => path.join(fixture.cache, "specsmd-inferno", path.basename(fixture.root), branch);
+const LEFT = (folder) => `left ${folder}: set verification.ship_cleanup to remove it`;
+const lines = (out) => out.split("\n");
+
+test("without ship_cleanup a ship names the cache folder it leaves and the key that would remove it, and stands", () => {
   const fixture = repo();
-  const { tree } = gated(fixture, {});
+  const { tree, branch } = gated(fixture, {});
+  const folder = branchCache(fixture, branch);
+  assert.equal(fs.existsSync(folder), true, "the gate writes its logs into the branch's cache folder");
   const result = run(fixture, ["ship", "alpha", "--tree", tree]);
 
   assert.equal(result.code, 0, result.out + result.err);
   assert.match(result.out, /shipped/);
+  assert.equal(lines(result.out).filter((line) => line === LEFT(folder)).length, 1);
+  assert.equal(lines(result.out).filter((line) => line.startsWith("left ")).length, 1);
   assert.doesNotMatch(result.out, /ship cleanup/);
+  assert.equal(fs.existsSync(folder), true);
+});
+
+test("without ship_cleanup a teardown names the cache folder it leaves", () => {
+  const fixture = repo();
+  const { tree, branch } = gated(fixture, {});
+  git(fixture.root, ["merge", "-q", "--no-ff", "-m", `Merge branch '${branch}'`, branch]);
+  git(fixture.root, ["push", "-q", "origin", "main"]);
+  const result = run(fixture, ["teardown", "--tree", tree]);
+
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /^removed /m);
+  assert.ok(lines(result.out).includes(LEFT(branchCache(fixture, branch))), result.out);
+});
+
+test("without ship_cleanup and without a cache folder for the branch, a teardown says nothing about one", () => {
+  const fixture = repo();
+  const { tree, branch } = closed(fixture);
+  git(fixture.root, ["merge", "-q", "--no-ff", "-m", `Merge branch '${branch}'`, branch]);
+  git(fixture.root, ["push", "-q", "origin", "main"]);
+  fs.rmSync(branchCache(fixture, branch), { recursive: true, force: true });
+  const result = run(fixture, ["teardown", "--tree", tree]);
+
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.doesNotMatch(result.out, /^left /m);
+});
+
+test("with ship_cleanup a ship prints the cleanup's last line and no left folder line", () => {
+  const { fixture, env } = hosted('echo "kept the logs"\n');
+  const { tree, branch } = gated(fixture, env);
+  const result = run(fixture, ["ship", "alpha", "--tree", tree], { env });
+
+  assert.equal(result.code, 0, result.out + result.err);
+  assert.match(result.out, /^ship cleanup: kept the logs$/m);
+  assert.equal(fs.existsSync(branchCache(fixture, branch)), true);
+  assert.doesNotMatch(result.out, /^left /m);
 });
 
 test("a --config file inherits ship_cleanup, and a blank or non-string value is refused", () => {

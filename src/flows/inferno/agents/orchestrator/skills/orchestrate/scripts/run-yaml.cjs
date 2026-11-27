@@ -137,20 +137,96 @@ function scalar(raw, label) {
 }
 
 function rowsOf(text) {
-  return text
-    .split('\n')
+  const lines = text.split('\n');
+  const rows = lines
     .map((line, index) => ({ indent: /^( *)/.exec(line)[1].length, text: line.trim(), raw: line, line: index + 1 }))
     .filter((row) => row.text.length > 0 && !row.text.startsWith('#'));
+  // A block scalar's body is read from the lines as written: an empty line and a line that opens
+  // with a hash are part of it, and neither is a row.
+  rows.lines = lines.map((line) => line.replace(/\r$/, ''));
+  return rows;
 }
 
-function parseBlockScalar(rows, index, indent) {
-  const body = [];
-  let i = index;
-  while (i < rows.length && rows[i].indent > indent) {
-    body.push(rows[i].text);
-    i += 1;
+/**
+ * A block scalar header: `|` or `>`, then at most one chomping marker and one indentation digit,
+ * in either order. A value made of those characters alone that YAML does not allow, such as `>0`
+ * or `|-+`, is refused on the marker's own line: read as text, its body lines would be refused one
+ * line further on, under a message that points away from the marker.
+ */
+const HEADER = /^([|>])(?:([-+])([1-9])?|([1-9])([-+])?)?$/;
+
+function blockHeader(value, line) {
+  if (!/^[|>][-+0-9]*$/.test(value)) return null;
+  const match = HEADER.exec(value);
+  if (!match) {
+    throw new RunError(
+      `cannot parse line ${line}: the block scalar header ${value} is not one YAML allows. Write | or >, then at ` +
+        'most one of - or + and one indentation digit 1 to 9, in either order; nothing was read past that line.',
+      'BAD_YAML'
+    );
   }
-  return [body.join('\n'), i];
+  return { fold: match[1] === '>', chomp: match[2] || match[5] || '', digit: Number(match[3] || match[4] || 0) };
+}
+
+/** The text of a block's body lines, its indent cut off, an empty line as ''. */
+function blockText(body, { fold, chomp }) {
+  let last = body.length;
+  while (last > 0 && body[last - 1] === '') last -= 1;
+  let out = '';
+  let empties = 0;
+  let read = false;
+  let deeper = false;
+  for (const line of body.slice(0, last)) {
+    if (line === '') {
+      empties += 1;
+      continue;
+    }
+    // Folding joins two lines of text with a space, and an empty line between them stands for one
+    // line break. A more indented line keeps the line breaks around it, as a literal line does.
+    if (!fold || /^[ \t]/.test(line)) {
+      deeper = fold;
+      out += '\n'.repeat(read ? 1 + empties : empties);
+    } else if (deeper) {
+      deeper = false;
+      out += '\n'.repeat(empties + 1);
+    } else {
+      out += empties === 0 ? (read ? ' ' : '') : '\n'.repeat(empties);
+    }
+    out += line;
+    read = true;
+    empties = 0;
+  }
+  // Keep (`+`) keeps the final line break and every empty line after it, and strip (`-`) drops
+  // them. Clip, no marker, reads as strip, as this reader always read `|` and `>`: every value it
+  // hands on is a path, a command, a line of code or a piece of copy that a reader matches against
+  // a file or prints in a line, where a final break would make a pin's copy or a mutant's line miss.
+  return chomp === '+' ? out + '\n'.repeat((read ? 1 : 0) + body.length - last) : out;
+}
+
+/**
+ * The block scalar whose header stands on `line` under a node indented `parent`, and the index of
+ * the first row after it. The body is every line indented deeper than the parent, or as deep as
+ * the indentation digit says, up to the first line of text indented less.
+ */
+function parseBlockScalar(rows, index, parent, header, line) {
+  const { lines } = rows;
+  let indent = header.digit > 0 ? parent + header.digit : null;
+  const body = [];
+  let end = line;
+  for (let i = line; i < lines.length; i += 1) {
+    if (lines[i].trim() === '') {
+      if (i < lines.length - 1) body.push('');
+      continue;
+    }
+    const own = /^ */.exec(lines[i])[0].length;
+    if (indent === null && own > parent) indent = own;
+    if (indent === null || own < indent) break;
+    body.push(lines[i].slice(indent));
+    end = i + 1;
+  }
+  let next = index;
+  while (next < rows.length && rows[next].line <= end) next += 1;
+  return [blockText(body, header), next];
 }
 
 function parseNode(rows, index, indent, label) {
@@ -162,15 +238,25 @@ function parseList(rows, index, indent, label) {
   const out = [];
   let i = index;
   while (i < rows.length && rows[i].indent === indent && rows[i].text.startsWith('- ')) {
-    const rest = rows[i].text.slice(2);
-    if (/^(?:"[^"]*"|'[^']*'|[^:]+):(?: |$)/.test(rest)) {
+    // The comment goes before the item is read as `key: value`, as YAML cuts it: else
+    // `- path  # note: text` reads as the map {"path  # note": "text"}. A plain key never opens
+    // with a quote, so a quoted scalar holding `: ` stays one scalar.
+    const rest = stripComment(rows[i].text.slice(2)).trim();
+    if (/^(?:"[^"]*"|'[^']*'|[^:"'][^:]*):(?: |$)/.test(rest)) {
       rows[i] = { indent: indent + 2, text: rest, raw: rest, line: rows[i].line };
       const [value, next] = parseMap(rows, i, indent + 2);
       out.push(value);
       i = next;
     } else {
-      out.push(scalar(rest, label));
-      i += 1;
+      const header = blockHeader(rest, rows[i].line);
+      if (header) {
+        const [value, next] = parseBlockScalar(rows, i + 1, indent, header, rows[i].line);
+        out.push(value);
+        i = next;
+      } else {
+        out.push(scalar(rest, label));
+        i += 1;
+      }
     }
   }
   return [out, i];
@@ -187,11 +273,12 @@ function parseMap(rows, index, indent) {
     // A header written `verification: # the cheap checks` carries a comment, not a value. Read
     // it as the empty value it is, or the block under it and every key after it fall out of
     // the document with no error at all (2026-09-09).
-    const marker = rest.trim();
+    // A block scalar's marker may carry a comment of its own too: `notes: |  # as written`.
     const value = stripComment(rest).trim();
+    const header = blockHeader(value, rows[i].line);
     i += 1;
-    if (marker === '|' || marker === '>' || marker === '|-') {
-      const [body, next] = parseBlockScalar(rows, i, indent);
+    if (header) {
+      const [body, next] = parseBlockScalar(rows, i, indent, header, rows[i - 1].line);
       out[key] = body;
       i = next;
     } else if (value === '' && i < rows.length && rows[i].indent > indent) {
